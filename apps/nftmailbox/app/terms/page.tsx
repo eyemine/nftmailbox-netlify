@@ -155,6 +155,8 @@ export default function TermsPage() {
           {' · '}
           <Link href="/terms" className="hover:text-white transition">Terms of Use</Link>
           {' · '}
+          <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
+          {' · '}
           Privacy is a Right, Sovereignty is an Upgrade
         </footer>
       </div>

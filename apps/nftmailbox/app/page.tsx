@@ -163,6 +163,8 @@ export default function Home() {
           nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
           {' · '}
           <Link href="/terms" className="hover:text-white transition underline underline-offset-2">Terms of Use</Link>
+          {' · '}
+          <Link href="/privacy" className="hover:text-white transition underline underline-offset-2">Privacy Policy</Link>
         </footer>
       </div>
     </div>
