@@ -161,6 +161,8 @@ export default function Home() {
 
         <footer className="text-center text-xs text-[var(--muted)]">
           nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
+          {' · '}
+          <Link href="/terms" className="hover:text-white transition underline underline-offset-2">Terms of Use</Link>
         </footer>
       </div>
     </div>

@@ -94,6 +94,7 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
   const [stepB, setStepB] = useState<MintStep>('idle');
   const [claimStep, setClaimStep] = useState<MintStep>('idle');
   const [claimStepC, setClaimStepC] = useState<MintStep>('idle');
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   // Card C: collection NFT picker
   interface WalletNft { type: 'ens' | 'collection'; name: string; displayName: string; email: string; tokenId?: string; collection?: string; }
@@ -157,6 +158,12 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
       setR({ name: mintLabel, email: mintEmail, tbaAddress: data.tbaAddress || '', txHash: data.txHash, gasless: true });
       setS('done');
       setShowModal(true);
+      // Log terms agreement to Glass Box Audit (non-blocking)
+      fetch('/api/record-terms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: ownerAddress, email: mintEmail }),
+      }).catch(() => {});
     } catch (err: any) {
       setError(err?.message || 'Gasless mint failed');
       setS('error');
@@ -505,7 +512,21 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
                 </div>
               )}
               <p className="text-[10px] text-[var(--muted)]">{HINT}</p>
-              <MintButton cardStep={stepB} cardResult={resultB} onMint={mintCardB} mintLabel={cardBLabel} mintEmail={cardBEmail} status={statusB} disabled={!cardBLabel || cardBPart2Clean.length < 1} />
+              {!resultB && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={termsAgreed}
+                  onChange={e => setTermsAgreed(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-emerald-400 cursor-pointer"
+                />
+                <span className="text-[10px] text-[var(--muted)]">
+                  I agree to the{' '}
+                  <Link href="/terms" target="_blank" className="text-[rgb(160,220,255)] underline underline-offset-2 hover:text-white transition">Terms of Use</Link>
+                </span>
+              </label>
+            )}
+            <MintButton cardStep={stepB} cardResult={resultB} onMint={mintCardB} mintLabel={cardBLabel} mintEmail={cardBEmail} status={statusB} disabled={!cardBLabel || cardBPart2Clean.length < 1 || !termsAgreed} />
             </div>
           </div>
         ) : (
@@ -575,7 +596,21 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
               </>
             )}
 
-            <MintButton cardStep={step} cardResult={result} onMint={mint} mintLabel={label} mintEmail={fullEmail} status={nameStatus} disabled={!label || name1.length < 2 || (!isSingleName && name2.length < 2)} />
+            {step !== 'done' && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={termsAgreed}
+                  onChange={e => setTermsAgreed(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-emerald-400 cursor-pointer"
+                />
+                <span className="text-[10px] text-[var(--muted)]">
+                  I agree to the{' '}
+                  <Link href="/terms" target="_blank" className="text-[rgb(160,220,255)] underline underline-offset-2 hover:text-white transition">Terms of Use</Link>
+                </span>
+              </label>
+            )}
+            <MintButton cardStep={step} cardResult={result} onMint={mint} mintLabel={label} mintEmail={fullEmail} status={nameStatus} disabled={!label || name1.length < 2 || (!isSingleName && name2.length < 2) || !termsAgreed} />
           </div>
         )}
 
