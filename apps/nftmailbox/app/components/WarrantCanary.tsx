@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const CANARY_FILE_URL = 'https://raw.githubusercontent.com/Ghost-Agency/ghostagent-ninja-mvp/main/apps/nftmailbox/CANARY.txt';
+const CANARY_FILE_URL = '/api/canary';
 
 export function WarrantCanary() {
   const [lastChecked, setLastChecked] = useState<string | null>(null);
@@ -16,18 +16,9 @@ export function WarrantCanary() {
           setAlive(false);
           return;
         }
-        const text = await res.text();
-        // CANARY.txt format: "ALIVE <ISO timestamp>"
-        const match = text.match(/^ALIVE\s+(.+)$/m);
-        if (match) {
-          const ts = match[1].trim();
-          setLastChecked(ts);
-          const ageMs = Date.now() - new Date(ts).getTime();
-          const stale = ageMs > 48 * 60 * 60 * 1000;
-          setAlive(!stale);
-        } else {
-          setAlive(false);
-        }
+        const data = await res.json() as { alive: boolean; timestamp: string };
+        setLastChecked(data.timestamp);
+        setAlive(data.alive === true);
       } catch {
         // If fetch fails, show last known state
         setLastChecked(new Date().toISOString());

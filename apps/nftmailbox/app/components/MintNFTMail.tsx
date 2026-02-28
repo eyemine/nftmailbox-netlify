@@ -92,8 +92,10 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
 
   const [step, setStep] = useState<MintStep>('idle');
   const [stepB, setStepB] = useState<MintStep>('idle');
+  const [claimStep, setClaimStep] = useState<MintStep>('idle');
   const [result, setResult] = useState<MintResult | null>(null);
   const [resultB, setResultB] = useState<MintResult | null>(null);
+  const [claimResult, setClaimResult] = useState<{ email: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [mintMode, setMintMode] = useState<MintMode>('gasless');
@@ -205,12 +207,33 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
     else await doWalletMint(label, fullEmail, setStep, setResult);
   }, [authenticated, wallets, label, name1, name2, isSingleName, mintMode, fullEmail, doGaslessMint, doWalletMint]);
 
-  // ENS Card A mint (single-name)
-  const mintCardA = useCallback(async () => {
+  // ENS Card A: sovereign claim (no on-chain tx — ENS is the key)
+  const claimCardA = useCallback(async () => {
     if (!authenticated || wallets.length === 0) { setError('Connect your wallet first'); return; }
-    if (mintMode === 'gasless') await doGaslessMint(cardALabel, cardAEmail, setStep, setResult);
-    else await doWalletMint(cardALabel, cardAEmail, setStep, setResult);
-  }, [authenticated, wallets, mintMode, cardALabel, cardAEmail, doGaslessMint, doWalletMint]);
+    const ownerAddress = (injectedWallet || anyWallet)?.address;
+    if (!ownerAddress) { setError('No wallet address found'); return; }
+    setClaimStep('minting');
+    setError(null);
+    try {
+      const res = await fetch('/api/claim-sovereign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyType: 'ens',
+          keyId: `${initN1}.eth`,
+          ownerAddress,
+          claimedEmail: cardAEmail,
+        }),
+      });
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.error || 'Claim failed');
+      setClaimResult({ email: cardAEmail });
+      setClaimStep('done');
+    } catch (err: any) {
+      setError(err?.message || 'Claim failed');
+      setClaimStep('error');
+    }
+  }, [authenticated, wallets, injectedWallet, anyWallet, initN1, cardAEmail]);
 
   // ENS Card B mint (split)
   const mintCardB = useCallback(async () => {
@@ -221,6 +244,33 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
   }, [authenticated, wallets, mintMode, cardBLabel, cardBEmail, doGaslessMint, doWalletMint]);
 
   const HINT = 'Free – 8-day inbox, receive only. Evolve to Pupa or Imago to Molt.';
+
+  // ── Claim button (sovereign path — no NFT minted) ──
+  const ClaimButton = ({ email }: { email: string }) => {
+    if (claimStep === 'done' && claimResult) {
+      return (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <svg className="h-4 w-4 text-emerald-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+            <span className="text-sm font-semibold text-emerald-300">{claimResult.email}</span>
+          </div>
+          <Link
+            href={`/inbox/${encodeURIComponent(claimResult.email.replace('@nftmail.box', ''))}`}
+            className="rounded-lg border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.1)] px-3 py-1.5 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] whitespace-nowrap"
+          >Open Inbox →</Link>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={claimCardA}
+        disabled={claimStep === 'minting' || statusA === 'taken' || statusA === 'checking'}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/8 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition-all hover:bg-emerald-500/16 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {claimStep === 'minting' ? 'Activating inbox...' : `Claim – ${email}`}
+      </button>
+    );
+  };
 
   if (!authenticated) return null;
 
@@ -302,21 +352,24 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
               <p className="text-center text-[10px] text-emerald-300/60">No xDAI needed — gas sponsored by NFTMail treasury</p>
             )}
 
-            {/* Card A: single-name */}
-            <div className="rounded-xl border border-[var(--border)] bg-black/20 p-4 space-y-3">
+            {/* Card A: sovereign claim — ENS is the key, no NFT minted */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <svg className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span className="text-[9px] font-semibold tracking-wider text-emerald-300">SOVEREIGN CLAIM — NO NFT MINTED</span>
+              </div>
               <input
                 type="text"
-                value={initN1}
+                value={`${initN1}.eth  →  ${cardAEmail}`}
                 readOnly
-                className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white outline-none opacity-70 cursor-default"
+                className="w-full rounded-lg border border-emerald-500/20 bg-black/40 px-4 py-2.5 text-sm text-emerald-200 outline-none opacity-80 cursor-default"
               />
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20 whitespace-nowrap">Mint New NFT</span>
-                <p className="text-xs text-[rgb(160,220,255)]">{cardALabel}.nftmail.gno → {cardAEmail}</p>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20 whitespace-nowrap">Authority: {initN1}.eth</span>
                 <StatusBadge status={statusA} />
               </div>
               <p className="text-[10px] text-[var(--muted)]">{HINT}</p>
-              <MintButton cardStep={step} cardResult={result} onMint={mintCardA} mintLabel={cardALabel} mintEmail={cardAEmail} status={statusA} />
+              <ClaimButton email={cardAEmail} />
             </div>
 
             {/* Card B: split with ENS TLD */}

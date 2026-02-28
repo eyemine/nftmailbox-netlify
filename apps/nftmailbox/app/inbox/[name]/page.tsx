@@ -48,6 +48,7 @@ interface InboxMessage {
   fromAddress: string;
   receivedTime: string;
   summary: string;
+  bodyHtml: string;
   encrypted: boolean;
   contentHash: string;
   type: string;
@@ -315,6 +316,7 @@ export default function InboxPage() {
           fromAddress: m.fromAddress || '',
           receivedTime: m.receivedTime || '',
           summary: m.summary || '',
+          bodyHtml: m.bodyHtml || m.summary || '',
           encrypted: m.encrypted ?? false,
           contentHash: m.contentHash || '',
           type: m.type || '',
@@ -1269,15 +1271,15 @@ export default function InboxPage() {
                               <span className="text-white/70">{msg.receivedTime ? formatTimestamp(msg.receivedTime) : ''}</span>
                             </div>
                           </div>
-                          <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3">
-                            {msg.summary && /<[a-z][\s\S]*>/i.test(msg.summary) ? (
+                          <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3 text-xs text-[var(--muted)] leading-relaxed">
+                            {msg.bodyHtml && /<[a-z][\s\S]*>/i.test(msg.bodyHtml) ? (
                               <div
-                                className="prose prose-invert prose-xs max-w-none text-xs text-[var(--muted)] leading-relaxed [&_a]:text-[rgb(160,220,255)] [&_a]:underline [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5"
-                                dangerouslySetInnerHTML={{ __html: safeHtml(msg.summary) }}
+                                style={{ color: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' }}
+                                dangerouslySetInnerHTML={{ __html: safeHtml(msg.bodyHtml) }}
                               />
                             ) : (
-                              <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
-                                {msg.summary || '(no content)'}
+                              <p className="whitespace-pre-wrap break-words">
+                                {msg.bodyHtml || msg.summary || '(no content)'}
                               </p>
                             )}
                           </div>

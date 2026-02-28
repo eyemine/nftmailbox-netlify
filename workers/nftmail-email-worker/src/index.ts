@@ -1320,6 +1320,98 @@ export default {
           }), request);
         }
 
+        // --- Sovereign Claim: ENS / NFT-collection holders activate inbox without minting ---
+        // Their existing token IS the key — no .nftmail.gno NFT required.
+        // keyType: 'ens' | 'nft-collection'
+        // keyId: 'rgbanksy.eth' | 'bayc-1234'
+        // ownerAddress: '0x...'
+        // claimedEmail: 'rgbanksy@nftmail.box'
+        if (email.action === 'claimSovereignInbox') {
+          const keyType: string = (email as any).keyType || '';
+          const keyId: string = ((email as any).keyId || '').toLowerCase().trim();
+          const ownerAddress: string = ((email as any).ownerAddress || '').toLowerCase().trim();
+          const claimedEmail: string = ((email as any).claimedEmail || '').toLowerCase().trim();
+
+          if (!keyType || !keyId || !ownerAddress || !claimedEmail) {
+            return corsify(Response.json({ error: 'Missing keyType, keyId, ownerAddress, or claimedEmail' }, { status: 400 }), request);
+          }
+          if (!['ens', 'nft-collection'].includes(keyType)) {
+            return corsify(Response.json({ error: 'keyType must be ens or nft-collection' }, { status: 400 }), request);
+          }
+          const localPart = claimedEmail.replace('@nftmail.box', '').replace('@surge.nftmail.box', '');
+          if (!isValidSovereignName(localPart)) {
+            return corsify(Response.json({ error: `"${localPart}" is not a valid sovereign name` }, { status: 400 }), request);
+          }
+
+          // Check if already claimed by a different address
+          const existing = await env.INBOX_KV.get(`sovereign-claim:${localPart}`);
+          if (existing) {
+            try {
+              const ex = JSON.parse(existing);
+              if (ex.ownerAddress && ex.ownerAddress !== ownerAddress) {
+                return corsify(Response.json({
+                  error: 'This name is already claimed by a different address',
+                  claimedBy: ex.ownerAddress,
+                }, { status: 409 }), request);
+              }
+              // Same owner re-claiming — idempotent, return success
+              return corsify(Response.json({
+                status: 'already-claimed',
+                localPart,
+                email: claimedEmail,
+                keyType: ex.keyType,
+                keyId: ex.keyId,
+                ownerAddress: ex.ownerAddress,
+                claimedAt: ex.claimedAt,
+              }), request);
+            } catch {}
+          }
+
+          const claimedAt = Date.now();
+          const claimEntry = JSON.stringify({
+            keyType,
+            keyId,
+            ownerAddress,
+            claimedEmail,
+            claimedAt,
+            path: 'sovereign-no-mint',
+          });
+
+          await Promise.all([
+            env.INBOX_KV.put(`sovereign-claim:${localPart}`, claimEntry),
+            env.INBOX_KV.put(`nftmailgno:${localPart}`, JSON.stringify({
+              controller: ownerAddress,
+              origin_nft: keyId,
+              legacy_identity: null,
+              minted_tokenId: null,
+              registrar: keyType === 'ens' ? 'ens-sovereign' : 'nft-collection-sovereign',
+              chain: keyType === 'ens' ? 'ethereum' : 'various',
+              registered_at: claimedAt,
+              sovereign_key_type: keyType,
+            })),
+            env.INBOX_KV.put(`privacy:${localPart}`, JSON.stringify({ tier: 'exposed', updatedAt: claimedAt })),
+            env.INBOX_KV.put(`acct-tier:${localPart}`, JSON.stringify({
+              tier: 'basic',
+              expires_at: claimedAt + 8 * 24 * 60 * 60 * 1000,
+              upgraded_at: null,
+              safe: null,
+              retention: '8-day',
+              story_ip: null,
+            })),
+          ]);
+
+          return corsify(Response.json({
+            status: 'claimed',
+            localPart,
+            email: claimedEmail,
+            keyType,
+            keyId,
+            ownerAddress,
+            claimedAt,
+            message: `Inbox activated. No NFT minted — your ${keyType === 'ens' ? 'ENS name' : 'NFT'} is the key.`,
+          }), request);
+        }
+
         // --- Tier Upgrade: promote account from basic → lite → premium → ghost ---
         // Secured by WEBHOOK_SECRET. Called by /api/upgrade-tier after payment confirmed.
         if (email.action === 'upgradeTier') {
