@@ -10,6 +10,23 @@ import { WarrantCanary } from '../components/WarrantCanary';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 
+function stripHtml(html: unknown): string {
+  if (html === null || html === undefined) return '';
+  return String(html)
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/p>/gi, ' ')
+    .replace(/<\/div>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/\u202f/g, ' ')
+    .trim();
+}
+
 interface NftMailName {
   tokenId: number;
   label: string;
@@ -457,7 +474,7 @@ export default function DashboardPage() {
                               <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[rgb(0,163,255)]" />
                             )}
                             <span className="truncate text-sm font-medium text-white">
-                              {msg.subject}
+                              {stripHtml(msg.subject)}
                             </span>
                             {msg.hasAttachment && (
                               <svg className="h-3 w-3 flex-shrink-0 text-[var(--muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -467,7 +484,7 @@ export default function DashboardPage() {
                           </div>
                           <p className="mt-0.5 text-xs text-[var(--muted)]">{msg.sender}</p>
                           {msg.summary && (
-                            <p className="mt-1 truncate text-xs text-[var(--muted)] opacity-60">{msg.summary}</p>
+                            <p className="mt-1 truncate text-xs text-[var(--muted)] opacity-60">{stripHtml(msg.summary)}</p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">

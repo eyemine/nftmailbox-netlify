@@ -276,6 +276,7 @@ export default function NftmailPage() {
   const upgradeLabel = searchParams?.get('label') || '';
   const upgradeTier = searchParams?.get('upgrade') || '';
   const claimName = searchParams?.get('claim') || '';
+  const isSovereignClaim = !!(claimName && searchParams?.get('sovereign') === '1');
   const isUpgradeFlow = !!(upgradeLabel && (upgradeTier === 'lite' || upgradeTier === 'pro' || upgradeTier === 'premium'));
 
   const [mintedName, setMintedName] = useState('');
@@ -283,6 +284,45 @@ export default function NftmailPage() {
   const [tier, setTier] = useState<Tier>('none');
 
   const email = mintedName ? `${mintedName}@nftmail.box` : '';
+
+  // ── Sovereign claim flow: ?claim=rgbanksy&sovereign=1 — focused mint page ──
+  if (isSovereignClaim) {
+    return (
+      <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
+        <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-8 px-4 py-10 md:px-6">
+          <header className="flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+              <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95" />
+              <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
+            </Link>
+            <button onClick={() => window.history.back()} className="text-[10px] text-[var(--muted)] hover:text-white transition">← Back</button>
+          </header>
+
+          <section className="text-center">
+            <h1 className="text-3xl font-bold tracking-tight">Claim <span className="text-[rgb(160,220,255)]">{claimName}@nftmail.box</span></h1>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-[var(--muted)]">
+              Mint your ENS identity as a self-contained NFTMail address on Gnosis.
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+            {authenticated ? (
+              <MintNFTMail initialName={claimName} />
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-[var(--muted)]">Connect your wallet to claim this name.</p>
+                <NFTLogin />
+              </div>
+            )}
+          </section>
+
+          <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
+            nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
+          </footer>
+        </div>
+      </div>
+    );
+  }
 
   // ── Upgrade flow: show tier upgrade panel directly ──
   if (isUpgradeFlow) {

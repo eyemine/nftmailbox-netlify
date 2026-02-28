@@ -29,6 +29,18 @@ function stripHtml(html: unknown): string {
     .trim();
 }
 
+// Sanitize HTML for safe rendering: strip scripts, event handlers, dangerous attrs
+function safeHtml(html: unknown): string {
+  if (html === null || html === undefined) return '';
+  return String(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+\s*=\s*(["'])[\s\S]*?\1/gi, '')
+    .replace(/\son\w+\s*=[^\s>]*/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/vbscript\s*:/gi, '');
+}
+
 interface InboxMessage {
   id: string;
   subject: string;
@@ -157,6 +169,9 @@ export default function InboxPage() {
 
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+
+  // Evolve panel expand toggle
+  const [showEvolvePanel, setShowEvolvePanel] = useState(false);
 
   // Owner check: if onChainOwner is recorded, require wallet match.
   // If not recorded (legacy mints pre-ownership tracking), fall back to authenticated.
@@ -299,7 +314,7 @@ export default function InboxPage() {
           sender: m.sender || m.fromAddress || 'unknown',
           fromAddress: m.fromAddress || '',
           receivedTime: m.receivedTime || '',
-          summary: stripHtml(m.summary || ''),
+          summary: m.summary || '',
           encrypted: m.encrypted ?? false,
           contentHash: m.contentHash || '',
           type: m.type || '',
@@ -1037,48 +1052,6 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
-        {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-              <p className="text-sm font-semibold text-white">
-                {accountTier === 'basic' ? 'You are a Larva.' : 'You are a Pupa.'}
-              </p>
-              <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">
-                {accountTier === 'basic' ? 'LARVA' : 'PUPA'}
-              </span>
-            </div>
-            <p className="text-[11px] text-[var(--muted)]">
-              {accountTier === 'basic'
-                ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
-                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {accountTier === 'basic' && (
-                <Link
-                  href={`/nftmail?upgrade=lite&label=${name}`}
-                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
-                >
-                  <span className="block text-sm font-bold">10 xDAI</span>
-                  Molt to Pupa
-                </Link>
-              )}
-              <Link
-                href={`/nftmail?upgrade=premium&label=${name}`}
-                className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
-                  accountTier === 'basic' ? '' : 'col-span-2'
-                }`}
-              >
-                <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
-                Evolve to Imago
-              </Link>
-            </div>
-            {daysLeft !== null && daysLeft <= 7 && (
-              <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
-            )}
-          </div>
-        )}
 
         {/* ── Error state ── */}
         {error && (
@@ -1297,9 +1270,16 @@ export default function InboxPage() {
                             </div>
                           </div>
                           <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3">
-                            <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
-                              {stripHtml(msg.summary || '(no content)')}
-                            </p>
+                            {msg.summary && /<[a-z][\s\S]*>/i.test(msg.summary) ? (
+                              <div
+                                className="prose prose-invert prose-xs max-w-none text-xs text-[var(--muted)] leading-relaxed [&_a]:text-[rgb(160,220,255)] [&_a]:underline [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5"
+                                dangerouslySetInnerHTML={{ __html: safeHtml(msg.summary) }}
+                              />
+                            ) : (
+                              <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
+                                {msg.summary || '(no content)'}
+                              </p>
+                            )}
                           </div>
                         </>
                       )}
@@ -1498,20 +1478,73 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve CTA ── */}
-        <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
+        {/* ── Footer CTA: Evolve (non-Imago) or Molt to Agent (Imago) ── */}
+        <div className="mt-auto space-y-0">
+          {isImago ? (
+            /* Imago: Molt to Agent */
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-white">Ready to Molt to Agent</p>
+                  <p className="mt-0.5 text-[10px] text-[var(--muted)]">Deploy a sovereign GhostAgent identity — autonomous, on-chain, permanent</p>
+                </div>
+                <a
+                  href="https://ghostagent.ninja"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-5 py-2 text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 flex-shrink-0"
+                >
+                  GhostAgent.ninja →
+                </a>
+              </div>
             </div>
-            <Link
-              href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
-            >
-              Evolve
-            </Link>
-          </div>
+          ) : (
+            /* Larva / Pupa: Evolve CTA + expandable panel */
+            <>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
+                    <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
+                  </div>
+                  <button
+                    onClick={() => setShowEvolvePanel(p => !p)}
+                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
+                  >
+                    {showEvolvePanel ? 'Close ✕' : 'Evolve'}
+                  </button>
+                </div>
+              </div>
+
+              {showEvolvePanel && (
+                <div className="rounded-b-xl border border-t-0 border-amber-500/20 bg-black/30 p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {accountTier === 'basic' && (
+                      <Link
+                        href={`/nftmail?upgrade=lite&label=${encodeURIComponent(agentName)}`}
+                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                      >
+                        <span className="block text-sm font-bold">10 xDAI</span>
+                        Molt to Pupa
+                      </Link>
+                    )}
+                    <Link
+                      href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
+                      className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-3 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
+                        accountTier === 'basic' ? '' : 'col-span-2'
+                      }`}
+                    >
+                      <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
+                      Evolve to Imago
+                    </Link>
+                  </div>
+                  {daysLeft !== null && daysLeft <= 7 && (
+                    <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
