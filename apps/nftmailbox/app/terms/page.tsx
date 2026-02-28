@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const EFFECTIVE_DATE = '1 March 2026';
-const CONTACT_EMAIL = 'legal@ghostagent.ninja';
+const CONTACT_EMAIL = 'ghostagent@nftmail.box';
 
 export default function TermsPage() {
   return (
