@@ -87,8 +87,7 @@ export async function GET(req: NextRequest) {
             sender: isEnc ? '' : (m.payload?.from || 'unknown'),
             fromAddress: isEnc ? '' : (m.payload?.from || ''),
             receivedTime: new Date(receivedMs).toISOString(),
-            summary: isEnc ? '' : (m.payload?.body || ''),
-            bodyHtml: isEnc ? '' : (m.payload?.body || ''),
+            summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
             isRead: false,
             hasAttachment: false,
             encrypted: isEnc,
@@ -131,7 +130,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ 
         messages: [], 
         tier: 'free',
-        note: 'Zoho not configured. Human stream messages may not be available.',
         ...(workerError ? { workerError } : {}),
       });
     }

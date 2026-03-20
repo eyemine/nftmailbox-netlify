@@ -8,6 +8,22 @@ import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 import { ComposeEmail } from '../../components/ComposeEmail';
 
+function isAgentAddress(addr: string): boolean {
+  if (!addr) return false;
+  const local = addr.includes('@') ? addr.split('@')[0] : addr;
+  return local.endsWith('_');
+}
+
+function BlurFrom({ from }: { from: string }) {
+  if (!from || from === 'unknown') return <span className="text-white/70">unknown</span>;
+  if (isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
+  return (
+    <span className="relative inline-block select-none" title="Sender identity protected">
+      <span className="blur-sm text-white/70 pointer-events-none">{from}</span>
+    </span>
+  );
+}
+
 function stripHtml(html: unknown): string {
   if (html === null || html === undefined) return '';
   return String(html)
@@ -29,18 +45,6 @@ function stripHtml(html: unknown): string {
     .trim();
 }
 
-// Sanitize HTML for safe rendering: strip scripts, event handlers, dangerous attrs
-function safeHtml(html: unknown): string {
-  if (html === null || html === undefined) return '';
-  return String(html)
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/\son\w+\s*=\s*(["'])[\s\S]*?\1/gi, '')
-    .replace(/\son\w+\s*=[^\s>]*/gi, '')
-    .replace(/javascript\s*:/gi, '')
-    .replace(/vbscript\s*:/gi, '');
-}
-
 interface InboxMessage {
   id: string;
   subject: string;
@@ -48,7 +52,6 @@ interface InboxMessage {
   fromAddress: string;
   receivedTime: string;
   summary: string;
-  bodyHtml: string;
   encrypted: boolean;
   contentHash: string;
   type: string;
@@ -115,6 +118,7 @@ interface ResolveResult {
   storyIp?: string | null;
   onChainOwner?: string | null;
   originNft?: string | null;
+  messagesCleared?: boolean;
   availability?: {
     status: string;
     type: string;
@@ -170,9 +174,6 @@ export default function InboxPage() {
 
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
-
-  // Evolve panel expand toggle
-  const [showEvolvePanel, setShowEvolvePanel] = useState(false);
 
   // Owner check: if onChainOwner is recorded, require wallet match.
   // If not recorded (legacy mints pre-ownership tracking), fall back to authenticated.
@@ -256,7 +257,7 @@ export default function InboxPage() {
           try {
             const auditRes = await fetch(`https://${agentName}-proxy.richard-159.workers.dev/audit`);
             if (auditRes.ok) {
-              const auditData = await auditRes.json();
+              const auditData = await auditRes.json() as { auditLog?: any[] };
               setAuditEntries((auditData.auditLog || []).map((e: any) => ({
                 id: e.id,
                 from: e.from,
@@ -279,7 +280,7 @@ export default function InboxPage() {
             body: JSON.stringify({ action: 'getInbox', localPart: name }),
           });
           if (kvRes.ok) {
-            const kvData = await kvRes.json();
+            const kvData = await kvRes.json() as { messages?: any[] };
             const kvMessages = (kvData.messages || []).map((m: any) => ({
               id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
               subject: m.subject || '(no subject)',
@@ -302,7 +303,7 @@ export default function InboxPage() {
       }
 
       const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}`);
-      const data = await res.json();
+      const data = await res.json() as { error?: string; messages?: any[]; [key: string]: any };
       if (data.error && !data.messages) {
         setError(data.error);
         setLoading(false);
@@ -315,8 +316,7 @@ export default function InboxPage() {
           sender: m.sender || m.fromAddress || 'unknown',
           fromAddress: m.fromAddress || '',
           receivedTime: m.receivedTime || '',
-          summary: m.summary || '',
-          bodyHtml: m.bodyHtml || m.summary || '',
+          summary: stripHtml(m.summary || ''),
           encrypted: m.encrypted ?? false,
           contentHash: m.contentHash || '',
           type: m.type || '',
@@ -456,8 +456,8 @@ export default function InboxPage() {
     );
   }
 
-  // ─── EXPIRED BASIC TIER: account dormant, show renewal prompt ───
-  if (resolved && !resolved.exists && resolved.expired) {
+  // ─── MESSAGES CLEARED (basic tier): identity permanent, inbox address active ───
+  if (resolved && resolved.exists && resolved.messagesCleared) {
     return (
       <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
         <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8 md:px-6">
@@ -479,16 +479,16 @@ export default function InboxPage() {
           <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-3">
               <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
-              <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">EXPIRED</span>
+              <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-zinc-500/10 text-zinc-400 ring-zinc-500/20">MESSAGES CLEARED</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-amber-400" />
-              <span className="text-sm font-medium text-amber-300">Basic tier expired — 8-day inbox window closed</span>
+              <div className="h-3 w-3 rounded-full bg-zinc-400" />
+              <span className="text-sm font-medium text-amber-300">8-day history window — inbox address is permanent</span>
             </div>
             <p className="text-center text-sm text-[var(--muted)] max-w-md">
-              Your <strong className="text-white">Basic</strong> inbox has decayed. Upgrade to
-              {' '}<strong className="text-amber-300">Lite ($10)</strong> to restore sending,
-              get a <strong className="text-white">Gnosis Safe body</strong>, and extend your account.
+                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days.
+                Upgrade to {''}<strong className="text-amber-300">Lite ($10)</strong> for 30-day retention,
+                sending, and a <strong className="text-white">Gnosis Safe body</strong>.
             </p>
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <Link
@@ -756,7 +756,7 @@ export default function InboxPage() {
                         <span className={`text-sm font-medium ${item.redacted ? 'text-amber-300' : 'text-white'}`}>{item.subject}</span>
                         <p className="mt-0.5 text-xs text-[var(--muted)]">
                           {isOut ? 'To: ' : 'From: '}
-                          <span className="text-white/70">{item.from}</span>
+                          <BlurFrom from={isOut ? item.from : item.from} />
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -802,7 +802,7 @@ export default function InboxPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium text-white">{msg.subject}</span>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">From: <span className="text-white/70">{msg.sender}</span></p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">From: <BlurFrom from={msg.sender} /></p>
                     </div>
                     <div className="flex items-center gap-2">
                       {msg.encrypted && (
@@ -868,7 +868,7 @@ export default function InboxPage() {
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
   const dotColor = privacyTier === 'hard-privacy' ? 'bg-cyan-400' : privacyTier === 'private' ? 'bg-emerald-400' : 'bg-amber-400';
-  const isBlurred = privacyTier === 'private';
+  const isBlurred = privacyTier === 'private' && !isOwner;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -1054,6 +1054,48 @@ export default function InboxPage() {
           </div>
         )}
 
+        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
+        {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              <p className="text-sm font-semibold text-white">
+                {accountTier === 'basic' ? 'You are a Larva.' : 'You are a Pupa.'}
+              </p>
+              <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">
+                {accountTier === 'basic' ? 'LARVA' : 'PUPA'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[var(--muted)]">
+              {accountTier === 'basic'
+                ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
+                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {accountTier === 'basic' && (
+                <Link
+                  href={`/nftmail?upgrade=lite&label=${name}`}
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                >
+                  <span className="block text-sm font-bold">10 xDAI</span>
+                  Molt to Pupa
+                </Link>
+              )}
+              <Link
+                href={`/nftmail?upgrade=premium&label=${name}`}
+                className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
+                  accountTier === 'basic' ? '' : 'col-span-2'
+                }`}
+              >
+                <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
+                Evolve to Imago
+              </Link>
+            </div>
+            {daysLeft !== null && daysLeft <= 7 && (
+              <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
+            )}
+          </div>
+        )}
 
         {/* ── Error state ── */}
         {error && (
@@ -1069,8 +1111,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Private inbox: blurred placeholder (account exists + private/hard-privacy) ── */}
-        {!loading && !error && privacyTier !== 'exposed' && messages.length === 0 && (
+        {/* ── Private inbox: blurred placeholder (account exists + private/hard-privacy, non-owner) ── */}
+        {!loading && !error && privacyTier !== 'exposed' && !isOwner && messages.length === 0 && (
           <div className="space-y-2 select-none" aria-hidden="true">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2 blur-sm opacity-60">
@@ -1167,7 +1209,7 @@ export default function InboxPage() {
                           </span>
                         </div>
                         {!msg.encrypted && (
-                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate">{msg.sender}</p>
+                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={msg.sender} /></p>
                         )}
                         {!msg.encrypted && !isExpanded && msg.summary && (
                           <p className="mt-0.5 text-xs text-[var(--muted)] opacity-50 truncate">{stripHtml(msg.summary).slice(0, 120)}</p>
@@ -1210,7 +1252,7 @@ export default function InboxPage() {
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">From:</span>
-                                    <span className="text-white">{decrypted.from}</span>
+                                    <BlurFrom from={decrypted.from} />
                                   </div>
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">Subject:</span>
@@ -1264,24 +1306,17 @@ export default function InboxPage() {
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">From:</span>
-                              <span className="text-white">{msg.sender}</span>
+                              <BlurFrom from={msg.sender} />
                             </div>
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">Date:</span>
                               <span className="text-white/70">{msg.receivedTime ? formatTimestamp(msg.receivedTime) : ''}</span>
                             </div>
                           </div>
-                          <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3 text-xs text-[var(--muted)] leading-relaxed">
-                            {msg.bodyHtml && /<[a-z][\s\S]*>/i.test(msg.bodyHtml) ? (
-                              <div
-                                style={{ color: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' }}
-                                dangerouslySetInnerHTML={{ __html: safeHtml(msg.bodyHtml) }}
-                              />
-                            ) : (
-                              <p className="whitespace-pre-wrap break-words">
-                                {msg.bodyHtml || msg.summary || '(no content)'}
-                              </p>
-                            )}
+                          <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3">
+                            <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
+                              {stripHtml(msg.summary || '(no content)')}
+                            </p>
                           </div>
                         </>
                       )}
@@ -1430,7 +1465,7 @@ export default function InboxPage() {
                           <svg className="h-3 w-3 text-cyan-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                           <span className="truncate text-sm font-medium text-white">{dm.subject || '(no subject)'}</span>
                         </div>
-                        <p className="mt-0.5 text-xs text-[var(--muted)] truncate">{dm.from}</p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={dm.from} /></p>
                         {!isExpanded && <p className="mt-0.5 text-xs text-[var(--muted)] opacity-50 truncate">{dm.body?.slice(0, 100)}</p>}
                       </div>
                       <div className="flex-shrink-0">
@@ -1480,73 +1515,20 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Footer CTA: Evolve (non-Imago) or Molt to Agent (Imago) ── */}
-        <div className="mt-auto space-y-0">
-          {isImago ? (
-            /* Imago: Molt to Agent */
-            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-medium text-white">Ready to Molt to Agent</p>
-                  <p className="mt-0.5 text-[10px] text-[var(--muted)]">Deploy a sovereign GhostAgent identity — autonomous, on-chain, permanent</p>
-                </div>
-                <a
-                  href="https://ghostagent.ninja"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-5 py-2 text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 flex-shrink-0"
-                >
-                  GhostAgent.ninja →
-                </a>
-              </div>
+        {/* ── Evolve CTA ── */}
+        <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
             </div>
-          ) : (
-            /* Larva / Pupa: Evolve CTA + expandable panel */
-            <>
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
-                    <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
-                  </div>
-                  <button
-                    onClick={() => setShowEvolvePanel(p => !p)}
-                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
-                  >
-                    {showEvolvePanel ? 'Close ✕' : 'Evolve'}
-                  </button>
-                </div>
-              </div>
-
-              {showEvolvePanel && (
-                <div className="rounded-b-xl border border-t-0 border-amber-500/20 bg-black/30 p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {accountTier === 'basic' && (
-                      <Link
-                        href={`/nftmail?upgrade=lite&label=${encodeURIComponent(agentName)}`}
-                        className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
-                      >
-                        <span className="block text-sm font-bold">10 xDAI</span>
-                        Molt to Pupa
-                      </Link>
-                    )}
-                    <Link
-                      href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
-                      className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-3 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
-                        accountTier === 'basic' ? '' : 'col-span-2'
-                      }`}
-                    >
-                      <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
-                      Evolve to Imago
-                    </Link>
-                  </div>
-                  {daysLeft !== null && daysLeft <= 7 && (
-                    <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+            <Link
+              href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
+            >
+              Evolve
+            </Link>
+          </div>
         </div>
 
         <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
