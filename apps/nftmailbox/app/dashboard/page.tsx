@@ -533,14 +533,14 @@ export default function DashboardPage() {
                       <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">
                       UPCYCLED
                       </span>
-                      <span className="text-sm text-violet-300">Compose & Send requires a PUPA or IMAGO mailbox</span>
+                      <span className="text-sm text-violet-300">Compose & Send requires an IMAGO mailbox</span>
                     </div>
                     <p className="mt-2 text-xs text-[var(--muted)]">
-                      Cycle your inbox on the{' '}
+                      Cycle to IMAGO on the{' '}
                       <Link href="/nftmail" className="text-violet-300 hover:underline">
                         mint page
                       </Link>{' '}
-                      to unlock sending, compose, and your Mirror Body Safe.
+                      to unlock your dedicated private mailbox seat with outbound sending.
                     </p>
                   </div>
                 )}
