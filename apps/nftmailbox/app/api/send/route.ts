@@ -50,42 +50,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Subject or content required' }, { status: 400 });
     }
 
-    const zohoOrgId = process.env.ZOHO_ORG_ID;
+    const catchAllAccountId = process.env.ZOHO_CATCHALL_ACCOUNT_ID;
     const token = await getZohoAccessToken();
-    if (!token || !zohoOrgId) {
-      return NextResponse.json({ error: 'Zoho not configured' }, { status: 503 });
+    if (!token || !catchAllAccountId) {
+      return NextResponse.json({ error: 'Mail server not configured' }, { status: 503 });
     }
 
-    // Find account ID for the sender
-    const accountsRes = await fetch(
-      `${ZOHO_MAIL_API}/organization/${zohoOrgId}/accounts`,
-      { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
-    );
-
-    if (!accountsRes.ok) {
-      return NextResponse.json({ error: `Zoho accounts API returned ${accountsRes.status}` }, { status: 502 });
-    }
-
-    const accountsData = (await accountsRes.json()) as Record<string, any>;
-    const accounts = accountsData?.data || [];
-    const account = accounts.find(
-      (a: any) =>
-        a.primaryEmailAddress?.toLowerCase() === fromEmail.toLowerCase() ||
-        a.mailboxAddress?.toLowerCase() === fromEmail.toLowerCase()
-    );
-
-    if (!account) {
-      return NextResponse.json(
-        { error: 'No Zoho mailbox found for this address. Premium upgrade required.' },
-        { status: 403 }
-      );
-    }
-
-    const accountId = account.accountId || account.zuid;
-
-    // Send email via Zoho
+    // Send via catch-all account with fromAddress set to the sender's nftmail.box address
     const sendRes = await fetch(
-      `${ZOHO_MAIL_API}/accounts/${accountId}/messages`,
+      `${ZOHO_MAIL_API}/accounts/${catchAllAccountId}/messages`,
       {
         method: 'POST',
         headers: {
