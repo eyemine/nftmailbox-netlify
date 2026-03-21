@@ -14,9 +14,9 @@ function isAgentAddress(addr: string): boolean {
   return local.endsWith('_');
 }
 
-function BlurFrom({ from }: { from: string }) {
+function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) {
   if (!from || from === 'unknown') return <span className="text-white/70">unknown</span>;
-  if (isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
+  if (reveal || isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
   return (
     <span className="relative inline-block select-none" title="Sender identity protected">
       <span className="blur-sm text-white/70 pointer-events-none">{from}</span>
@@ -26,7 +26,7 @@ function BlurFrom({ from }: { from: string }) {
 
 function stripHtml(html: unknown): string {
   if (html === null || html === undefined) return '';
-  return String(html)
+  const stripped = String(html)
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/li>/gi, '\n')
@@ -43,6 +43,18 @@ function stripHtml(html: unknown): string {
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  // Drop lines that look like CSS/inline style artifacts
+  const lines = stripped.split('\n').filter(line => {
+    const t = line.trim();
+    if (!t) return false;
+    // CSS selector lines: contain { or } or start with . or # followed by alphanumeric
+    if (/[{}]/.test(t)) return false;
+    if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
+    // Inline style leftovers: key: value patterns at start
+    if (/^[a-z-]+\s*:\s/.test(t) && !t.includes('@') && !t.includes('<')) return false;
+    return true;
+  });
+  return lines.join('\n').trim();
 }
 
 interface InboxMessage {
@@ -1166,7 +1178,7 @@ export default function InboxPage() {
                           </span>
                         </div>
                         {!msg.encrypted && (
-                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={msg.sender} /></p>
+                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={msg.sender} reveal={isOwner} /></p>
                         )}
                         {!msg.encrypted && !isExpanded && msg.summary && (
                           <p className="mt-0.5 text-xs text-[var(--muted)] opacity-50 truncate">{stripHtml(msg.summary).slice(0, 120)}</p>
@@ -1209,7 +1221,7 @@ export default function InboxPage() {
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">From:</span>
-                                    <BlurFrom from={decrypted.from} />
+                                    <BlurFrom from={decrypted.from} reveal={isOwner} />
                                   </div>
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">Subject:</span>
@@ -1263,7 +1275,7 @@ export default function InboxPage() {
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">From:</span>
-                              <BlurFrom from={msg.sender} />
+                              <BlurFrom from={msg.sender} reveal={isOwner} />
                             </div>
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">Date:</span>
