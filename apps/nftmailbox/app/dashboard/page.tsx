@@ -8,6 +8,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
 import { MoltToPrivate } from '../components/MoltToPrivate';
+import { TogglePrivacy } from '../components/TogglePrivacy';
 
 function stripHtml(html: string): string {
   const s = html
@@ -84,6 +85,7 @@ export default function DashboardPage() {
 
   // Privacy toggle state
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
+  const [privacyTier, setPrivacyTier] = useState<string>('exposed');
 
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
@@ -362,6 +364,30 @@ export default function DashboardPage() {
               </div>
               <span className="text-[10px] text-[var(--muted)]">{selectedName?.gnoName}</span>
             </div>
+
+            {/* Privacy toggle + badge — agent accounts only */}
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
+              <div className="flex items-center gap-2">
+                {/* Badge */}
+                {privacyTier === 'hard-privacy' ? (
+                  <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-300 ring-1 ring-violet-500/20">HARD PRIVATE</span>
+                ) : privacyTier === 'private' || privacyEnabled ? (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">PRIVATE</span>
+                ) : (
+                  <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[9px] font-semibold text-red-300 ring-1 ring-red-500/20">EXPOSED</span>
+                )}
+              </div>
+            )}
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
+              <TogglePrivacy
+                name={selectedName.label}
+                walletAddress={preferredWallet.address}
+                onPrivacyChange={(enabled) => {
+                  setPrivacyEnabled(enabled);
+                  setPrivacyTier(enabled ? 'private' : 'exposed');
+                }}
+              />
+            )}
 
             {/* Open Agency: Molt to Private (only for molt.gno agents) */}
             {selectedName && preferredWallet && (
@@ -693,12 +719,12 @@ export default function DashboardPage() {
         )}
 
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
-          <span>nftmail.box dashboard — 8-day decay inbox — self-contained identity</span>
+          <span>nftmail.box dashboard — 8-day history inbox — self-contained identity</span>
           <Link
             href="/nftmail"
             className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap"
           >
-            Evolve to Imago →
+            Upcycle to Imago →
           </Link>
         </footer>
       </div>
