@@ -1034,20 +1034,6 @@ export default function InboxPage() {
         {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
         {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-              <p className="text-sm font-semibold text-white">
-                {accountTier === 'basic' ? 'You are a Larva.' : 'You are a Pupa.'}
-              </p>
-              <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">
-                {accountTier === 'basic' ? 'LARVA' : 'PUPA'}
-              </span>
-            </div>
-            <p className="text-[11px] text-[var(--muted)]">
-              {accountTier === 'basic'
-                ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
-                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
-            </p>
             <div className="grid grid-cols-2 gap-2">
               {accountTier === 'basic' && (
                 <Link
@@ -1065,7 +1051,7 @@ export default function InboxPage() {
                 }`}
               >
                 <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
-                Evolve to Imago
+                {accountTier === 'basic' ? 'Cycle from Larva to Pupa to Imago' : 'Cycle from Pupa to Imago'}
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
@@ -1490,8 +1476,8 @@ export default function InboxPage() {
         <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
+              <p className="text-xs font-medium text-white">{accountTier === 'basic' ? 'Cycle from Larva to Pupa to Imago' : 'Cycle from Pupa to Imago'}</p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Paid-tier Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
             </div>
             <Link
               href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}

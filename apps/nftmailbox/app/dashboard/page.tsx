@@ -384,10 +384,24 @@ export default function DashboardPage() {
             {/* Inbox tab */}
             {tab === 'inbox' && (
               <div className="space-y-3">
-                {/* 8-day decay legend */}
+                {/* Link to full inbox page */}
+                {selectedName && (
+                  <div className="flex justify-end">
+                    <Link
+                      href={`/inbox/${encodeURIComponent(selectedName.label)}`}
+                      className="text-[10px] text-[rgb(160,220,255)] hover:text-white transition"
+                    >
+                      Open full inbox →
+                    </Link>
+                  </div>
+                )}
+                {/* Tier-aware decay legend — Imago has no expiry */}
+                {inboxTier !== 'premium' && inboxTier !== 'ghost' && (
                 <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">8-DAY HISTORY WINDOW</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
+                      {inboxTier === 'lite' ? '30-DAY HISTORY WINDOW' : '8-DAY HISTORY WINDOW'}
+                    </span>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -411,6 +425,7 @@ export default function DashboardPage() {
                     {loadingInbox ? 'Loading...' : 'Refresh'}
                   </button>
                 </div>
+                )}
 
                 {inboxNote && (
                   <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
@@ -465,17 +480,20 @@ export default function DashboardPage() {
                               </svg>
                             )}
                           </div>
-                          <p className={`mt-0.5 text-xs text-[var(--muted)] ${!privacyEnabled ? 'blur-sm select-none' : ''}`}>{msg.sender}</p>
+                          <p className="mt-0.5 text-xs text-[var(--muted)]">{msg.sender}</p>
                           {msg.summary && (
                             <p className="mt-1 truncate text-xs text-[var(--muted)] opacity-60">{stripHtml(msg.summary)}</p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                           <span className="text-[10px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                          {/* Decay bar */}
+                          {/* Decay bar — hidden for Imago (no expiry) */}
+                          {inboxTier !== 'premium' && inboxTier !== 'ghost' && (
                           <div className="flex items-center gap-1.5">
                             <span className={`text-[9px] font-mono ${decayColor(msg.decayPct)}`}>
-                              {8 - Math.floor(msg.decayPct / 12.5)}d left
+                              {inboxTier === 'lite'
+                                ? `${30 - Math.floor(msg.decayPct / (100/30))}d left`
+                                : `${8 - Math.floor(msg.decayPct / 12.5)}d left`}
                             </span>
                             <div className="h-1 w-12 overflow-hidden rounded-full bg-white/5">
                               <div
@@ -484,6 +502,7 @@ export default function DashboardPage() {
                               />
                             </div>
                           </div>
+                          )}
                           <div className="flex items-center gap-2">
                             <Link
                               href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`}
