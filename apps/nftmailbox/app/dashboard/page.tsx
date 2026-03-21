@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
-import { TogglePrivacy } from '../components/TogglePrivacy';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 
 function stripHtml(html: string): string {
@@ -385,15 +384,6 @@ export default function DashboardPage() {
             {/* Inbox tab */}
             {tab === 'inbox' && (
               <div className="space-y-3">
-                {/* Privacy toggle — inside inbox tab */}
-                {selectedName && preferredWallet && (
-                  <TogglePrivacy
-                    name={selectedName.label}
-                    walletAddress={preferredWallet.address}
-                    onPrivacyChange={setPrivacyEnabled}
-                  />
-                )}
-
                 {/* 8-day decay legend */}
                 <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">

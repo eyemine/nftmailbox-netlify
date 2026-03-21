@@ -120,18 +120,21 @@ export default function Home() {
 
         {/* Mint or Upgrade */}
         <section className="w-full max-w-lg">
+          <p className="mb-3 text-center text-sm text-[var(--muted)]">
+            Minting paused until official launch — April 2026
+          </p>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
             <h2 className="text-sm font-semibold text-white mb-1">New here?</h2>
             <p className="text-xs text-[var(--muted)] mb-4">
-              Mint a free NFTMail.box inbox address or upgrade to paid for full feature Gnosis wallet and hardened security.
+              Mint a free NFTmail inbox address or upgrade to paid for full feature Gnosis wallet and hardened security.
             </p>
             <div className="flex gap-3 justify-center">
-              <Link
-                href="/nftmail"
-                className="rounded-lg bg-[rgba(0,163,255,0.12)] px-6 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)]"
+              <span
+                title="Minting paused until official launch — April 2026"
+                className="cursor-not-allowed rounded-lg bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--muted)] border border-[var(--border)] select-none"
               >
-                Mint NFTMail
-              </Link>
+                NFTmail
+              </span>
             </div>
           </div>
         </section>
@@ -140,10 +143,10 @@ export default function Home() {
         <div className="flex flex-wrap justify-center gap-2">
           {[
             { label: 'Free Tier', color: 'emerald' },
-            { label: '8-Day Decay', color: 'blue' },
+            { label: '8-Day History', color: 'blue' },
             { label: 'Glass Box Agents', color: 'violet' },
             { label: 'Sovereign Kill-Switch', color: 'red' },
-            { label: 'Privacy Toggle', color: 'emerald' },
+            { label: 'Encrypted XMTP', color: 'emerald' },
           ].map((f) => (
             <span
               key={f.label}
@@ -161,10 +164,6 @@ export default function Home() {
 
         <footer className="text-center text-xs text-[var(--muted)]">
           nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
-          {' · '}
-          <Link href="/terms" className="hover:text-white transition underline underline-offset-2">Terms of Use</Link>
-          {' · '}
-          <Link href="/privacy" className="hover:text-white transition underline underline-offset-2">Privacy Policy</Link>
         </footer>
       </div>
     </div>

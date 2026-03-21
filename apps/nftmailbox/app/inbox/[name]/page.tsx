@@ -861,14 +861,24 @@ export default function InboxPage() {
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
 
-  const tierLabel = privacyTier === 'hard-privacy' ? 'HARD PRIVACY' : privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
-  const tierColor = privacyTier === 'hard-privacy'
+  // Privacy model:
+  // - Human stream: always private from public (blurred unless owner)
+  // - Molt.gno agent (glassbox): exposed by default, owner can toggle
+  // - Other agents: private by default, owner can toggle
+  // - hard-privacy (IMAGO): always blurred from public regardless
+  const isMoltAgent = isAgent && agentTld === 'molt.gno';
+  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = !isAgent
+    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // humans always private
+    : privacyTier;  // agents: use stored tier (molt.gno defaults exposed, others default private)
+  const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
+
+  const tierLabel = effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
+  const tierColor = effectivePrivacyTier === 'hard-privacy'
     ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
-    : privacyTier === 'private'
+    : effectivePrivacyTier === 'private'
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
-    : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
-  const dotColor = privacyTier === 'hard-privacy' ? 'bg-cyan-400' : privacyTier === 'private' ? 'bg-emerald-400' : 'bg-amber-400';
-  const isBlurred = privacyTier === 'private' && !isOwner;
+    : 'text-red-300 bg-red-500/10 ring-red-500/20';
+  const dotColor = effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -907,41 +917,28 @@ export default function InboxPage() {
               </span>
             </div>
 
-            {/* Privacy toggle: exposed ↔ private — only for authenticated owner */}
-            {isOwner ? (
+            {/* Privacy toggle: agents only — owner can toggle exposed/private */}
+            {isOwner && isAgent && privacyTier !== 'hard-privacy' && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrivacyToggle}
-                disabled={togglingPrivacy || privacyTier === 'hard-privacy'}
+                disabled={togglingPrivacy}
                 className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
                   privacyTier === 'private'
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : privacyTier === 'hard-privacy'
-                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 cursor-default'
-                    : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:text-white'
+                    : 'border-red-500/30 bg-red-500/10 text-red-300'
                 } disabled:opacity-50`}
               >
                 {togglingPrivacy ? (
                   <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
-                ) : privacyTier !== 'exposed' ? (
+                ) : privacyTier === 'private' ? (
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                 ) : (
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 )}
-                {privacyTier === 'hard-privacy' ? 'LOCKED' : privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
+                {privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
               </button>
-                {privacyTier === 'exposed' && (
-                <span className="text-[9px] text-[var(--muted)]">toggle to blur</span>
-              )}
             </div>
-          ) : (
-            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
-              privacyTier === 'private' ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
-              : privacyTier === 'hard-privacy' ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
-              : ''
-            }`}>
-              {privacyTier === 'private' ? 'PRIVATE' : privacyTier === 'hard-privacy' ? 'HARD PRIVACY' : ''}
-            </span>
           )}
           </div>
 
@@ -964,7 +961,7 @@ export default function InboxPage() {
               )}
               {isImago && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] text-cyan-300/80">✦ Sovereign Identity — no decay</span>
+                  <span className="text-[9px] text-cyan-300/80">✦ Sovereign — Persistent History</span>
                 </div>
               )}
               {decayPct !== null && !isImago && daysLeft !== null && (
@@ -994,43 +991,23 @@ export default function InboxPage() {
           )}
         </div>
 
-        {/* ── Folder tabs + Compose button ── */}
+        {/* ── Owner action bar: Dashboard + Compose (if canSend) ── */}
         {isOwner && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-0.5">
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard?email=${encodeURIComponent(name + (isAgent ? '' : '@nftmail.box'))}`}
+              className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+              Dashboard
+            </Link>
+            {canSend && (
               <button
-                onClick={() => setActiveFolder('inbox')}
-                className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
-                  activeFolder === 'inbox'
-                    ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]'
-                    : 'text-[var(--muted)] hover:text-white'
-                }`}
+                onClick={() => setActiveFolder(activeFolder === 'compose' ? 'inbox' : 'compose')}
+                className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
               >
-                Inbox {messages.length > 0 ? `(${messages.length})` : ''}
-              </button>
-              {canSend && (
-                <button
-                  onClick={() => setActiveFolder('compose')}
-                  className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
-                    activeFolder === 'compose'
-                      ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]'
-                      : 'text-[var(--muted)] hover:text-white'
-                  }`}
-                >
-                  Compose
-                </button>
-              )}
-            </div>
-            {canSend && activeFolder === 'inbox' && (
-              <button
-                onClick={() => setActiveFolder('compose')}
-                className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.16)] transition"
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-                New Message
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                {activeFolder === 'compose' ? 'Back to Inbox' : 'Compose'}
               </button>
             )}
           </div>
@@ -1111,8 +1088,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Private inbox: blurred placeholder (account exists + private/hard-privacy, non-owner) ── */}
-        {!loading && !error && privacyTier !== 'exposed' && !isOwner && messages.length === 0 && (
+        {/* ── Private inbox: blurred placeholder (account exists + blurred for non-owner) ── */}
+        {!loading && !error && isBlurred && messages.length === 0 && (
           <div className="space-y-2 select-none" aria-hidden="true">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2 blur-sm opacity-60">
@@ -1137,8 +1114,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Empty state: account exists, exposed, but no emails ── */}
-        {!loading && !error && privacyTier === 'exposed' && messages.length === 0 && (
+        {/* ── Empty state: account exists, not blurred, but no emails ── */}
+        {!loading && !error && !isBlurred && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <svg className="h-14 w-14 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
             <p className="text-sm text-[var(--muted)]">Inbox empty</p>
@@ -1148,22 +1125,16 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Message count + Dashboard link ── */}
+        {/* ── Message count ── */}
         {!loading && messages.length > 0 && (
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
                 INBOX ({messages.length})
               </span>
-              <Link
-                href={isOwner ? `/dashboard?email=${encodeURIComponent(name + '@nftmail.box')}` : '/nftmail'}
-                className="rounded-md border border-[var(--border)] bg-black/20 px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition"
-              >
-                Dashboard
-              </Link>
             </div>
             <span className="text-[9px] text-[var(--muted)]">
-              {isImago ? '✦ Sovereign — no decay' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
+              {isImago ? '✦ Sovereign — Persistent History' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
             </span>
           </div>
         )}
@@ -1184,7 +1155,7 @@ export default function InboxPage() {
                       ? 'border-cyan-500/20 bg-cyan-500/5'
                       : 'border-[var(--border)] bg-[var(--card)]'
                   } ${isExpanded ? 'ring-1 ring-[rgba(0,163,255,0.2)]' : ''}`}
-                  style={isBlurred && !msg.encrypted ? { filter: 'blur(6px)', WebkitFilter: 'blur(6px)' } : undefined}
+                  style={isBlurred && !msg.encrypted ? { filter: 'blur(8px)', WebkitFilter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' } : undefined}
                 >
                   {/* ── Collapsed row ── */}
                   <button

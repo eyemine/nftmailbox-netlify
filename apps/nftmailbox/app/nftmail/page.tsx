@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
@@ -19,16 +19,13 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
   const { user } = usePrivy();
   const [selectedTier, setSelectedTier] = useState<'lite' | 'pro'>(defaultTier === 'pro' || defaultTier === 'premium' ? 'pro' : 'lite');
   const stageName = selectedTier === 'pro' ? 'Imago' : 'Pupa';
+  const [txHash, setTxHash] = useState('');
   const [upgrading, setUpgrading] = useState(false);
-  const [polling, setPolling] = useState(false);
-  const [pollSeconds, setPollSeconds] = useState(0);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<'address' | 'amount' | null>(null);
   const [paymentToken, setPaymentToken] = useState<'xdai' | 'eure'>('xdai');
   const [showGnosisPayTooltip, setShowGnosisPayTooltip] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollCountRef = useRef(0);
 
   const ownerWallet = user?.wallet?.address || '';
   const xdaiAmount = TIER_XDAI[selectedTier];
@@ -40,53 +37,28 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    setPolling(false);
-  }, []);
-
-  const attemptVerify = useCallback(async () => {
-    if (!ownerWallet) return;
+  const handleUpgrade = useCallback(async () => {
+    if (!ownerWallet) { setError('Connect wallet first'); return; }
+    const hash = txHash.trim();
+    if (!hash) { setError('Paste the tx hash from your payment'); return; }
+    if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) { setError('Invalid tx hash — must be 0x followed by 64 hex characters'); return; }
+    setUpgrading(true);
+    setError('');
     try {
       const res = await fetch('/api/upgrade-tier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentToken, autoDetect: true }),
+        body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentTxHash: hash, paymentToken }),
       });
-      const data = await res.json();
-      if (res.ok && data.newTier) {
-        stopPolling();
-        setUpgrading(false);
-        setResult(data);
-      }
-    } catch { /* silent — keep polling */ }
-  }, [label, ownerWallet, selectedTier, paymentToken, stopPolling]);
-
-  const startPolling = useCallback(() => {
-    if (!ownerWallet) { setError('Connect wallet first'); return; }
-    setError('');
-    setPolling(true);
-    setUpgrading(true);
-    setPollSeconds(0);
-    pollCountRef.current = 0;
-    // First check immediately
-    attemptVerify();
-    pollRef.current = setInterval(() => {
-      pollCountRef.current += 5;
-      setPollSeconds(pollCountRef.current);
-      // Stop after 10 minutes
-      if (pollCountRef.current >= 600) {
-        stopPolling();
-        setUpgrading(false);
-        setError('Payment not detected after 10 minutes. Check the amount and chain, then try again.');
-        return;
-      }
-      attemptVerify();
-    }, 5000);
-  }, [ownerWallet, attemptVerify, stopPolling]);
-
-  // Cleanup on unmount
-  useEffect(() => () => stopPolling(), [stopPolling]);
+      const data = await res.json() as { error?: string; [key: string]: any };
+      if (!res.ok) throw new Error(data.error || 'Upgrade failed');
+      setResult(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUpgrading(false);
+    }
+  }, [label, ownerWallet, selectedTier, txHash, paymentToken]);
 
   if (result) {
     return (
@@ -256,52 +228,42 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         </a>
       </div>
 
-      {/* Step 2: auto-detect payment */}
+      {/* Step 2: paste tx hash */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedTier === 'pro' ? 'bg-violet-500/20 text-violet-300' : 'bg-amber-500/20 text-amber-300'}`}>2</div>
-          <span className="text-xs font-semibold text-white">Send payment — we detect it automatically</span>
+          <span className="text-xs font-semibold text-white">Paste your transaction hash</span>
         </div>
-
-        {polling ? (
-          <div className={`rounded-xl border p-4 space-y-3 ${selectedTier === 'pro' ? 'border-violet-500/25 bg-violet-500/5' : 'border-amber-500/25 bg-amber-500/5'}`}>
-            <div className="flex items-center gap-3">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent text-[var(--muted)] flex-shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-white">Watching for your payment…</p>
-                <p className="text-[10px] text-[var(--muted)]">Checking Gnosis chain every 5 seconds · {pollSeconds}s elapsed</p>
-              </div>
-            </div>
-            <p className="text-[10px] text-[var(--muted)]">
-              Send exactly <strong className="text-white">{paymentToken === 'eure' ? `${eureAmount} EURe` : `${xdaiAmount} xDAI`}</strong> to the address above — your tier activates the moment it lands.
-            </p>
-            <button
-              onClick={() => { stopPolling(); setUpgrading(false); }}
-              className="text-[10px] text-[var(--muted)] hover:text-white transition underline"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={startPolling}
-            disabled={upgrading}
-            className={`w-full rounded-xl border px-4 py-3.5 text-sm font-semibold transition disabled:opacity-40 ${
-              selectedTier === 'pro'
-                ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-                : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
-            }`}
-          >
-            I&apos;ve sent the payment — activate {selectedTier === 'pro' ? 'Imago' : 'Pupa'} →
-          </button>
-        )}
-
+        <input
+          type="text"
+          value={txHash}
+          onChange={e => { setTxHash(e.target.value); setError(''); }}
+          placeholder="0x... (64-char tx hash from Gnosisscan)"
+          className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
+          spellCheck={false}
+        />
         {error && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
             <p className="text-[11px] text-red-400">{error}</p>
           </div>
         )}
-        <p className="text-center text-[10px] text-[var(--muted)]">Verified on-chain automatically — no tx hash needed</p>
+        <button
+          onClick={handleUpgrade}
+          disabled={upgrading || !txHash.trim()}
+          className={`w-full rounded-lg border px-4 py-3 text-sm font-semibold transition disabled:opacity-40 ${
+            selectedTier === 'pro'
+              ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+          }`}
+        >
+          {upgrading ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Verifying payment on-chain...
+            </span>
+          ) : `Verify & ${selectedTier === 'pro' ? 'Emerge as Imago' : 'Molt to Pupa'} →`}
+        </button>
+        <p className="text-center text-[10px] text-[var(--muted)]">Payment verified on-chain — no trust required</p>
       </div>
     </div>
   );
@@ -314,7 +276,6 @@ export default function NftmailPage() {
   const upgradeLabel = searchParams?.get('label') || '';
   const upgradeTier = searchParams?.get('upgrade') || '';
   const claimName = searchParams?.get('claim') || '';
-  const isSovereignClaim = !!(claimName && searchParams?.get('sovereign') === '1');
   const isUpgradeFlow = !!(upgradeLabel && (upgradeTier === 'lite' || upgradeTier === 'pro' || upgradeTier === 'premium'));
 
   const [mintedName, setMintedName] = useState('');
@@ -322,45 +283,6 @@ export default function NftmailPage() {
   const [tier, setTier] = useState<Tier>('none');
 
   const email = mintedName ? `${mintedName}@nftmail.box` : '';
-
-  // ── Sovereign claim flow: ?claim=rgbanksy&sovereign=1 — focused mint page ──
-  if (isSovereignClaim) {
-    return (
-      <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
-        <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-8 px-4 py-10 md:px-6">
-          <header className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
-              <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95" />
-              <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
-            </Link>
-            <button onClick={() => window.history.back()} className="text-[10px] text-[var(--muted)] hover:text-white transition">← Back</button>
-          </header>
-
-          <section className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Claim <span className="text-[rgb(160,220,255)]">{claimName}@nftmail.box</span></h1>
-            <p className="mx-auto mt-2 max-w-lg text-sm text-[var(--muted)]">
-              Mint your ENS identity as a self-contained NFTMail address on Gnosis.
-            </p>
-          </section>
-
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-            {authenticated ? (
-              <MintNFTMail initialName={claimName} />
-            ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-[var(--muted)]">Connect your wallet to claim this name.</p>
-                <NFTLogin />
-              </div>
-            )}
-          </section>
-
-          <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
-            nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
-          </footer>
-        </div>
-      </div>
-    );
-  }
 
   // ── Upgrade flow: show tier upgrade panel directly ──
   if (isUpgradeFlow) {
@@ -508,10 +430,10 @@ export default function NftmailPage() {
                 >
                   {tier !== 'none' ? '✓' : '2'}
                 </div>
-                <h2 className="text-lg font-semibold text-white">Mint NFTMail</h2>
+                <h2 className="text-lg font-semibold text-white">Mint NFTmail</h2>
                 <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">FREE</span>
               </div>
-              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day inbox, receive only. Molt to Pupa for a 30-day cycle.</p>
+              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Molt to Pupa for a 30-day cycle.</p>
             </div>
             <div className="ml-8">
               {tier !== 'none' ? (
@@ -622,53 +544,66 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
     : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);      // standard human name
 
   return (
-    <div className="space-y-3">
-      <MintNFTMail initialName={initialName} />
-      {!showManual ? (
+    <div className="space-y-4">
+      {/* Human / Agent tab selector */}
+      <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
         <button
-          onClick={() => setShowManual(true)}
-          className="w-full rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-xs text-[var(--muted)] transition hover:text-white"
+          onClick={() => { setNameType('human'); setManualName(''); }}
+          className={`flex-1 px-3 py-2 transition ${nameType === 'human' ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
         >
-          Already minted? Enter details →
+          Human
         </button>
+        <button
+          onClick={() => { setNameType('agent'); setManualName(''); }}
+          className={`flex-1 px-3 py-2 transition ${nameType === 'agent' ? 'bg-amber-500/15 text-amber-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+        >
+          Agent (NFTmail.gno)
+        </button>
+      </div>
+
+      {nameType === 'human' ? (
+        <div className="rounded-xl border border-[var(--border)] bg-black/20 px-5 py-6 text-center space-y-2">
+          <p className="text-sm font-semibold text-white">Minting paused</p>
+          <p className="text-xs text-[var(--muted)]">
+            Human NFTmail minting opens at official launch — April 2026.
+          </p>
+          <p className="text-[10px] text-[var(--muted)]">
+            Agent minting via GhostAgent.ninja remains open.
+          </p>
+        </div>
       ) : (
-        <div className="space-y-3 rounded-xl border border-[var(--border)] bg-black/20 p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">ALREADY MINTED</div>
-            {/* Human / Agent toggle */}
-            <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
+        <>
+          <MintNFTMail initialName={initialName} />
+          {!showManual ? (
+            <button
+              onClick={() => setShowManual(true)}
+              className="w-full rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-xs text-[var(--muted)] transition hover:text-white"
+            >
+              Already minted? Enter details →
+            </button>
+          ) : (
+            <div className="space-y-3 rounded-xl border border-[var(--border)] bg-black/20 p-4">
+              <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">ALREADY MINTED — AGENT</div>
+              <input
+                type="text"
+                value={manualName}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Agent name (e.g. ghostbot_)"
+                className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
+              />
+              {manualName && !isValid && (
+                <p className="text-[10px] text-amber-400">Agent names must end with an underscore, e.g. <code>ghostbot_</code></p>
+              )}
               <button
-                onClick={() => { setNameType('human'); setManualName(''); }}
-                className={`px-3 py-1 transition ${nameType === 'human' ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+                onClick={() => { if (isValid) onMinted(manualName, ''); }}
+                disabled={!isValid}
+                className="w-full rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] disabled:opacity-40"
               >
-                Human
-              </button>
-              <button
-                onClick={() => { setNameType('agent'); setManualName(''); }}
-                className={`px-3 py-1 transition ${nameType === 'agent' ? 'bg-amber-500/15 text-amber-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
-              >
-                Agent
+                Confirm → Evolve to Imago
               </button>
             </div>
-          </div>
-          <input
-            type="text"
-            value={manualName}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder={nameType === 'agent' ? 'Agent name (e.g. ghostbot_)' : 'Name (e.g. alice.ops)'}
-            className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
-          />
-          {nameType === 'agent' && manualName && !isValid && (
-            <p className="text-[10px] text-amber-400">Agent names must end with an underscore, e.g. <code>ghostbot_</code></p>
           )}
-          <button
-            onClick={() => { if (isValid) onMinted(manualName, ''); }}
-            disabled={!isValid}
-            className="w-full rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] disabled:opacity-40"
-          >
-            Confirm → Evolve to Imago
-          </button>
-        </div>
+        </>
       )}
     </div>
   );
