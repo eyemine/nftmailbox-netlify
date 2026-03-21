@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
@@ -165,6 +165,7 @@ export default function InboxPage() {
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
+  const { wallets: connectedWallets } = useWallets();
 
   // Address resolution state
   const [resolved, setResolved] = useState<ResolveResult | null>(null);
@@ -196,15 +197,21 @@ export default function InboxPage() {
     if (!authenticated) return false;
     if (!resolved?.onChainOwner) return authenticated; // legacy: trust session
     const owner = resolved.onChainOwner.toLowerCase();
-    const wallets: string[] = [];
-    if (user?.wallet?.address) wallets.push(user.wallet.address.toLowerCase());
+    const addrs: string[] = [];
+    // Privy embedded wallet
+    if (user?.wallet?.address) addrs.push(user.wallet.address.toLowerCase());
+    // All linked accounts (external wallets, email, socials)
     if (user?.linkedAccounts) {
       for (const acct of user.linkedAccounts) {
-        if ((acct as any).address) wallets.push((acct as any).address.toLowerCase());
+        if ((acct as any).address) addrs.push((acct as any).address.toLowerCase());
       }
     }
-    return wallets.includes(owner);
-  }, [authenticated, resolved?.onChainOwner, user]);
+    // useWallets() — catches actively connected external wallets (MetaMask, WalletConnect, etc.)
+    for (const w of connectedWallets) {
+      if (w.address) addrs.push(w.address.toLowerCase());
+    }
+    return addrs.includes(owner);
+  }, [authenticated, resolved?.onChainOwner, user, connectedWallets]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
