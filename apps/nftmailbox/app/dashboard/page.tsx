@@ -10,6 +10,10 @@ import { WarrantCanary } from '../components/WarrantCanary';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 interface NftMailName {
   tokenId: number;
   label: string;
@@ -332,15 +336,6 @@ export default function DashboardPage() {
               <span className="text-[10px] text-[var(--muted)]">{selectedName?.gnoName}</span>
             </div>
 
-            {/* Privacy Toggle */}
-            {selectedName && preferredWallet && (
-              <TogglePrivacy
-                name={selectedName.label}
-                walletAddress={preferredWallet.address}
-                onPrivacyChange={setPrivacyEnabled}
-              />
-            )}
-
             {/* Open Agency: Molt to Private (only for molt.gno agents) */}
             {selectedName && preferredWallet && (
               <MoltToPrivate
@@ -372,7 +367,7 @@ export default function DashboardPage() {
               >
                 Compose
                 <span className="ml-1 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] text-violet-300 ring-1 ring-violet-500/20">
-                  EVOLVED
+                  IMAGO
                 </span>
               </button>
               <button
@@ -390,6 +385,15 @@ export default function DashboardPage() {
             {/* Inbox tab */}
             {tab === 'inbox' && (
               <div className="space-y-3">
+                {/* Privacy toggle — inside inbox tab */}
+                {selectedName && preferredWallet && (
+                  <TogglePrivacy
+                    name={selectedName.label}
+                    walletAddress={preferredWallet.address}
+                    onPrivacyChange={setPrivacyEnabled}
+                  />
+                )}
+
                 {/* 8-day decay legend */}
                 <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">
@@ -471,9 +475,9 @@ export default function DashboardPage() {
                               </svg>
                             )}
                           </div>
-                          <p className="mt-0.5 text-xs text-[var(--muted)]">{msg.sender}</p>
+                          <p className={`mt-0.5 text-xs text-[var(--muted)] ${!privacyEnabled ? 'blur-sm select-none' : ''}`}>{msg.sender}</p>
                           {msg.summary && (
-                            <p className="mt-1 truncate text-xs text-[var(--muted)] opacity-60">{msg.summary}</p>
+                            <p className="mt-1 truncate text-xs text-[var(--muted)] opacity-60">{stripHtml(msg.summary)}</p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -533,14 +537,14 @@ export default function DashboardPage() {
                       <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">
                       UPCYCLED
                       </span>
-                      <span className="text-sm text-violet-300">Compose & Send requires an IMAGO mailbox</span>
+                      <span className="text-sm text-violet-300">Compose & Send requires a PUPA or IMAGO mailbox</span>
                     </div>
                     <p className="mt-2 text-xs text-[var(--muted)]">
-                      Cycle to IMAGO on the{' '}
+                      Cycle your inbox on the{' '}
                       <Link href="/nftmail" className="text-violet-300 hover:underline">
                         mint page
                       </Link>{' '}
-                      to unlock your dedicated private mailbox seat with outbound sending.
+                      to unlock sending, compose, and your Mirror Body Safe.
                     </p>
                   </div>
                 )}
