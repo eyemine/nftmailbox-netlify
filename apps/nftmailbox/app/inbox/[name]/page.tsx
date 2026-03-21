@@ -91,6 +91,7 @@ interface AuditEntry {
 
 interface FeedItem {
   key: string;
+  id?: string;
   subject: string;
   from: string;
   timestamp: number;
@@ -375,6 +376,7 @@ export default function InboxPage() {
       inboxSubjects.add(msg.subject.toLowerCase().trim());
       feed.push({
         key: `msg-${msg.id}`,
+        id: msg.id,
         subject: msg.subject,
         from: msg.sender,
         timestamp: ts,
@@ -792,6 +794,24 @@ export default function InboxPage() {
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${isOut ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-blue-500/10 text-blue-300 ring-blue-500/20'}`}>{isOut ? '↑ out' : '↓ in'}</span>
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${channelColor}`}>{item.channel}</span>
                         <span className="text-[10px] text-[var(--muted)] whitespace-nowrap">{item.timestamp ? formatTimeAgo(new Date(item.timestamp).toISOString()) : ''}</span>
+                        {isOwner && item.id && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Delete this message permanently?')) return;
+                              await fetch(WORKER_URL, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id }),
+                              });
+                              setMessages(prev => prev.filter(m => m.id !== item.id));
+                            }}
+                            className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-0.5 text-[9px] font-medium text-red-300 transition hover:bg-red-500/15"
+                            title="Delete"
+                          >
+                            <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                     {item.body && !item.encrypted && (
