@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -56,8 +56,10 @@ interface InboxMessage {
 type Tab = 'inbox' | 'compose' | 'killswitch';
 
 export default function DashboardPage() {
-  const { authenticated, login, logout, ready } = usePrivy();
-  const { wallets } = useWallets();
+  const { authenticated, login, logout, ready, user } = usePrivy();
+  // NOTE: useWallets() omitted — browser extensions (ZilPay etc.) inject null entries that crash enumeration.
+  // Use user.wallet from Privy session instead.
+  const wallets: any[] = [];
 
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
@@ -86,7 +88,10 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
 
-  const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
+  // Derive wallet address safely from Privy session (avoids useWallets() crash)
+  const walletAddress = user?.wallet?.address ||
+    (user?.linkedAccounts as any[])?.find((a: any) => a?.address)?.address || null;
+  const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
 
   // Resolve NFTMail names for connected wallet
   const resolveNames = useCallback(async () => {
