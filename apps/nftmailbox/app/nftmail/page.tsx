@@ -90,8 +90,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
         <div>
           <p className="text-sm font-semibold text-white">You are a Larva.</p>
-          <p className="text-[11px] text-[var(--muted)]">{label}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.</p>
-          {/* Note: basic=8-day decay, pupa=30-day cycle */}
+          <p className="text-[11px] text-[var(--muted)]">{label}@nftmail.box · Your shell is temporary (8-day history). Cycle to next stage of metamorphosis.</p>
         </div>
         <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20 whitespace-nowrap">LARVA</span>
       </div>
@@ -104,7 +103,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         >
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm font-semibold text-white">Molt to Pupa</p>
+              <p className="text-sm font-semibold text-white">Cycle to Pupa</p>
               <p className="text-[10px] text-[var(--muted)]">Lite tier</p>
             </div>
             <span className="text-lg font-bold text-amber-300">10 xDAI</span>
@@ -129,7 +128,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
           </div>
           <ul className="space-y-1 text-[11px] text-[var(--muted)]">
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Everything in Pupa</li>
-            <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Infinite retention — no 8-day decay</li>
+            <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Infinite retention — no 8-day history window</li>
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Encrypted KV storage — you own your keys</li>
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Enter GhostAgent molting stream</li>
           </ul>
@@ -261,7 +260,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
               <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
               Verifying payment on-chain...
             </span>
-          ) : `Verify & ${selectedTier === 'pro' ? 'Emerge as Imago' : 'Molt to Pupa'} →`}
+          ) : `Verify & ${selectedTier === 'pro' ? 'Emerge as Imago' : 'Cycle to Pupa'} →`}
         </button>
         <p className="text-center text-[10px] text-[var(--muted)]">Payment verified on-chain — no trust required</p>
       </div>
@@ -300,7 +299,7 @@ export default function NftmailPage() {
           <section className="text-center">
             <h1 className="text-3xl font-bold tracking-tight">You are a <span className="text-amber-300">Larva</span>.</h1>
             <p className="mx-auto mt-2 max-w-lg text-sm text-[var(--muted)]">
-              Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.
+              Your shell is temporary (8-day history). Cycle to next stage of metamorphosis.
             </p>
           </section>
 
@@ -433,7 +432,7 @@ export default function NftmailPage() {
                 <h2 className="text-lg font-semibold text-white">Mint NFTmail</h2>
                 <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">FREE</span>
               </div>
-              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Molt to Pupa for a 30-day cycle.</p>
+              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Cycle to Pupa for a 30-day window.</p>
             </div>
             <div className="ml-8">
               {tier !== 'none' ? (

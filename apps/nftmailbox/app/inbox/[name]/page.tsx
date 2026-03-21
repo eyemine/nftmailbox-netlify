@@ -501,29 +501,22 @@ export default function InboxPage() {
           <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-3">
               <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
-              <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-zinc-500/10 text-zinc-400 ring-zinc-500/20">MESSAGES CLEARED</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-zinc-400" />
-              <span className="text-sm font-medium text-amber-300">8-day history window — inbox address is permanent</span>
             </div>
             <p className="text-center text-sm text-[var(--muted)] max-w-md">
-                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days.
-                Upgrade to {''}<strong className="text-amber-300">Lite ($10)</strong> for 30-day retention,
-                sending, and a <strong className="text-white">Gnosis Safe body</strong>.
+                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Upcycle to <strong className="text-amber-300">Pupa ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
             </p>
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <Link
                 href={`/nftmail?upgrade=lite&label=${name}`}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 text-center"
               >
-                Upgrade to Lite — $10
+                Upcycle to Pupa — $10
               </Link>
               <Link
                 href={`/nftmail?upgrade=premium&label=${name}`}
                 className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-6 py-2.5 text-sm font-semibold text-violet-300 transition hover:bg-violet-500/20 text-center"
               >
-                Go Premium — $60/yr
+                Go Imago — $24
               </Link>
             </div>
           </div>
@@ -551,9 +544,7 @@ export default function InboxPage() {
               {user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : 'Disconnect'}
             </button>
           ) : (
-            <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">
-              Connect Wallet
-            </button>
+            <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">Connect</button>
           )}
           </header>
 
@@ -611,7 +602,7 @@ export default function InboxPage() {
                   <div className="h-3 w-3 rounded-full bg-red-400" />
                   <span className="text-sm font-medium text-red-300">Collection not approved</span>
                 </div>
-                <p className="text-center text-sm text-[var(--muted)] max-w-md">
+                <p className="text-center text-sm text-[var(--muted)]">
                   Collection not approved — <strong className="text-white">apply to whitelist</strong> your NFT collection
                 </p>
                 <div className="flex gap-3">
@@ -1005,8 +996,8 @@ export default function InboxPage() {
               )}
               {showLarvaWarning && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5">
-                  <span className="text-[10px] text-amber-300">⚠ Your memory is nearly full ({daysLeft}d left). Molt to Pupa to extend to 30 days and deploy your Mirror Body.</span>
-                  <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Molt →</Link>
+                  <span className="text-[10px] text-amber-300">⚠ Your history window ends in {daysLeft}d. Cycle to Pupa to extend to 30 days and deploy your Mirror Body.</span>
+                  <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Upcycle →</Link>
                 </div>
               )}
             </div>
@@ -1054,26 +1045,15 @@ export default function InboxPage() {
         )}
 
         {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
-        {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
+        {isOwner && accountTier === 'basic' && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
             <div className="grid grid-cols-2 gap-2">
-              {accountTier === 'basic' && (
-                <Link
-                  href={`/nftmail?upgrade=lite&label=${name}`}
-                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
-                >
-                  <span className="block text-sm font-bold">10 xDAI</span>
-                  Molt to Pupa
-                </Link>
-              )}
               <Link
-                href={`/nftmail?upgrade=premium&label=${name}`}
-                className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
-                  accountTier === 'basic' ? '' : 'col-span-2'
-                }`}
+                href={`/nftmail?upgrade=lite&label=${name}`}
+                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
               >
-                <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
-                {accountTier === 'basic' ? 'Cycle from Larva to Pupa to Imago' : 'Cycle from Pupa to Imago'}
+                <span className="block text-sm font-bold">10 xDAI</span>
+                Upcycle to Pupa
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
@@ -1494,21 +1474,23 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve CTA ── */}
-        <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium text-white">{accountTier === 'basic' ? 'Cycle from Larva to Pupa to Imago' : 'Cycle from Pupa to Imago'}</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Paid-tier Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
+        {/* ── Evolve CTA — only shown for basic (Larva) tier ── */}
+        {accountTier === 'basic' && (
+          <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium text-white">Cycle from Larva to Pupa to Imago</p>
+                <p className="mt-0.5 text-[10px] text-[var(--muted)]">Paid-tier Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
+              </div>
+              <Link
+                href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
+                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
+              >
+                Upcycle
+              </Link>
             </div>
-            <Link
-              href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
-              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
-            >
-              Evolve
-            </Link>
           </div>
-        </div>
+        )}
 
         <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
           nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
