@@ -191,13 +191,11 @@ export default function InboxPage() {
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
-  // Owner check:
-  // - Agent inboxes (_): any authenticated session = owner. ECIES protects content.
-  // - Sovereign inboxes: match linkedAccounts against onChainOwner.
+  // Owner check: match authenticated user's linked accounts against onChainOwner.
+  // NOTE: useWallets() is intentionally NOT used — browser wallet extensions (ZilPay etc.)
+  // inject null entries that crash Privy's wallet enumeration. user.linkedAccounts is safe.
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
-    // Agent inboxes: authenticated = owner. No wallet matching needed.
-    if (isAgent) return true;
     if (resolving) return false;
     // No on-chain owner recorded — trust session (legacy mints)
     if (!resolved?.onChainOwner) return authenticated;
@@ -211,9 +209,13 @@ export default function InboxPage() {
           if (addr) addrs.push(addr.toLowerCase());
         }
       }
-      return addrs.includes(owner);
-    } catch (_) { return false; }
-  }, [authenticated, isAgent, resolving, resolved?.onChainOwner, user]);
+      if (addrs.includes(owner)) return true;
+    } catch (_) { /* ignore enumeration errors */ }
+    // Fallback for agent inboxes: grant access if authenticated.
+    // ECIES encryption still protects private message content regardless.
+    if (isAgent && authenticated) return true;
+    return false;
+  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
@@ -712,6 +714,18 @@ export default function InboxPage() {
               {hasMolted ? 'SOVEREIGN (MOLTED)' : tldLabel}
             </span>
           </div>
+
+          {/* ── Owner controls: Dashboard + Compose ── */}
+          {isOwner && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/dashboard?email=${encodeURIComponent(`${agentName}@nftmail.box`)}`}
+                className="rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
+              >
+                Dashboard
+              </Link>
+            </div>
+          )}
 
           {/* Glassbox: public audit log explanation */}
           {isGlassbox && (
