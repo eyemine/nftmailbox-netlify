@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
@@ -165,7 +165,7 @@ export default function InboxPage() {
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
-  const { wallets: connectedWallets, ready: walletsReady } = useWallets();
+
 
   // Address resolution state
   const [resolved, setResolved] = useState<ResolveResult | null>(null);
@@ -191,33 +191,31 @@ export default function InboxPage() {
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
-  // Owner check: if onChainOwner is recorded, require wallet match.
-  // If not recorded (legacy mints pre-ownership tracking), fall back to authenticated.
-  // Wait for both: address resolution AND wallet list to be ready before evaluating.
+  // Owner check: match authenticated user's linked accounts against onChainOwner.
+  // NOTE: useWallets() is intentionally NOT used — browser wallet extensions (ZilPay etc.)
+  // inject null entries that crash Privy's wallet enumeration. user.linkedAccounts is safe.
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
-    if (resolving) return false; // wait for resolution
-    if (!resolved?.onChainOwner) return authenticated; // legacy: trust session
+    if (resolving) return false;
+    // No on-chain owner recorded — trust session (legacy mints)
+    if (!resolved?.onChainOwner) return authenticated;
     const owner = resolved.onChainOwner.toLowerCase();
-    const addrs: string[] = [];
-    // Privy embedded wallet
-    if (user?.wallet?.address) addrs.push(user.wallet.address.toLowerCase());
-    // All linked accounts (external wallets, email, socials)
-    if (user?.linkedAccounts) {
-      for (const acct of user.linkedAccounts) {
-        if ((acct as any).address) addrs.push((acct as any).address.toLowerCase());
+    try {
+      const addrs: string[] = [];
+      if (user?.wallet?.address) addrs.push(user.wallet.address.toLowerCase());
+      if (user?.linkedAccounts) {
+        for (const acct of user.linkedAccounts) {
+          const addr = (acct as { address?: string }).address;
+          if (addr) addrs.push(addr.toLowerCase());
+        }
       }
-    }
-    // useWallets() — catches actively connected external wallets (MetaMask, WalletConnect, etc.)
-    for (const w of connectedWallets) {
-      if (w.address) addrs.push(w.address.toLowerCase());
-    }
-    const matched = addrs.includes(owner);
-    // Fallback: if wallets haven’t loaded yet but user is authenticated and this is an
-    // agent inbox, grant provisional owner access — ECIES still protects private content.
-    if (!matched && isAgent && authenticated && !walletsReady) return true;
-    return matched;
-  }, [authenticated, resolving, resolved?.onChainOwner, user, connectedWallets, walletsReady, isAgent]);
+      if (addrs.includes(owner)) return true;
+    } catch (_) { /* ignore enumeration errors */ }
+    // Fallback for agent inboxes: grant access if authenticated.
+    // ECIES encryption still protects private message content regardless.
+    if (isAgent && authenticated) return true;
+    return false;
+  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
