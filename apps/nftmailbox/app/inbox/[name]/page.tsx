@@ -165,7 +165,7 @@ export default function InboxPage() {
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
-  const { wallets: connectedWallets } = useWallets();
+  const { wallets: connectedWallets, ready: walletsReady } = useWallets();
 
   // Address resolution state
   const [resolved, setResolved] = useState<ResolveResult | null>(null);
@@ -193,8 +193,10 @@ export default function InboxPage() {
 
   // Owner check: if onChainOwner is recorded, require wallet match.
   // If not recorded (legacy mints pre-ownership tracking), fall back to authenticated.
+  // Wait for both: address resolution AND wallet list to be ready before evaluating.
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
+    if (resolving) return false; // wait for resolution
     if (!resolved?.onChainOwner) return authenticated; // legacy: trust session
     const owner = resolved.onChainOwner.toLowerCase();
     const addrs: string[] = [];
@@ -210,8 +212,12 @@ export default function InboxPage() {
     for (const w of connectedWallets) {
       if (w.address) addrs.push(w.address.toLowerCase());
     }
-    return addrs.includes(owner);
-  }, [authenticated, resolved?.onChainOwner, user, connectedWallets]);
+    const matched = addrs.includes(owner);
+    // Fallback: if wallets haven’t loaded yet but user is authenticated and this is an
+    // agent inbox, grant provisional owner access — ECIES still protects private content.
+    if (!matched && isAgent && authenticated && !walletsReady) return true;
+    return matched;
+  }, [authenticated, resolving, resolved?.onChainOwner, user, connectedWallets, walletsReady, isAgent]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
