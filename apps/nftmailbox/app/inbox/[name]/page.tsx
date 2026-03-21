@@ -191,11 +191,13 @@ export default function InboxPage() {
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
-  // Owner check: match authenticated user's linked accounts against onChainOwner.
-  // NOTE: useWallets() is intentionally NOT used — browser wallet extensions (ZilPay etc.)
-  // inject null entries that crash Privy's wallet enumeration. user.linkedAccounts is safe.
+  // Owner check:
+  // - Agent inboxes (_): any authenticated session = owner. ECIES protects content.
+  // - Sovereign inboxes: match linkedAccounts against onChainOwner.
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
+    // Agent inboxes: authenticated = owner. No wallet matching needed.
+    if (isAgent) return true;
     if (resolving) return false;
     // No on-chain owner recorded — trust session (legacy mints)
     if (!resolved?.onChainOwner) return authenticated;
@@ -209,13 +211,9 @@ export default function InboxPage() {
           if (addr) addrs.push(addr.toLowerCase());
         }
       }
-      if (addrs.includes(owner)) return true;
-    } catch (_) { /* ignore enumeration errors */ }
-    // Fallback for agent inboxes: grant access if authenticated.
-    // ECIES encryption still protects private message content regardless.
-    if (isAgent && authenticated) return true;
-    return false;
-  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
+      return addrs.includes(owner);
+    } catch (_) { return false; }
+  }, [authenticated, isAgent, resolving, resolved?.onChainOwner, user]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
