@@ -10,7 +10,25 @@ import { WarrantCanary } from '../components/WarrantCanary';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const stripped = html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(?:p|div|li)>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Drop CSS/style artifact tokens
+  const tokens = stripped.split(' ').filter(t => {
+    if (!t) return false;
+    if (/[{}]/.test(t)) return false;
+    if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
+    return true;
+  });
+  return tokens.join(' ').trim();
 }
 
 interface NftMailName {
@@ -200,7 +218,10 @@ export default function DashboardPage() {
   };
 
   const formatTimeAgo = (ts: string) => {
-    const ms = Date.now() - (parseInt(ts, 10) || Date.parse(ts) || Date.now());
+    const raw = parseInt(ts, 10);
+    // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
+    const epoch = !isNaN(raw) ? (raw < 1e11 ? raw * 1000 : raw) : (Date.parse(ts) || Date.now());
+    const ms = Date.now() - epoch;
     const mins = Math.floor(ms / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);

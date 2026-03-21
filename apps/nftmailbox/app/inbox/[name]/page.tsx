@@ -26,7 +26,9 @@ function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) 
 
 function stripHtml(html: unknown): string {
   if (html === null || html === undefined) return '';
-  const stripped = String(html)
+  const s = String(html)
+    // Collapse multiline tags so regex can strip them
+    .replace(/<[^>]*\n[^>]*>/g, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<\/li>/gi, '\n')
@@ -43,15 +45,14 @@ function stripHtml(html: unknown): string {
     .replace(/\r\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  // Drop lines that look like CSS/inline style artifacts
-  const lines = stripped.split('\n').filter(line => {
+  // Drop lines that are CSS/style artifacts
+  const lines = s.split('\n').filter(line => {
     const t = line.trim();
     if (!t) return false;
-    // CSS selector lines: contain { or } or start with . or # followed by alphanumeric
     if (/[{}]/.test(t)) return false;
     if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
-    // Inline style leftovers: key: value patterns at start
-    if (/^[a-z-]+\s*:\s/.test(t) && !t.includes('@') && !t.includes('<')) return false;
+    // Lines that are purely CSS property lists (margin-left : auto; ...)
+    if (/^([a-z-]+\s*:\s*[^;@<]+;\s*)+$/i.test(t)) return false;
     return true;
   });
   return lines.join('\n').trim();
