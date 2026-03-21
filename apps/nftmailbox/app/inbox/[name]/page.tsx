@@ -27,13 +27,15 @@ function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) 
 function stripHtml(html: unknown): string {
   if (html === null || html === undefined) return '';
   const s = String(html)
-    // Collapse multiline tags so regex can strip them
-    .replace(/<[^>]*\n[^>]*>/g, ' ')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<\/div>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
+    // Remove style/script blocks entirely (content included)
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    // Block-level tags → newlines (works across newlines via [\/] match)
+    .replace(/<br[\s\S]*?\/>/gi, '\n')
+    .replace(/<br>/gi, '\n')
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+    // Strip ALL tags including multiline ones using [\/s\S]*? dotall
+    .replace(/<[\s\S]*?>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')

@@ -10,10 +10,13 @@ import { WarrantCanary } from '../components/WarrantCanary';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 
 function stripHtml(html: string): string {
-  const stripped = html
-    .replace(/<br\s*\/?>/gi, ' ')
-    .replace(/<\/(?:p|div|li)>/gi, ' ')
-    .replace(/<[^>]+>/g, '')
+  const s = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br[\s\S]*?\/>/gi, ' ')
+    .replace(/<br>/gi, ' ')
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, ' ')
+    .replace(/<[\s\S]*?>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -22,13 +25,12 @@ function stripHtml(html: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   // Drop CSS/style artifact tokens
-  const tokens = stripped.split(' ').filter(t => {
+  return s.split(' ').filter(t => {
     if (!t) return false;
     if (/[{}]/.test(t)) return false;
     if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
     return true;
-  });
-  return tokens.join(' ').trim();
+  }).join(' ').trim();
 }
 
 interface NftMailName {
