@@ -1,174 +1,297 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import Link from 'next/link';
 
-// Safe wallet detection via Gnosis Safe API
-async function isSafeAddress(address: string): Promise<boolean> {
-  try {
-    const res = await fetch(`https://safe-global.api.gnosischain.com/api/v1/safes/${address}/`);
-    return res.ok;
-  } catch {
-    return false;
-  }
+const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
+
+interface NftRow {
+  type: 'ens' | 'collection';
+  name: string;
+  displayName: string;
+  email: string;
+  tokenId?: string;
+  collection?: string;
+  sovereign?: boolean;  // Path B: TBA-owned Safe — no .nftmail.gno mint needed
+  // resolved after scan
+  exists?: boolean | null; // null = checking, true = has inbox, false = unclaimed
 }
 
-// TBA detection via ERC-6551 registry
-async function isTokenboundAccount(address: string): Promise<boolean> {
-  try {
-    // Check if address is a TBA by calling ERC-6551 registry
-    const data = '0x30185c4c'; // account() function selector
-    const res = await fetch('https://rpc.gnosischain.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_call',
-        params: [{ to: '0x000000006551c19487814612e58FE06813775758', data }, 'latest'],
-      }),
-    });
-    const result = await res.json() as { result?: string };
-    return !!(result?.result && result.result !== '0x');
-  } catch {
-    return false;
-  }
+interface EnsResult {
+  ensName: string | null;
+  ensLabel: string | null;
+  hasEns: boolean;
+  qualifiesForNftmail?: boolean;
+  disqualifyReason?: string | null;
 }
-
-// Get the NFT owner for a TBA
-async function getTBAOwner(tbaAddress: string): Promise<string | null> {
-  try {
-    // Call owner() on the TBA to get the NFT owner
-    const data = '0x8da5cb5b'; // owner() function selector
-    const res = await fetch('https://rpc.gnosischain.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_call',
-        params: [{ to: tbaAddress, data }, 'latest'],
-      }),
-    });
-    const result = await res.json() as { result?: string };
-    if (result?.result && result.result !== '0x') {
-      return result.result;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// localStorage keys for Safe auth
-const SAFE_AUTH_KEY = 'nftmail_safe_auth';
-const SAFE_ADDRESS_KEY = 'nftmail_safe_address';
 
 export function NFTLogin() {
   const { login, logout, authenticated, ready, connectWallet } = usePrivy();
   const { wallets } = useWallets();
   const [error, setError] = useState<string | null>(null);
-  const [safeAddress, setSafeAddress] = useState<string | null>(null);
-  const [isSafeAuth, setIsSafeAuth] = useState(false);
+
+  // ENS resolution state
+  const [ensResult, setEnsResult] = useState<EnsResult | null>(null);
+  const [ensResolving, setEnsResolving] = useState(false);
+
+  // NFT picker rows (ENS + collection NFTs merged)
+  const [rows, setRows] = useState<NftRow[]>([]);
+  const [scanningNfts, setScanningNfts] = useState(false);
+  const [showNftPicker, setShowNftPicker] = useState(false);
 
   const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
 
-  // Check for existing Safe auth on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(SAFE_AUTH_KEY);
-    const addr = localStorage.getItem(SAFE_ADDRESS_KEY);
-    if (stored === 'true' && addr) {
-      setSafeAddress(addr);
-      setIsSafeAuth(true);
+  // Resolve existence for a single row and update state
+  const checkRowExists = useCallback(async (email: string) => {
+    const name = email.replace('@nftmail.box', '');
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resolveAddress', name }),
+      });
+      const data = await res.json() as { exists: boolean };
+      setRows(prev => prev.map(r => r.email === email ? { ...r, exists: data.exists } : r));
+    } catch {
+      setRows(prev => prev.map(r => r.email === email ? { ...r, exists: false } : r));
     }
   }, []);
 
-  // Listen for WalletConnect sessions to detect TBA connections
-  useEffect(() => {
-    const handleWalletConnectSession = async (event: any) => {
-      if (event.detail?.accounts?.length > 0) {
-        const address = event.detail.accounts[0];
-        const isTBA = await isTokenboundAccount(address);
-        if (isTBA) {
-          const owner = await getTBAOwner(address);
-          if (owner) {
-            setError(`Tokenbound wallet detected. Please connect with the NFT owner: ${owner.slice(0, 6)}...${owner.slice(-4)} to authenticate. The TBA ${address.slice(0, 6)}...${address.slice(-4)} is controlled by this owner.`);
-          }
-        }
-      }
-    };
+  // Resolve ENS primary name, then build rows
+  const resolveEns = useCallback(async (address: string) => {
+    setEnsResolving(true);
+    setEnsResult(null);
+    try {
+      const res = await fetch(`/api/resolve-ens?address=${address}`);
+      const data: EnsResult & { error?: string } = await res.json();
+      if (data.error) throw new Error(data.error);
+      setEnsResult(data);
 
-    window.addEventListener('walletconnect_session', handleWalletConnectSession);
-    return () => window.removeEventListener('walletconnect_session', handleWalletConnectSession);
-  }, []);
+      if (data.hasEns && data.ensLabel && data.qualifiesForNftmail) {
+        // Path B ENS: rgbanksy.eth → email=rgbanksy@nftmail.box
+        // TBA-owned Gnosis Safe IS the inbox — no .nftmail.gno subname mint, no TLD suffix
+        const ensRow: NftRow = {
+          type: 'ens',
+          name: data.ensLabel,
+          displayName: data.ensName || data.ensLabel,
+          email: `${data.ensLabel}@nftmail.box`,
+          sovereign: true,
+          exists: null,
+        };
+        setRows(prev => {
+          const already = prev.find(r => r.email === ensRow.email);
+          if (already) return prev;
+          return [ensRow, ...prev];
+        });
+        setShowNftPicker(true);
+        checkRowExists(ensRow.email);
+      }
+    } catch {
+      setEnsResult(null);
+    }
+    setEnsResolving(false);
+  }, [checkRowExists]);
+
+  // Scan wallet for collection NFTs (ENS already added via resolveEns)
+  const scanNfts = useCallback(async (address: string) => {
+    setScanningNfts(true);
+    try {
+      const res = await fetch(`/api/scan-wallet-nfts?address=${address}`);
+      const data = await res.json() as { nfts?: any[] };
+      if (data.nfts && Array.isArray(data.nfts)) {
+        const newRows: NftRow[] = (data.nfts as any[])
+          .filter((n: any) => n.type !== 'ens') // ENS already in rows via resolveEns
+          .map((n: any) => ({
+            type: n.type,
+            name: n.name,
+            displayName: n.displayName,
+            email: n.email,
+            tokenId: n.tokenId,
+            collection: n.collection,
+            sovereign: true, // Path B: all collection NFTs use TBA-owned Safe
+            exists: null,
+          }));
+        setRows(prev => {
+          const merged = [...prev];
+          for (const r of newRows) {
+            if (!merged.find(x => x.email === r.email)) merged.push(r);
+          }
+          return merged;
+        });
+        // kick off existence checks for new rows
+        for (const r of newRows) checkRowExists(r.email);
+      }
+    } catch {
+      // Non-fatal
+    }
+    setScanningNfts(false);
+  }, [checkRowExists]);
+
+  // Auto-resolve ENS when wallet connects
+  useEffect(() => {
+    if (authenticated && preferredWallet?.address) {
+      resolveEns(preferredWallet.address);
+    }
+  }, [authenticated, preferredWallet?.address, resolveEns]);
 
   if (!ready) return null;
 
-  // Detect if connected wallet is a Safe (for Privy-authenticated wallets)
-  const [detectedSafe, setDetectedSafe] = useState(false);
-  useEffect(() => {
-    if (authenticated && wallets.length > 0 && preferredWallet?.address) {
-      isSafeAddress(preferredWallet.address).then(setDetectedSafe);
-    } else {
-      setDetectedSafe(false);
-    }
-  }, [authenticated, wallets, preferredWallet?.address]);
-
-  // Show connected state for either Privy auth or Safe auth
-  if ((authenticated && wallets.length > 0) || isSafeAuth) {
-    const addr = isSafeAuth ? safeAddress : preferredWallet?.address;
-    const isSafe = isSafeAuth || detectedSafe;
-    
-    const handleLogout = () => {
-      if (isSafeAuth) {
-        localStorage.removeItem(SAFE_AUTH_KEY);
-        localStorage.removeItem(SAFE_ADDRESS_KEY);
-        setSafeAddress(null);
-        setIsSafeAuth(false);
-      } else {
-        logout();
-      }
-    };
-
+  // ─── AUTHENTICATED WITH WALLET ───
+  if (authenticated && wallets.length > 0) {
+    const addr = preferredWallet.address;
     return (
       <div className="flex flex-col gap-3">
+        {/* Wallet address + disconnect */}
         <div className="flex items-center gap-3">
-          <div className={`flex flex-1 items-center gap-2 rounded-xl border ${isSafe ? 'border-violet-500/30 bg-violet-500/8' : 'border-emerald-500/30 bg-emerald-500/8'} px-4 py-3`}>
+          <div className="flex flex-1 items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-3">
             <div className="relative flex h-2.5 w-2.5">
-              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${isSafe ? 'bg-violet-400' : 'bg-emerald-400'} opacity-75`} />
-              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${isSafe ? 'bg-violet-400' : 'bg-emerald-400'}`} />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
             </div>
-            <span className={`text-sm font-medium ${isSafe ? 'text-violet-300' : 'text-emerald-300'}`}>
-              {addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : 'Unknown'}
+            <span className="text-sm font-medium text-emerald-300">
+              {addr.slice(0, 6)}...{addr.slice(-4)}
             </span>
-            {isSafe && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[9px] font-semibold text-violet-300">
-                Safe
-              </span>
-            )}
           </div>
           <button
-            onClick={handleLogout}
+            onClick={logout}
             className="rounded-xl border border-[var(--border)] bg-black/30 px-4 py-3 text-sm text-[var(--muted)] transition hover:border-red-500/30 hover:text-red-400"
           >
             Disconnect
           </button>
         </div>
-        <p className="text-center text-[10px] text-[var(--muted)]">
-          {isSafe 
-            ? 'Safe wallet connected — ready to manage your nftmail.gno identity'
-            : 'Wallet connected — ready to mint your nftmail.gno identity'
-          }
-        </p>
-        {!isSafe && wallets.length > 1 && (
-          <p className="text-center text-[10px] text-[var(--muted)]">
-            Using: {(preferredWallet as any)?.walletClientType || 'wallet'}
-          </p>
+
+        {/* ENS resolving spinner */}
+        {ensResolving && (
+          <div className="flex items-center gap-2 rounded-xl border border-[rgba(0,163,255,0.2)] bg-[rgba(0,163,255,0.05)] px-4 py-3">
+            <div className="h-3 w-3 animate-spin rounded-full border border-[rgba(0,163,255,0.4)] border-t-transparent" />
+            <span className="text-xs text-[rgb(160,220,255)]">Resolving ENS name...</span>
+          </div>
         )}
+
+        {/* ENS not eligible notice */}
+        {ensResult?.hasEns && ensResult.ensLabel && !ensResult.qualifiesForNftmail && !ensResolving && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="h-2 w-2 rounded-full bg-amber-400" />
+              <span className="text-[10px] font-semibold text-amber-300">ENS NAME NOT ELIGIBLE</span>
+            </div>
+            <p className="text-xs text-white">{ensResult.ensName}</p>
+            <p className="mt-1 text-[10px] text-amber-300/70">
+              {ensResult.disqualifyReason || 'Does not meet nftmail.box character requirements.'}
+            </p>
+          </div>
+        )}
+
+        {/* NFT Picker toggle button */}
+        <button
+          onClick={() => {
+            const next = !showNftPicker;
+            setShowNftPicker(next);
+            if (next && rows.filter(r => r.type !== 'ens').length === 0) {
+              scanNfts(addr);
+            }
+          }}
+          className="w-full rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-4 py-3 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
+        >
+          {showNftPicker ? 'Hide NFT Picker' : 'NFT Picker'}
+        </button>
+
+        {/* NFT Picker panel */}
+        {showNftPicker && (
+          <div className="rounded-xl border border-[var(--border)] bg-black/20 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="h-4 w-4 text-[rgb(160,220,255)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>
+                <span className="text-xs font-semibold text-white">NFTs in wallet</span>
+              </div>
+              {!scanningNfts && rows.filter(r => r.type !== 'ens').length === 0 && (
+                <button
+                  onClick={() => scanNfts(addr)}
+                  className="text-[10px] text-[rgb(160,220,255)] hover:underline"
+                >
+                  Scan collection NFTs
+                </button>
+              )}
+            </div>
+
+            {(scanningNfts || ensResolving) && rows.length === 0 && (
+              <div className="flex items-center gap-2 py-4 justify-center">
+                <div className="h-3 w-3 animate-spin rounded-full border border-[rgba(0,163,255,0.4)] border-t-transparent" />
+                <span className="text-xs text-[var(--muted)]">Scanning wallet...</span>
+              </div>
+            )}
+
+            {!scanningNfts && !ensResolving && rows.length === 0 && (
+              <p className="text-xs text-[var(--muted)] text-center py-4">
+                No ENS names or verified collection NFTs found in this wallet.
+              </p>
+            )}
+
+            {rows.length > 0 && (
+              <div className="flex flex-col gap-2 overflow-y-auto pr-1" style={{ maxHeight: '272px' }}>
+                {rows.map((row, i) => (
+                  <div
+                    key={`${row.email}-${i}`}
+                    className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-white truncate">{row.displayName}</p>
+                        <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
+                          row.type === 'ens'
+                            ? 'text-[rgb(160,220,255)] bg-[rgba(0,163,255,0.08)] ring-[rgba(0,163,255,0.2)]'
+                            : 'text-violet-300 bg-violet-500/8 ring-violet-500/20'
+                        }`}>
+                          {row.type === 'ens' ? 'ENS' : row.collection || 'NFT'}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-[var(--muted)] mt-0.5">{row.email}</p>
+                    </div>
+                    <div className="ml-3 flex-shrink-0">
+                      {row.exists === null ? (
+                        <div className="h-3 w-3 animate-spin rounded-full border border-[rgb(160,220,255)] border-t-transparent" />
+                      ) : row.exists ? (
+                        <Link
+                          href={`/inbox/${row.name}${row.tokenId ? '.' + row.tokenId : ''}`}
+                          className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-300 transition hover:bg-emerald-500/20 whitespace-nowrap"
+                        >
+                          Check Mail
+                        </Link>
+                      ) : row.sovereign ? (
+                        <Link
+                          href={`/nftmail?claim=${row.name}${row.tokenId ? '.' + row.tokenId : ''}&sovereign=1`}
+                          className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 whitespace-nowrap"
+                        >
+                          Claim Name
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/nftmail?claim=${row.name}${row.tokenId ? '.' + row.tokenId : ''}`}
+                          className="rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-3 py-1.5 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)] whitespace-nowrap"
+                        >
+                          Claim
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="mt-2 text-center text-[10px] text-[var(--muted)]">
+              Verified NFT Collections Coming Soon
+            </p>
+
+          </div>
+        )}
+
+        {error && <p className="text-center text-xs text-amber-400">{error}</p>}
       </div>
     );
   }
 
+  // ─── AUTHENTICATED BUT NO WALLET ───
   if (authenticated && wallets.length === 0) {
     return (
       <div className="flex flex-col gap-3">
@@ -186,60 +309,12 @@ export function NFTLogin() {
     );
   }
 
+  // ─── NOT AUTHENTICATED ───
   const handleLogin = async () => {
     setError(null);
     try {
       await login();
-      
-      // After Privy login, check if the connected wallet is a Safe
-      // If it is, store it for Safe auth flow
-      if (authenticated && wallets.length > 0 && preferredWallet?.address) {
-        const isSafe = await isSafeAddress(preferredWallet.address);
-        if (isSafe) {
-          localStorage.setItem(SAFE_AUTH_KEY, 'true');
-          localStorage.setItem(SAFE_ADDRESS_KEY, preferredWallet.address);
-          setSafeAddress(preferredWallet.address);
-          setIsSafeAuth(true);
-          return;
-        }
-      }
     } catch (err: any) {
-      // If Privy login fails, check if user is trying to connect a Safe or TBA directly
-      const walletProvider = (window as any).ethereum;
-      if (walletProvider) {
-        try {
-          const accounts = await walletProvider.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            const address = accounts[0] as string;
-            
-            // Check if it's a Safe
-            const isSafe = await isSafeAddress(address);
-            if (isSafe) {
-              localStorage.setItem(SAFE_AUTH_KEY, 'true');
-              localStorage.setItem(SAFE_ADDRESS_KEY, address);
-              setSafeAddress(address);
-              setIsSafeAuth(true);
-              return; // Success - Safe authenticated
-            }
-            
-            // Check if it's a TBA
-            const isTBA = await isTokenboundAccount(address);
-            if (isTBA) {
-              // Get the NFT owner for this TBA
-              const owner = await getTBAOwner(address);
-              if (owner) {
-                setError(`Tokenbound wallet detected. Please connect with the NFT owner: ${owner.slice(0, 6)}...${owner.slice(-4)} to authenticate. The TBA ${address.slice(0, 6)}...${address.slice(-4)} is controlled by this owner.`);
-              } else {
-                setError(`Tokenbound wallet detected. Please connect with the NFT's owner wallet instead. The TBA ${address.slice(0, 6)}...${address.slice(-4)} cannot sign messages directly.`);
-              }
-              return;
-            }
-          }
-        } catch {
-          // Continue to error display
-        }
-      }
-      
       setError(err?.message || 'Connection failed. Try email login or a different wallet.');
     }
   };
@@ -255,19 +330,15 @@ export function NFTLogin() {
             <rect x="2" y="6" width="20" height="12" rx="2" />
             <path d="M22 8l-10 5L2 8" />
           </svg>
-          Connect Wallet or Safe
+          NFT Login
           <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14" />
             <path d="m12 5 7 7-7 7" />
           </svg>
         </div>
       </button>
-      <p className="text-center text-[10px] text-[var(--muted)]">
-        Connect wallet, Safe, or sign in with email to mint your nftmail.box address
-      </p>
-      {error && (
-        <p className="text-center text-xs text-amber-400">{error}</p>
-      )}
+      <p className="text-center text-[10px] text-[var(--muted)]">Connect wallet to check ENS name or browse NFTs for your nftmail.box address</p>
+      {error && <p className="text-center text-xs text-amber-400">{error}</p>}
     </div>
   );
 }

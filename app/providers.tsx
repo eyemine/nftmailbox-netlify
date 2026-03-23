@@ -1,9 +1,23 @@
 'use client';
 
 import { PrivyProvider } from '@privy-io/react-auth';
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect, useState } from 'react';
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+
+const ETHEREUM_MAINNET = {
+  id: 1,
+  name: 'Ethereum',
+  network: 'homestead',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://eth.llamarpc.com'] },
+    public:  { http: ['https://eth.llamarpc.com'] },
+  },
+  blockExplorers: {
+    default: { name: 'Etherscan', url: 'https://etherscan.io' },
+  },
+} as const;
 
 const GNOSIS_CHAIN = {
   id: 100,
@@ -33,6 +47,11 @@ function isValidPrivyAppId(appId: string | undefined) {
 }
 
 export function Providers({ children }: PropsWithChildren) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) return null;
+
   if (!isValidPrivyAppId(PRIVY_APP_ID)) {
     return (
       <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.14),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -41,7 +60,7 @@ export function Providers({ children }: PropsWithChildren) {
             <div className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)]">SETUP REQUIRED</div>
             <div className="mt-2 text-lg font-semibold">Add a valid Privy App ID</div>
             <div className="mt-2 text-sm text-[var(--muted)]">
-              Set <code className="font-mono">NEXT_PUBLIC_PRIVY_APP_ID</code> in <code className="font-mono">.env.local</code>, then restart the dev server.
+              Set <code className="font-mono">NEXT_PUBLIC_PRIVY_APP_ID</code> in your Netlify environment variables, then redeploy.
             </div>
           </div>
           <div className="w-full opacity-70">{children}</div>
@@ -64,8 +83,8 @@ export function Providers({ children }: PropsWithChildren) {
           createOnLogin: 'users-without-wallets',
           noPromptOnSignature: false,
         },
-        defaultChain: GNOSIS_CHAIN, // Gnosis Chain
-        supportedChains: [GNOSIS_CHAIN], // Gnosis only for MVP
+        defaultChain: ETHEREUM_MAINNET,
+        supportedChains: [ETHEREUM_MAINNET, GNOSIS_CHAIN],
       }}
     >
       {children}

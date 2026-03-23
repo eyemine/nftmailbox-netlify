@@ -1,24 +1,33 @@
-import type { Metadata } from "next";
-import { Inter, Roboto_Mono } from "next/font/google";
-import "./globals.css";
-import { Providers } from "./providers";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import type { Metadata } from 'next';
+import { Inter, Roboto_Mono } from 'next/font/google';
+import './globals.css';
+import { Providers } from './providers';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const geistSans = Inter({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
 });
 
 const geistMono = Roboto_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
 });
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: "GhostAgent Dashboard",
-  description: "GhostAgent control surface",
+  title: 'NFTMail.box',
+  description: 'Mint a self-contained email identity on Gnosis',
+  icons: {
+    icon: '/nftmail-logo-32.png',
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'NFTMail.box',
+    description: 'Mint a self-contained email identity on Gnosis',
+    images: [{ url: '/nftmail-logo.png' }],
+  },
 };
 
 export default function RootLayout({
@@ -28,24 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                if (typeof window !== 'undefined' && !window.ethereum) {
-                  Object.defineProperty(window, 'ethereum', {
-                    configurable: true,
-                    writable: true,
-                    value: undefined,
-                  });
-                }
-              } catch(e) {}
-            `,
-          }}
-        />
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ErrorBoundary>
           <Providers>{children}</Providers>
         </ErrorBoundary>

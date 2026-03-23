@@ -33,10 +33,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <div className="w-full rounded-2xl border border-red-500/30 bg-red-500/8 p-6">
               <div className="text-xs font-semibold tracking-[0.18em] text-red-300">CLIENT ERROR</div>
               <h2 className="mt-2 text-lg font-semibold text-white">Something went wrong</h2>
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                This is often caused by browser wallet extensions conflicting with each other.
-                Try disabling extra wallet extensions or using a different browser.
-              </p>
               <pre className="mt-3 max-h-24 overflow-auto rounded-lg bg-black/40 p-3 text-xs text-red-300/70">
                 {this.state.error?.message}
               </pre>

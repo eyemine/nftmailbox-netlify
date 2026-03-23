@@ -36,7 +36,7 @@ export function WhiteLabelZoho({ agentName, email, tbaAddress }: WhiteLabelZohoP
         }),
       });
 
-      const data = await res.json() as Record<string, any>;
+      const data = (await res.json()) as Record<string, any>;
 
       if (!res.ok) {
         throw new Error(data.error || 'Zoho provisioning failed');
@@ -57,13 +57,10 @@ export function WhiteLabelZoho({ agentName, email, tbaAddress }: WhiteLabelZohoP
 
   return (
     <div className="rounded-2xl border border-violet-500/20 bg-[var(--card)] overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold tracking-[0.18em] text-violet-300/70">PAID TIER</span>
-          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">
-            ZOHO MAIL
-          </span>
+          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">ZOHO MAIL</span>
         </div>
         {step === 'done' && (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300">
@@ -73,47 +70,7 @@ export function WhiteLabelZoho({ agentName, email, tbaAddress }: WhiteLabelZohoP
         )}
       </div>
 
-      {/* Body */}
       <div className="space-y-4 px-5 py-4">
-        {/* Feature comparison */}
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div>
-            <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">FREE TIER (CURRENT)</div>
-            <ul className="mt-2 space-y-1 text-[var(--muted)]">
-              <li className="flex items-center gap-1.5">
-                <span className="text-emerald-400">✓</span> KV sovereign inbox
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-emerald-400">✓</span> A2A email routing
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-zinc-600">✗</span> 8-day TTL decay
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-zinc-600">✗</span> No calendar/tasks
-              </li>
-            </ul>
-          </div>
-          <div>
-            <div className="text-[10px] font-semibold tracking-wider text-violet-300/70">PAID TIER (ZOHO)</div>
-            <ul className="mt-2 space-y-1 text-[var(--muted)]">
-              <li className="flex items-center gap-1.5">
-                <span className="text-violet-400">✓</span> Persistent mailbox
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-violet-400">✓</span> IMAP/SMTP access
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-violet-400">✓</span> Calendar + tasks
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="text-violet-400">✓</span> White-label domain
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* Provision button or result */}
         {step === 'done' && zohoResult ? (
           <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
             <div className="flex flex-col gap-1">
@@ -145,30 +102,11 @@ export function WhiteLabelZoho({ agentName, email, tbaAddress }: WhiteLabelZohoP
             disabled={step === 'provisioning'}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/8 px-5 py-3 text-sm font-semibold text-violet-300 transition hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {step === 'provisioning' ? (
-              <>
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2v4m0 12v4m-7.07-3.93 2.83-2.83m8.48-8.48 2.83-2.83M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83" />
-                </svg>
-                Provisioning Zoho Mailbox...
-              </>
-            ) : (
-              <>
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2v20M2 12h20" />
-                </svg>
-                Upgrade to Zoho Mail
-              </>
-            )}
+            {step === 'provisioning' ? 'Provisioning Zoho Mailbox...' : 'Upgrade to Zoho Mail'}
           </button>
         )}
 
         {error && <p className="text-center text-xs text-red-400">{error}</p>}
-
-        <p className="text-center text-[10px] text-[var(--muted)]">
-          Zoho Mail API provisions a white-label mailbox on nftmail.box domain.
-          Requires active Zoho Workplace subscription.
-        </p>
       </div>
     </div>
   );
