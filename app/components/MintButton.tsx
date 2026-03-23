@@ -7,6 +7,7 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import type { Namespace } from './NamespaceSelect';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
+import { useNameCheck, NameStatusBadge } from '../utils/ensCheck';
 
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
 const GNSRegistryABI = [
@@ -47,6 +48,9 @@ export function MintButton({ namespace, agentName }: MintButtonProps) {
   const registrar = GNO_REGISTRARS[namespace];
   const fullName = `${agentName}.${namespace}.gno`;
   const emailName = `${agentName}_@nftmail.box`;
+  const connectedWallet = wallets[0]?.address ?? '';
+  const nameStatus = useNameCheck(agentName, `${namespace}.gno`, connectedWallet);
+  const ensBlocked = nameStatus.state === 'reserved' || nameStatus.state === 'taken';
 
   const checkInbox = useCallback(async () => {
     setInboxLoading(true);
@@ -155,7 +159,7 @@ export function MintButton({ namespace, agentName }: MintButtonProps) {
     <>
       <button
         onClick={mint}
-        disabled={state === 'minting' || !agentName.trim()}
+        disabled={state === 'minting' || !agentName.trim() || ensBlocked}
         className="rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.12)] px-6 py-3 text-sm font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.18)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {state === 'minting' ? (
@@ -177,6 +181,7 @@ export function MintButton({ namespace, agentName }: MintButtonProps) {
         )}
       </button>
 
+      <NameStatusBadge status={nameStatus} label={agentName} tld={`${namespace}.gno`} />
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
       {/* Success Modal */}

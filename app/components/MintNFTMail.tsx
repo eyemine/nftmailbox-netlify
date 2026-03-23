@@ -6,6 +6,7 @@ import { createWalletClient, createPublicClient, custom, http, decodeEventLog, k
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
+import { useNameCheck, NameStatusBadge } from '../utils/ensCheck';
 
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
 const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
@@ -28,7 +29,7 @@ interface MintResult {
   txHash: string;
 }
 
-export function MintNFTMail() {
+export function MintNFTMail({ onMinted }: { onMinted?: (name: string, tba: string) => void } = {}) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
   const [name1, setName1] = useState('');
@@ -45,6 +46,9 @@ export function MintNFTMail() {
 
   const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
+  const connectedWallet = injectedWallet?.address ?? wallets[0]?.address ?? '';
+  const nameStatus = useNameCheck(label, 'nftmail.gno', connectedWallet);
+  const ensBlocked = nameStatus.state === 'reserved' || nameStatus.state === 'taken';
 
   const mint = useCallback(async () => {
     if (!authenticated || wallets.length === 0) {
@@ -137,6 +141,7 @@ export function MintNFTMail() {
       });
       setStep('done');
       setShowModal(true);
+      onMinted?.(label, tbaAddress);
     } catch (err: any) {
       setError(err?.shortMessage || err?.message || 'Minting failed');
       setStep('error');
@@ -192,12 +197,13 @@ export function MintNFTMail() {
               </p>
             </div>
           )}
+          <NameStatusBadge status={nameStatus} label={label} tld="nftmail.gno" />
         </div>
 
         {/* Mint button */}
         <button
           onClick={mint}
-          disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting'}
+          disabled={!label || name1.length < 2 || name2.length < 2 || step === 'minting' || ensBlocked}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-5 py-3 text-sm font-semibold text-[rgb(160,220,255)] transition-all hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_24px_rgba(0,163,255,0.12)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {step === 'minting' ? (
