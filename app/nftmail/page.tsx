@@ -11,6 +11,7 @@ import { MintNFTMail } from '../components/MintNFTMail';
 type Tier = 'none' | 'free' | 'pro';
 
 const TREASURY = '0xb7e493e3d226f8fE722CC9916fF164B793af13F4';
+const MINTING_ENABLED = process.env.NEXT_PUBLIC_MINTING_ENABLED !== 'false';
 const TIER_XDAI: Record<string, number> = { lite: 10, pro: 24 };
 const TIER_EURE: Record<string, number> = { lite: 10, pro: 22 };
 
@@ -560,7 +561,11 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
         </button>
       </div>
 
-      {nameType === 'human' ? (
+      {!MINTING_ENABLED ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-6 text-center text-sm text-amber-300">
+          Minting is currently paused. Check back soon.
+        </div>
+      ) : nameType === 'human' ? (
         <MintNFTMail initialName={initialName} />
       ) : (
         <>
