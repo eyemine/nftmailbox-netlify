@@ -526,26 +526,30 @@ export default function NftmailPage() {
 function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: string, tba: string) => void; initialName?: string }) {
   const [manualName, setManualName] = useState('');
   const [showManual, setShowManual] = useState(false);
-  const [nameType, setNameType] = useState<'human' | 'agent'>('human');
+  const [nameType, setNameType] = useState<'human' | 'agent' | 'ens'>('human');
+  const [ensInput, setEnsInput] = useState('');
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
     if (nameType === 'agent') {
-      // agent: allow letters, numbers, dots, hyphens, one trailing underscore
       setManualName(lower.replace(/[^a-z0-9._-]/g, ''));
     } else {
-      // human: no underscore
       setManualName(lower.replace(/[^a-z0-9.-]/g, ''));
     }
   };
 
   const isValid = nameType === 'agent'
-    ? /^[a-z0-9][a-z0-9._-]*_$/.test(manualName)   // must end with _
-    : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);      // standard human name
+    ? /^[a-z0-9][a-z0-9._-]*_$/.test(manualName)
+    : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);
+
+  // ENS tab helpers
+  const ensLabel = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
+  const ensNameFull = ensLabel ? `${ensLabel}.eth` : '';
+  const ensIsValid = ensLabel.length >= 3;
 
   return (
     <div className="space-y-4">
-      {/* Human / Agent tab selector */}
+      {/* Human / Agent / ENS tab selector */}
       <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
         <button
           onClick={() => { setNameType('human'); setManualName(''); }}
@@ -554,16 +558,43 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
           Human
         </button>
         <button
+          onClick={() => { setNameType('ens'); setEnsInput(''); }}
+          className={`flex-1 px-3 py-2 transition ${nameType === 'ens' ? 'bg-violet-500/20 text-violet-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+        >
+          ENS Holder
+        </button>
+        <button
           onClick={() => { setNameType('agent'); setManualName(''); }}
           className={`flex-1 px-3 py-2 transition ${nameType === 'agent' ? 'bg-amber-500/15 text-amber-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
         >
-          Agent (NFTmail.gno)
+          Agent
         </button>
       </div>
 
       {!MINTING_ENABLED ? (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-6 text-center text-sm text-amber-300">
           Minting is currently paused. Check back soon.
+        </div>
+      ) : nameType === 'ens' ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-[11px] text-violet-300/80">
+            Own <strong>name.eth</strong>? Claim <strong>name@nftmail.box</strong> free — server verifies ENS ownership on mainnet.
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              value={ensInput}
+              onChange={(e) => setEnsInput(e.target.value.toLowerCase())}
+              placeholder="yourname.eth"
+              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
+            />
+            {ensLabel && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-violet-400">→ {ensLabel}@nftmail.box</span>
+            )}
+          </div>
+          {ensIsValid && (
+            <MintNFTMail initialName={ensLabel} ensName={ensNameFull} />
+          )}
         </div>
       ) : nameType === 'human' ? (
         <MintNFTMail initialName={initialName} />
