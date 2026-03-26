@@ -83,11 +83,14 @@ export async function GET(req: NextRequest) {
 
           return {
             id: m.id,
+            messageId: m.id,
             subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
             sender: isEnc ? '' : (m.payload?.from || 'unknown'),
             fromAddress: isEnc ? '' : (m.payload?.from || ''),
             receivedTime: new Date(receivedMs).toISOString(),
             summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
+            body: isEnc ? '' : (m.payload?.body || ''),
+            bodyHtml: isEnc ? '' : (m.payload?.bodyHtml || ''),
             isRead: false,
             hasAttachment: false,
             encrypted: isEnc,

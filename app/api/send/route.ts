@@ -5,8 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const MAILGUN_API_BASE = 'https://api.mailgun.net/v3';
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'nftmail.box';
+const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
 
 export async function POST(req: NextRequest) {
   try {

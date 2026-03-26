@@ -15,8 +15,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
-const MAILGUN_API_BASE = 'https://api.mailgun.net/v3';
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'nftmail.box';
+const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
 
 async function sendViaMailgun(params: {
   from: string;
