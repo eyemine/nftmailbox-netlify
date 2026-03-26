@@ -16,6 +16,8 @@ const geistMono = Roboto_Mono({
 
 export const dynamic = 'force-dynamic';
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
+
 export const metadata: Metadata = {
   title: 'NFTMail.box',
   description: 'Mint a self-contained email identity on Gnosis',
@@ -26,7 +28,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'NFTMail.box',
     description: 'Mint a self-contained email identity on Gnosis',
-    images: [{ url: '/nftmail-logo.png' }],
+    images: [{ url: `${APP_URL}/nftmail-logo.png` }],
   },
 };
 
