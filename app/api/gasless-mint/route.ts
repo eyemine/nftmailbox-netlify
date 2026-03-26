@@ -9,8 +9,18 @@ import {
   encodePacked,
   namehash,
 } from 'viem';
+import { mainnet } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
+
+const ENS_BASE_REGISTRAR = '0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85' as const;
+const ENS_ABI = [{
+  inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+  name: 'ownerOf',
+  outputs: [{ internalType: 'address', name: '', type: 'address' }],
+  stateMutability: 'view',
+  type: 'function',
+}] as const;
 
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
@@ -99,7 +109,11 @@ export async function POST(req: NextRequest) {
 
     // Parse request
     const body = await req.json();
-    const { label, owner } = body as { label?: string; owner?: string };
+    const { label, owner, ensProof } = body as {
+      label?: string;
+      owner?: string;
+      ensProof?: { name: string };
+    };
 
     if (!label || typeof label !== 'string' || label.length < 3) {
       return NextResponse.json(
@@ -129,8 +143,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Rate limit
-    if (!checkRateLimit()) {
+    // ── ENS holder verification (free mint for name.eth owners) ─────────────
+    // If ensProof is provided, caller must own label.eth on Ethereum mainnet.
+    // ENS holders bypass the daily rate limit — they're entitled to their own name.
+    let isEnsHolder = false;
+    if (ensProof?.name) {
+      const ensLabel = ensProof.name.toLowerCase().replace(/\.eth$/, '');
+      // ENS proof name must match the GNS label (single-part names only)
+      if (ensLabel !== label) {
+        return NextResponse.json(
+          { error: `ENS proof name "${ensLabel}" does not match label "${label}"` },
+          { status: 400 },
+        );
+      }
+      const ethClient = createPublicClient({
+        chain: mainnet,
+        transport: http(process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com'),
+      });
+      try {
+        const tokenId = BigInt(keccak256(encodePacked(['string'], [ensLabel])));
+        const ensOwner = await ethClient.readContract({
+          address: ENS_BASE_REGISTRAR,
+          abi: ENS_ABI,
+          functionName: 'ownerOf',
+          args: [tokenId],
+        });
+        if (!ensOwner || ensOwner.toLowerCase() !== owner.toLowerCase()) {
+          return NextResponse.json(
+            { error: `${ensLabel}.eth is not owned by ${owner}. Connect the wallet that owns ${ensLabel}.eth.` },
+            { status: 403 },
+          );
+        }
+        isEnsHolder = true;
+      } catch {
+        return NextResponse.json(
+          { error: `${ensLabel}.eth does not exist on Ethereum mainnet — cannot verify ENS ownership` },
+          { status: 403 },
+        );
+      }
+    }
+
+    // Rate limit — ENS holders bypass (they're entitled to their own name)
+    if (!isEnsHolder && !checkRateLimit()) {
       return NextResponse.json(
         { error: 'Daily gasless mint limit reached. Try again tomorrow or mint with your own wallet.' },
         { status: 429 }

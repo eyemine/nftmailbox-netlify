@@ -31,7 +31,7 @@ interface MintResult {
   gasless?: boolean;
 }
 
-export function MintNFTMail({ initialName }: { initialName?: string }) {
+export function MintNFTMail({ initialName, ensName }: { initialName?: string; ensName?: string }) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
 
@@ -145,10 +145,12 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
     setError(null);
 
     try {
+      // Pass ENS proof if caller confirmed ownership of label.eth
+      const ensProof = ensName ? { name: ensName } : undefined;
       const res = await fetch('/api/gasless-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, owner: ownerAddress }),
+        body: JSON.stringify({ label, owner: ownerAddress, ...(ensProof ? { ensProof } : {}) }),
       });
 
       const data = await res.json() as { error?: string; email?: string; tbaAddress?: string; txHash?: string; label?: string; sponsor?: string; kvRegistered?: boolean };
