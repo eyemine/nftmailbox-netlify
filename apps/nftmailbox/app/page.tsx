@@ -39,6 +39,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Image src="/nftmail-logo.png" alt="NFTMail" width={48} height={48} className="opacity-95" />
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold tracking-wider text-amber-300 ring-1 ring-amber-500/30">BETA</span>
           </div>
           <div className="flex items-center gap-3">
             <a
@@ -120,21 +121,18 @@ export default function Home() {
 
         {/* Mint or Upgrade */}
         <section className="w-full max-w-lg">
-          <p className="mb-3 text-center text-sm text-[var(--muted)]">
-            Minting paused until official launch — April 2026
-          </p>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
             <h2 className="text-sm font-semibold text-white mb-1">New here?</h2>
             <p className="text-xs text-[var(--muted)] mb-4">
-              Mint a free NFTmail inbox address or upgrade to paid for full feature Gnosis wallet and hardened security.
+              Mint a free NFTmail inbox address — no gas needed. Upgrade to paid for a Gnosis Safe wallet and hardened security.
             </p>
             <div className="flex gap-3 justify-center">
-              <span
-                title="Minting paused until official launch — April 2026"
-                className="cursor-not-allowed rounded-lg bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--muted)] border border-[var(--border)] select-none"
+              <Link
+                href="/nftmail"
+                className="rounded-lg bg-emerald-500/12 px-6 py-2.5 text-xs font-semibold text-emerald-300 border border-emerald-500/30 transition hover:bg-emerald-500/20"
               >
-                NFTmail
-              </span>
+                Mint NFTmail — Free
+              </Link>
             </div>
           </div>
         </section>
