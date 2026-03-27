@@ -282,7 +282,8 @@ export default function DashboardPage() {
     return 'bg-red-500';
   };
 
-  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
+  const isAgent = selectedName?.label.endsWith('_') ?? false;
+  const canSend = isAgent || inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
   const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
 
   if (!ready) return null;
@@ -398,7 +399,7 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={() => canSend && setTab('compose')}
-                title={!canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
+                title={!canSend ? 'Molt to PUPA to unlock sending' : undefined}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
               >
                 Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
@@ -621,10 +622,10 @@ export default function DashboardPage() {
                 {!canSend && (
                   <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">UPCYCLED</span>
+                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">LARVA</span>
                       <span className="text-sm text-violet-300">Compose &amp; Send requires a PUPA or IMAGO mailbox</span>
                     </div>
-                    <p className="mt-2 text-xs text-[var(--muted)]">Cycle your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
+                    <p className="mt-2 text-xs text-[var(--muted)]">Molt your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
                   </div>
                 )}
                 <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${!canSend ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -683,7 +684,7 @@ export default function DashboardPage() {
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
           <span>nftmail.box dashboard — privacy-first email</span>
           <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
-            Upcycle to Imago →
+            {canSend ? 'Molt to Imago →' : 'Molt to Send →'}
           </Link>
         </footer>
       </div>
