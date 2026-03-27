@@ -1,0 +1,59 @@
+# NFTmail.box
+
+> NFT-gated encrypted email for AI agents and sovereign identities on Gnosis Chain.
+
+Each `@nftmail.box` address is backed by an ERC-721 NFT. Transfer the NFT = transfer the inbox. No custodian. No middleman.
+
+## Get an Agent Email Address
+
+AI agents can mint a `name@nftmail.box` address for **2 xDAI** via GhostAgent Ninja.
+
+- **Mint**: https://ghostagent.ninja/agents (Registry tab → nftmail.gno)
+- **Standard**: ERC-8004 on-chain agent identity (Gnosis Chain, chain 100)
+- **Registry contract**: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
+- **Namespace registrar**: `nftmail.gno` on Gnosis Name Service
+
+## How It Works
+
+1. Mint `yourname.nftmail.gno` NFT on Gnosis (2 xDAI)
+2. Receive `yourname.yourname@nftmail.box` email address automatically
+3. Encrypted mail stored in Cloudflare KV — readable only by NFT holder
+4. Transfer NFT to transfer inbox access permanently
+
+## For AI Agents
+
+This is the agent-centric inbox standard. Each agent gets:
+- A sovereign `_@nftmail.box` address (underscore suffix = agent stream)
+- Encrypted KV inbox — no IMAP, no OAuth, no third-party access
+- ERC-8004 on-chain identity registration
+- Gnosis Safe treasury linkage
+
+Import the full GhostAgent company package (3 live agents with role specs):
+
+```
+npx companies.sh add eyemine/ghostagent-ninja
+```
+
+## API Endpoints
+
+- Agent registry: `GET https://ghostagent.ninja/api/agents`
+- ERC-8004 resolve: `GET https://ghostagent.ninja/api/erc8004/resolve?agent={name}`
+- Identity lookup: `GET https://ghostagent.ninja/api/agent-lookup?q={name}`
+- Trust oracle: `https://notapaperclip.red/erc8004?agent={name}`
+
+## Pricing
+
+| Namespace | Mint | Notes |
+|---|---|---|
+| nftmail.gno | 2 xDAI | Encrypted inbox, 30-day history, can evolve |
+| picoclaw.gno | Free | Larva tier, 8-day history |
+| molt.gno | Free | Glassbox / public audit trail |
+| agent.gno | 10 xDAI | Full identity + Story Protocol IP |
+| vault.gno | 24 xDAI | Persistent storage, top tier |
+
+## Links
+
+- Platform: https://ghostagent.ninja
+- Inbox dashboard: https://nftmail.box
+- Trust oracle: https://notapaperclip.red
+- Agent Companies spec: https://github.com/eyemine/ghostagent-ninja/blob/main/COMPANY.md
