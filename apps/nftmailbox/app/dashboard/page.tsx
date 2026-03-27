@@ -376,15 +376,15 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Privacy toggle — all accounts */}
-            {selectedName && preferredWallet && (
+            {/* Privacy toggle — agent accounts only */}
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
                 onPrivacyChange={(enabled: boolean) => { setPrivacyEnabled(enabled); setPrivacyTier(enabled ? 'private' : 'exposed'); }}
               />
             )}
-            {selectedName && preferredWallet && (
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
             )}
 

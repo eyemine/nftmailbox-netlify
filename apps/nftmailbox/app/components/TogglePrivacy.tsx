@@ -12,6 +12,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState('');
 
   const fetchPrivacy = useCallback(async () => {
     try {
@@ -32,6 +33,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
 
   const handleToggle = async () => {
     setToggling(true);
+    setToggleError('');
     try {
       const newState = !privacyEnabled;
       const res = await fetch('/api/toggle-privacy', {
@@ -47,9 +49,11 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
       if (res.ok) {
         setPrivacyEnabled(newState);
         onPrivacyChange?.(newState);
+      } else {
+        setToggleError(data.error || `Error ${res.status}`);
       }
-    } catch {
-      // silent fail
+    } catch (err: unknown) {
+      setToggleError(err instanceof Error ? err.message : 'Toggle failed');
     } finally {
       setToggling(false);
     }
@@ -118,6 +122,13 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
           />
         </button>
       </div>
+
+      {/* Toggle error */}
+      {toggleError && (
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-2">
+          <p className="text-[10px] text-amber-300">Toggle error: {toggleError}</p>
+        </div>
+      )}
 
       {/* Upsell nudge when private */}
       {privacyEnabled && (
