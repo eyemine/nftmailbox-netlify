@@ -803,7 +803,7 @@ export default function InboxPage() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id }),
                               });
-                              setMessages(prev => prev.filter(m => m.id !== item.id));
+                              setMessages((prev: InboxMessage[]) => prev.filter((m: InboxMessage) => m.id !== item.id));
                             }}
                             className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-0.5 text-[9px] font-medium text-red-300 transition hover:bg-red-500/15"
                             title="Delete"
