@@ -57,7 +57,7 @@ interface InboxMessage {
 }
 
 type Tab = 'inbox' | 'compose' | 'killswitch';
-type ViewMode = 'text' | 'headers' | 'source';
+type ViewMode = 'text' | 'html' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -518,7 +518,7 @@ export default function DashboardPage() {
                         {/* View mode bar + action buttons */}
                         <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
                           <div className="flex items-center gap-0.5">
-                            {(['text','headers','source'] as ViewMode[]).map(m => (
+                            {(['text','html','headers','source'] as ViewMode[]).map(m => (
                               <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m}</button>
                             ))}
                           </div>
@@ -578,6 +578,18 @@ export default function DashboardPage() {
                             </div>
                           ) : viewMode === 'text' ? (
                             <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
+                          ) : viewMode === 'html' ? (
+                            selectedMessage.bodyHtml ? (
+                              <iframe
+                                srcDoc={selectedMessage.bodyHtml}
+                                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                className="w-full border-0 bg-white rounded"
+                                style={{ minHeight: '320px' }}
+                                title="email-html"
+                              />
+                            ) : (
+                              <p className="text-xs text-[var(--muted)] py-4 text-center">No HTML content available for this message.</p>
+                            )
                           ) : viewMode === 'headers' ? (
                             <div className="space-y-1.5 font-mono text-[11px]">
                               {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
