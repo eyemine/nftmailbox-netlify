@@ -49,3 +49,11 @@ export const GNO_REGISTRAR_FACTORY = '0x4D4b486c5d3eFc719E8c3d7d232785290856f866
 export const SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552' as `0x${string}`;
 export const SAFE_PROXY_FACTORY = '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2' as `0x${string}`;
 export const SAFE_FALLBACK_HANDLER = '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4' as `0x${string}`;
+
+// ─── Story Protocol exports ───
+export const STORY_SUB_REGISTRAR = '0x3C1Aa0F0949E40cABbE4e14B1297DA50a4F6D7CA' as `0x${string}`;
+export const STORY_REGISTRAR_FACTORY = '0xc39DB7E1E326BD8D60983E4c359E4F41D308E05e' as `0x${string}`;
+export const STORY_REGISTRARS = {
+  creation: '0xB85c4Ad44DD2f7862a8eE26DdBEE8F508859dE06' as `0x${string}`,
+  moltbook: '0x53347ca0330AAD59784e61f557b2e14cCB1806BE' as `0x${string}`,
+} as const;
