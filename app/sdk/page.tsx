@@ -1,5 +1,6 @@
 'use client';
 
+// SDK Documentation page - https://nftmail.box/sdk
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
