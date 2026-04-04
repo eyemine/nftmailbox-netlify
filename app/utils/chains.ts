@@ -19,10 +19,33 @@ export const GHOST_REGISTRY = (process.env.NEXT_PUBLIC_GHOST_REGISTRY || '0x73F2
 export const BRAIN_MODULE = '0x291e8405096413407c3Ddd8850Fb101b446f5200' as `0x${string}`;
 
 export const GNO_REGISTRARS = {
-  nftmail: '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as `0x${string}`,
-  agent: '0x608071875bcc0ef0b934f8a2367672d8c472cacf' as `0x${string}`,
+  nftmail: '0x46c37365572c9994812aaa41fd04eb56d05469d0' as `0x${string}`,
+  agent:    '0x608071875bcc0ef0b934f8a2367672d8c472cacf' as `0x${string}`,
   openclaw: '0xbd8285a8455ccec4be671d9ee3924ab1264fcbbe' as `0x${string}`,
-  molt: '0x4b54213c1e5826497ff39ba8c87a7b75d2bc3c50' as `0x${string}`,
+  molt:     '0x4b54213c1e5826497ff39ba8c87a7b75d2bc3c50' as `0x${string}`,
   picoclaw: '0xe5fd65562698f46ea9762bd38141535b1fd875b5' as `0x${string}`,
-  vault: '0xc6b184a38da64d1d535674dafb9ce2440058ec4e' as `0x${string}`,
+  vault:    '0xc6b184a38da64d1d535674dafb9ce2440058ec4e' as `0x${string}`,
 } as const;
+
+// ─── Additional exports from ghostagent_ninja ───
+export const storyProtocol = defineChain({
+  id: 1514,
+  name: 'Story',
+  nativeCurrency: { name: 'IP', symbol: 'IP', decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: ['https://mainnet.storyrpc.io'],
+    },
+  },
+  blockExplorers: {
+    default: { name: 'StoryScan', url: 'https://www.storyscan.io' },
+  },
+});
+
+export const ERC6551_REGISTRY = '0x000000006551c19487814612e58FE06813775758' as const;
+export const NFTMAIL_SAFE = '0xb7e493e3d226f8fe722cc9916ff164b793af13f4' as `0x${string}`;
+export const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as `0x${string}`;
+export const GNO_REGISTRAR_FACTORY = '0x4D4b486c5d3eFc719E8c3d7d232785290856f866' as `0x${string}`;
+export const SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552' as `0x${string}`;
+export const SAFE_PROXY_FACTORY = '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2' as `0x${string}`;
+export const SAFE_FALLBACK_HANDLER = '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4' as `0x${string}`;
