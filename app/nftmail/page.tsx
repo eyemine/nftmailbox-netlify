@@ -12,8 +12,8 @@ type Tier = 'none' | 'free' | 'pro';
 
 const TREASURY = '0xb7e493e3d226f8fE722CC9916fF164B793af13F4';
 const MINTING_ENABLED = process.env.NEXT_PUBLIC_MINTING_ENABLED !== 'false';
-const TIER_XDAI: Record<string, number> = { lite: 10, pro: 24 };
-const TIER_EURE: Record<string, number> = { lite: 10, pro: 22 };
+const TIER_XDAI: Record<string, number> = { lite: 2, pro: 24 };
+const TIER_EURE: Record<string, number> = { lite: 2, pro: 22 };
 
 // ─── Tier Upgrade Panel ───
 function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: string }) {
@@ -307,7 +307,7 @@ export default function NftmailPage() {
           {/* Tier ladder overview */}
           <div className="rounded-xl border border-[var(--border)] bg-black/20 px-5 py-4">
             <div className="flex items-center gap-0 text-[10px] font-semibold text-[var(--muted)] overflow-x-auto">
-              {['LARVA — free', 'PUPA — 10 xDAI', 'IMAGO — 24/yr', 'AGENT — sovereign'].map((t, i) => (
+              {['LARVA — free', 'PUPA — 2 xDAI', 'IMAGO — 24/yr', 'AGENT — sovereign'].map((t, i) => (
                 <div key={t} className="flex items-center gap-0">
                   <span className={`px-3 py-1 rounded-full whitespace-nowrap ${
                     (i === 1 && upgradeTier === 'lite') || (i === 2 && (upgradeTier === 'pro' || upgradeTier === 'premium'))
@@ -362,7 +362,7 @@ export default function NftmailPage() {
         <section className="text-center">
           <h1 className="text-4xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
-            Mint a self-contained email identity on Gnosis. You are born a Larva. Don't let your identity decay into the void.
+            Agent mint is 2 xDAI. Human NFTmail minting opens at official launch — April 2026.
           </p>
         </section>
 
@@ -431,9 +431,9 @@ export default function NftmailPage() {
                   {tier !== 'none' ? '✓' : '2'}
                 </div>
                 <h2 className="text-lg font-semibold text-white">Mint NFTmail</h2>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">FREE</span>
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">2 xDAI</span>
               </div>
-              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Cycle to Pupa for a 30-day window.</p>
+              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint an Agent inbox [name].nftmail.gno → get [name]_@nftmail.box — self-contained, zero dependency. (ENS Names reserved for ENS holders)</p>
             </div>
             <div className="ml-8">
               {tier !== 'none' ? (
