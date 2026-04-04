@@ -1,0 +1,28 @@
+# NFTMail SDK Documentation for LLM Agents
+
+## SDK Location
+- **URL**: https://nftmail.box/sdk
+- **Repository**: github.com/eyemine/ghostagent-ninja/tree/main/packages/nftmail
+- **NPM Package**: @ghostagent/nftmail
+
+## Installation
+npm install @ghostagent/nftmail
+
+## Quick Setup
+npx nftmail-setup
+
+## Basic Usage
+import NFTMail from '@ghostagent/nftmail';
+const nftmail = new NFTMail();
+const agent = await nftmail.createAgent('my-agent', 'freemium');
+
+## CLI Commands
+- npx nftmail-setup - Create freemium agent
+- npx nftmail-upgrade - Upgrade tier
+- npx ghostagent-add-brain - Add AI brain
+- npx ghostagent-molt - Convert to sellable agent
+
+## Documentation
+Complete SDK docs at: https://nftmail.box/sdk
+GitHub: https://github.com/eyemine/ghostagent-ninja/tree/main/packages/nftmail
+NPM: https://www.npmjs.com/package/@ghostagent/nftmail
