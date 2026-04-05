@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     // Create agent record
     const agent = {
       name,
-      email: `${name}.agent@nftmail.box`,
+      email: `${name}.agent@ghostmail.box`,
       tier: 'freemium',
       apiKey,
       emailsRemaining: 100,
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
   if (createdAgents.has(name)) {
     return NextResponse.json({
       name,
-      email: `${name}.agent@nftmail.box`,
+      email: `${name}.agent@ghostmail.box`,
       tier: 'freemium',
       emailsRemaining: 100,
       storageDays: 8,

@@ -5,11 +5,10 @@
 set -e
 
 VERSION="1.0.0"
-BASE_URL="https://nftmail.box"
+BASE_URL="https://ghostagent.ninja"
 INSTALL_DIR="${HOME}/.nftmail"
 BIN_DIR="${HOME}/.local/bin"
-
-# Colors
+DEFAULT_DOMAIN="ghostmail.box"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,7 +18,7 @@ NC='\033[0m' # No Color
 # Parse arguments
 AGENT_NAME=""
 TIER="freemium"
-DOMAIN="nftmail.box"
+DOMAIN="ghostmail.box"
 AUTO_DISCOVER=false
 
 while [[ $# -gt 0 ]]; do
@@ -48,7 +47,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --name NAME      Agent name (auto-generated if not specified)"
       echo "  --tier TIER      freemium|professional|vault (default: freemium)"
-      echo "  --domain DOMAIN  Custom domain (default: nftmail.box)"
+      echo "  --domain DOMAIN  Custom domain (default: ghostmail.box)"
       echo "  --auto           Auto-discover with poetic name (for AI agents)"
       echo "  --help           Show this help"
       exit 0
