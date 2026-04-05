@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WORKER_URL } from '../../utils/config';
 
-// GET /api/inbox?email=name@nftmail.box  — fetch inbox from KV worker for human accounts
+// GET /api/inbox?email=name@nftmail.box  — fetch inbox from KV worker (getBlindInbox)
 export async function GET(request: NextRequest) {
   try {
     const email = request.nextUrl.searchParams.get('email');
@@ -9,37 +9,75 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid nftmail.box email' }, { status: 400 });
     }
 
-    const localPart = email.replace('@nftmail.box', '');
+    // Strip @nftmail.box and strip trailing _ (agent alias → identity name)
+    const localPart = email.split('@')[0];
+    const agentName = localPart.endsWith('_') ? localPart.slice(0, -1) : localPart;
 
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'getInbox', localPart }),
-    });
+    let workerError = '';
+    let kvMessages: any[] = [];
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      return NextResponse.json({ error: `Worker error: ${res.status}`, messages: [], note: text }, { status: 200 });
+    try {
+      const workerRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
+      });
+
+      if (workerRes.ok) {
+        const workerData = await workerRes.json() as Record<string, any>;
+        const acctDecayDays: number | null = workerData.decayDays ?? null;
+
+        kvMessages = (workerData.messages || []).map((m: any) => {
+          const isEnc = m.encrypted === true;
+          const now = Date.now();
+          const receivedMs = m.receivedAt || now;
+          const frozen = m.frozen === true;
+          const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
+          const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
+          const ageMs = now - receivedMs;
+
+          return {
+            id: m.id,
+            messageId: m.id,
+            subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
+            sender: isEnc ? '' : (m.payload?.from || 'unknown'),
+            fromAddress: isEnc ? '' : (m.payload?.from || ''),
+            receivedTime: new Date(receivedMs).toISOString(),
+            summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
+            body: isEnc ? '' : (m.payload?.body || ''),
+            bodyHtml: isEnc ? '' : (m.payload?.bodyHtml || ''),
+            isRead: false,
+            hasAttachment: false,
+            encrypted: isEnc,
+            type: m.type || '',
+            contentHash: m.envelope?.contentHash || m.plaintextHash || '',
+            frozen,
+            decayDays: frozen ? null : msgDecayDays,
+            decayPct: frozen ? 0 : Math.min(100, Math.round((ageMs / decayMs) * 100)),
+            expiresAt: frozen ? null : new Date(receivedMs + decayMs).toISOString(),
+            expired: !frozen && ageMs >= decayMs,
+          };
+        });
+      } else {
+        workerError = `Worker returned ${workerRes.status}: ${await workerRes.text().catch(() => '')}`;
+        console.error('Worker getBlindInbox failed:', workerError);
+      }
+    } catch (e: any) {
+      workerError = e?.message || String(e);
+      console.error('Worker getBlindInbox error:', workerError);
     }
 
-    const raw = await res.json() as { messages?: any[]; [key: string]: unknown };
-    const messages = (raw.messages || []).map((m: any) => ({
-      messageId: m.id || m.messageId || `msg-${Math.random().toString(36).slice(2)}`,
-      subject: m.subject || '(no subject)',
-      sender: m.sender || m.from || m.senderAgent || 'unknown',
-      fromAddress: m.fromAddress || m.from || '',
-      receivedTime: m.receivedTime || (m.receivedAt ? new Date(m.receivedAt).toISOString() : ''),
-      summary: m.summary || m.content || '',
-      body: m.body || m.content || '',
-      bodyHtml: m.bodyHtml || '',
-      encrypted: !!m.encrypted,
-      isRead: m.isRead ?? false,
-      hasAttachment: m.hasAttachment ?? false,
-      decayPct: m.decayPct ?? 0,
-      expiresAt: m.expiresAt || '',
-    }));
+    const active = kvMessages.filter((m: any) => !m.expired);
+    const hasEncrypted = active.some((m: any) => m.encrypted);
+    const hasCleartext = active.some((m: any) => !m.encrypted);
+    const tier = hasEncrypted && !hasCleartext ? 'L2' : hasEncrypted ? 'L1' : 'L0';
 
-    return NextResponse.json({ messages, tier: raw.tier || '', note: raw.note || '' });
+    return NextResponse.json({
+      messages: active,
+      total: active.length,
+      tier,
+      ...(workerError ? { note: workerError } : {}),
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to fetch inbox', messages: [] }, { status: 500 });
   }
