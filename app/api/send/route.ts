@@ -26,8 +26,11 @@ export async function POST(req: NextRequest) {
     if (!toAddress || !toAddress.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
-    if (!subject && !content && !html) {
-      return NextResponse.json({ error: 'Subject or content required' }, { status: 400 });
+    if (!content?.trim() && !html) {
+      return NextResponse.json({ error: 'Message body is required' }, { status: 400 });
+    }
+    if (!subject?.trim()) {
+      return NextResponse.json({ error: 'Subject is required' }, { status: 400 });
     }
 
     const apiKey = process.env.MAILGUN_API_KEY;

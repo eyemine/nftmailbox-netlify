@@ -12,6 +12,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const fetchPrivacy = useCallback(async () => {
     try {
@@ -32,6 +33,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
 
   const handleToggle = async () => {
     setToggling(true);
+    setToggleError(null);
     try {
       const newState = !privacyEnabled;
       const res = await fetch('/api/toggle-privacy', {
@@ -47,9 +49,11 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
       if (res.ok) {
         setPrivacyEnabled(newState);
         onPrivacyChange?.(newState);
+      } else {
+        setToggleError(data.error || 'Failed to update privacy');
       }
-    } catch {
-      // silent fail
+    } catch (err: any) {
+      setToggleError(err?.message || 'Network error');
     } finally {
       setToggling(false);
     }
@@ -118,6 +122,10 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
           />
         </button>
       </div>
+
+      {toggleError && (
+        <p className="text-[10px] text-red-400 px-1">{toggleError}</p>
+      )}
 
       {/* Upsell nudge when private */}
       {privacyEnabled && (

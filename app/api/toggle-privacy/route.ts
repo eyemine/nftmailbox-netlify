@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         action: 'setPrivacy',
         localPart: name,
+        tier: enabled ? 'private' : 'exposed',
         privacyEnabled: enabled,
         walletAddress,
       }),

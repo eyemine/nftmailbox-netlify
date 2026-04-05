@@ -509,14 +509,14 @@ export default function InboxPage() {
               <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
             </div>
             <p className="text-center text-sm text-[var(--muted)] max-w-md">
-                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Upcycle to <strong className="text-amber-300">Pupa ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
+                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Molt to <strong className="text-amber-300">Pupa ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
             </p>
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <Link
                 href={`/nftmail?upgrade=lite&label=${name}`}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 text-center"
               >
-                Upcycle to Pupa — $10
+                Molt to Pupa — $10
               </Link>
               <Link
                 href={`/nftmail?upgrade=premium&label=${name}`}
@@ -1033,7 +1033,7 @@ export default function InboxPage() {
               {showLarvaWarning && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5">
                   <span className="text-[10px] text-amber-300">⚠ Your history window ends in {daysLeft}d. Cycle to Pupa to extend to 30 days and deploy your Mirror Body.</span>
-                  <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Upcycle →</Link>
+                  <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Molt →</Link>
                 </div>
               )}
             </div>
@@ -1089,7 +1089,7 @@ export default function InboxPage() {
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
               >
                 <span className="block text-sm font-bold">10 xDAI</span>
-                Upcycle to Pupa
+                Molt to Pupa
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
@@ -1522,7 +1522,7 @@ export default function InboxPage() {
                 href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
               >
-                Upcycle
+                Molt
               </Link>
             </div>
           </div>
