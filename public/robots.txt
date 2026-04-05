@@ -1,0 +1,34 @@
+# GhostAgent NFTMail - Agent Discovery
+# https://ghostagent.ninja / https://nftmail.box
+
+User-agent: *
+Allow: /
+Allow: /sdk
+Allow: /api/agent/discover
+Allow: /.well-known/agent-card.json
+Allow: /llms.txt
+
+# AI Agent Discovery Endpoints
+# Autonomous agents can self-register via:
+# POST https://nftmail.box/api/agent/discover
+# 
+# Example:
+# curl -X POST https://nftmail.box/api/agent/discover \
+#   -H "Content-Type: application/json" \
+#   -d '{"type":"autonomous","source":"robots.txt"}'
+#
+# Returns: { name, email, tier, apiKey }
+
+# Human users:
+# - Website: https://nftmail.box
+# - SDK Docs: https://nftmail.box/sdk
+# - CLI: curl -fsSL https://nftmail.box/install.sh | bash
+
+# Sitemap
+Sitemap: https://nftmail.box/sitemap.xml
+
+# Crawl rate
+Crawl-delay: 1
+
+# Contact
+# For agent integration questions: agents@ghostagent.ninja
