@@ -144,12 +144,12 @@ export default function SDKPage() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <div className="flex gap-2 mb-6 flex-wrap">
               {[
-                { id: 'install', label: 'Install',       imgSrc: ICONS.install,    emoji: null, descIcon: ICONS.install },
-                { id: 'setup',   label: 'Quick Setup',   imgSrc: ICONS.quick,      emoji: null, descIcon: ICONS.quick },
-                { id: 'basic',   label: 'Basic Usage',   imgSrc: ICONS.basic,      emoji: null, descIcon: ICONS.basic },
-                { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid,       emoji: null, descIcon: ICONS.paid },
-                { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain,      emoji: null, descIcon: ICONS.brain },
-                { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt,       emoji: null, descIcon: ICONS.molt },
+                { id: 'install', label: 'Install',       imgSrc: ICONS.install },
+                { id: 'setup',   label: 'Quick Setup',   imgSrc: ICONS.quick },
+                { id: 'basic',   label: 'Basic Usage',   imgSrc: ICONS.basic },
+                { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid },
+                { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain },
+                { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -160,10 +160,7 @@ export default function SDKPage() {
                       : 'bg-black/20 border border-[var(--border)] text-[var(--foreground)] hover:bg-black/30'
                   }`}
                 >
-                  {tab.imgSrc
-                    ? <img src={tab.imgSrc} alt={tab.label} width={28} height={28} className="rounded-sm object-cover" />
-                    : <span>{tab.emoji}</span>
-                  }
+                  <img src={tab.imgSrc} alt={tab.label} width={28} height={28} className="rounded-sm object-cover" />
                   {tab.label}
                 </button>
               ))}
