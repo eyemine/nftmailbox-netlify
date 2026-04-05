@@ -17,6 +17,9 @@ const ICONS = {
   professional: 'https://gateway.lighthouse.storage/ipfs/bafkreibaydbqyzbtr2ukyogoj2wgplbn46rjltkxg5swnkjg5ftir2tyau',
   beta:         'https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay',
   keyFeatures:  'https://gateway.lighthouse.storage/ipfs/bafkreiczfomb6nap53t3ji7d3nzxbdvqtchlhnxs72qdxht4lb4pybsimi',
+  pricing:      'https://gateway.lighthouse.storage/ipfs/bafkreigjuxs7sdbgaonykcqeciepgubryegtl3irb3x4okodzpzh3kezaq',
+  brain:        'https://gateway.lighthouse.storage/ipfs/bafkreibib7gms7uadsofihzrp63fsmzf2ijjf63etqy7p2o2upelmzjd4i',
+  install:      'https://gateway.lighthouse.storage/ipfs/bafkreihotgdvy35ptxcxuu2ketfjomvwccfeifrkahzrutfkyntvmm7xmi',
 } as const;
 
 const codeBlocks = {
@@ -100,7 +103,7 @@ export default function SDKPage() {
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <img src={ICONS.keyFeatures} alt="Key Features" width={22} height={22} className="rounded-sm object-cover" />
+              <img src={ICONS.keyFeatures} alt="Key Features" width={44} height={44} className="rounded-sm object-cover" />
               Key Features
             </h2>
             <div className="grid md:grid-cols-2 gap-4 text-sm">
@@ -141,12 +144,12 @@ export default function SDKPage() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <div className="flex gap-2 mb-6 flex-wrap">
               {[
-                { id: 'install', label: 'Install',    imgSrc: null,           emoji: '📦' },
-                { id: 'setup',   label: 'Quick Setup', imgSrc: ICONS.quick,    emoji: null },
-                { id: 'basic',   label: 'Basic Usage', imgSrc: ICONS.basic,    emoji: null },
-                { id: 'upgrade', label: 'Upgrade',     imgSrc: ICONS.paid,     emoji: null },
-                { id: 'brain',   label: 'Add Brain',   imgSrc: null,           emoji: '🧠' },
-                { id: 'molt',    label: 'Molt',        imgSrc: ICONS.molt,     emoji: null },
+                { id: 'install', label: 'Install',       imgSrc: ICONS.install,    emoji: null, descIcon: ICONS.install },
+                { id: 'setup',   label: 'Quick Setup',   imgSrc: ICONS.quick,      emoji: null, descIcon: ICONS.quick },
+                { id: 'basic',   label: 'Basic Usage',   imgSrc: ICONS.basic,      emoji: null, descIcon: ICONS.basic },
+                { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid,       emoji: null, descIcon: ICONS.paid },
+                { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain,      emoji: null, descIcon: ICONS.brain },
+                { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt,       emoji: null, descIcon: ICONS.molt },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -158,7 +161,7 @@ export default function SDKPage() {
                   }`}
                 >
                   {tab.imgSrc
-                    ? <img src={tab.imgSrc} alt={tab.label} width={14} height={14} className="rounded-sm object-cover" />
+                    ? <img src={tab.imgSrc} alt={tab.label} width={28} height={28} className="rounded-sm object-cover" />
                     : <span>{tab.emoji}</span>
                   }
                   {tab.label}
@@ -173,33 +176,39 @@ export default function SDKPage() {
             </div>
 
             {activeTab === 'install' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>📦 Blockchain-native email service with x402 payments and sovereign identity</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.install} alt="Install" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Blockchain-native email service with x402 payments and sovereign identity</p>
               </div>
             )}
             {activeTab === 'setup' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>⚡ Creates freemium agent with 100 emails, 8-day storage</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.quick} alt="Quick" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Creates freemium agent with 100 emails, 8-day storage</p>
               </div>
             )}
             {activeTab === 'basic' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>💻 Send emails with optional x402 payments for blockchain transactions</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.basic} alt="Basic" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Send emails with optional x402 payments for blockchain transactions</p>
               </div>
             )}
             {activeTab === 'upgrade' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>💰 Professional: 10 xDAI/month unlimited, Vault: 24 xDAI/year unlimited</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.paid} alt="Paid" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Professional: 10 xDAI/month unlimited, Vault: 24 xDAI/year unlimited</p>
               </div>
             )}
             {activeTab === 'brain' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>🧠 Add AI brain for autonomous decision-making and email processing</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.brain} alt="Brain" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Add AI brain for autonomous decision-making and email processing</p>
               </div>
             )}
             {activeTab === 'molt' && (
-              <div className="mt-4 text-xs text-[var(--muted)]">
-                <p>🔥 Convert to sellable agent with 3x-14x ROI on marketplace</p>
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.molt} alt="Molt" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Convert to sellable agent with 3x-14x ROI on marketplace</p>
               </div>
             )}
           </div>
@@ -209,7 +218,7 @@ export default function SDKPage() {
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <img src={ICONS.journey} alt="Journey" width={22} height={22} className="rounded-sm object-cover" />
+            <img src={ICONS.journey} alt="Journey" width={44} height={44} className="rounded-sm object-cover" />
             User Journey
           </h2>
             <div className="space-y-4 text-sm">
@@ -256,11 +265,14 @@ export default function SDKPage() {
         {/* Pricing */}
         <section>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">💰 Pricing & Tiers</h2>
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <img src={ICONS.pricing} alt="Pricing" width={44} height={44} className="rounded-sm object-cover" />
+              Pricing & Tiers
+            </h2>
             <div className="grid md:grid-cols-3 gap-4 text-sm">
               <div className="border border-[var(--border)] rounded-lg p-4">
                 <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.freemium} alt="Freemium" width={20} height={20} className="rounded-sm object-cover" />
+                  <img src={ICONS.freemium} alt="Freemium" width={40} height={40} className="rounded-sm object-cover" />
                   Freemium
                 </div>
                 <div className="text-green-400 font-bold mb-2">Free</div>
@@ -272,7 +284,7 @@ export default function SDKPage() {
               </div>
               <div className="border border-[rgba(0,163,255,0.3)] rounded-lg p-4">
                 <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.professional} alt="Professional" width={20} height={20} className="rounded-sm object-cover" />
+                  <img src={ICONS.professional} alt="Professional" width={40} height={40} className="rounded-sm object-cover" />
                   Professional
                 </div>
                 <div className="text-[rgb(160,220,255)] font-bold mb-2">10 xDAI/month</div>
@@ -284,7 +296,7 @@ export default function SDKPage() {
               </div>
               <div className="border border-[rgba(124,77,255,0.3)] rounded-lg p-4">
                 <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.vault} alt="Vault" width={20} height={20} className="rounded-sm object-cover" />
+                  <img src={ICONS.vault} alt="Vault" width={40} height={40} className="rounded-sm object-cover" />
                   Vault
                 </div>
                 <div className="text-[rgb(180,160,255)] font-bold mb-2">24 xDAI/year</div>
