@@ -121,6 +121,13 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    // Block multi-part agent addresses: foo-bar_ → foo.bar_@nftmail.box is unsupported
+    if (label.includes('-') && label.endsWith('_')) {
+      return NextResponse.json(
+        { error: 'Multi-part agent addresses (e.g. foo.bar_@nftmail.box) are not supported. Use a single-part label.' },
+        { status: 400 }
+      );
+    }
 
     // GNS label uses hyphen (mac-slave.nftmail.gno)
     // nftmail.box email uses dot (mac.slave@nftmail.box)
