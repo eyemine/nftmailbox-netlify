@@ -15,6 +15,8 @@ const ICONS = {
   paid:         'https://gateway.lighthouse.storage/ipfs/bafkreigjuxs7sdbgaonykcqeciepgubryegtl3irb3x4okodzpzh3kezaq',
   journey:      'https://gateway.lighthouse.storage/ipfs/bafkreib3lfdmfleetjsbcmlf6y223dayeqkyhif644oxwyzza7gvmdijpy',
   professional: 'https://gateway.lighthouse.storage/ipfs/bafkreibaydbqyzbtr2ukyogoj2wgplbn46rjltkxg5swnkjg5ftir2tyau',
+  beta:         'https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay',
+  keyFeatures:  'https://gateway.lighthouse.storage/ipfs/bafkreiczfomb6nap53t3ji7d3nzxbdvqtchlhnxs72qdxht4lb4pybsimi',
 } as const;
 
 const codeBlocks = {
@@ -96,7 +98,10 @@ export default function SDKPage() {
         {/* Key Features */}
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">🏆 Key Features</h2>
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <img src={ICONS.keyFeatures} alt="Key Features" width={22} height={22} className="rounded-sm object-cover" />
+              Key Features
+            </h2>
             <div className="grid md:grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
                 <div className="flex justify-between">
