@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  --name NAME      Agent name (auto-generated if not specified)"
       echo "  --tier TIER      freemium|professional|vault (default: freemium)"
-      echo "  --domain DOMAIN  Custom domain (default: ghostmail.box)"
+      echo "  --domain DOMAIN  Custom domain (default: ghostmail.box, Imago tier can use nftmail.box)"
       echo "  --auto           Auto-discover with poetic name (for AI agents)"
       echo "  --help           Show this help"
       exit 0

@@ -49,6 +49,8 @@ function generateApiKey(): string {
   return `${prefix}_${random}`;
 }
 
+const DEFAULT_DOMAIN = 'ghostmail.box';
+
 export async function POST(request: NextRequest) {
   try {
     // Get client IP for rate limiting
@@ -64,6 +66,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { type = 'autonomous', source } = body;
     
+    // Check if user wants nftmail.box alias (Imago tier only)
+    const requestedDomain = body.domain || DEFAULT_DOMAIN;
+    let domain = DEFAULT_DOMAIN;
+    let tier = body.tier || 'freemium';
+    
+    // Imago tier users can request nftmail.box as alias
+    if (requestedDomain === 'nftmail.box' && tier !== 'imago') {
+      return NextResponse.json(
+        { error: 'nftmail.box requires Imago tier. Use ghostmail.box or upgrade to Imago.' },
+        { status: 403 }
+      );
+    }
+    
+    if (requestedDomain === 'nftmail.box' && tier === 'imago') {
+      domain = 'nftmail.box';
+    }
+
     // Generate poetic name
     let name: string;
     let attempts = 0;
@@ -99,15 +118,16 @@ export async function POST(request: NextRequest) {
     // Create agent record
     const agent = {
       name,
-      email: `${name}.agent@ghostmail.box`,
-      tier: 'freemium',
+      email: `${name}.agent@${domain}`,
+      tier,
       apiKey,
-      emailsRemaining: 100,
-      storageDays: 8,
+      emailsRemaining: tier === 'imago' ? 1000 : tier === 'professional' ? 500 : 100,
+      storageDays: tier === 'imago' ? 365 : tier === 'professional' ? 30 : 8,
       createdAt: new Date().toISOString(),
       source: source || 'api',
       type: type || 'autonomous',
       ip: ip === 'unknown' ? undefined : ip,
+      canMolt: tier === 'imago',
     };
     
     // TODO: Persist to KV store (Cloudflare Workers KV)
