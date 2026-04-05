@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface TogglePrivacyProps {
   name: string;
@@ -14,18 +14,25 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
   const [toggling, setToggling] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
 
+  // Use ref for callback to avoid fetchPrivacy dep-cycle re-triggering on every parent render
+  const onPrivacyChangeRef = useRef(onPrivacyChange);
+  useEffect(() => { onPrivacyChangeRef.current = onPrivacyChange; }, [onPrivacyChange]);
+
+  // Privacy is stored under the base name (strip trailing _ for agent alias)
+  const baseName = name.endsWith('_') ? name.slice(0, -1) : name;
+
   const fetchPrivacy = useCallback(async () => {
     try {
-      const res = await fetch(`/api/resolve-privacy?name=${encodeURIComponent(name)}`);
+      const res = await fetch(`/api/resolve-privacy?name=${encodeURIComponent(baseName)}`);
       const data = await res.json() as { privacyEnabled?: boolean };
       setPrivacyEnabled(data.privacyEnabled ?? false);
-      onPrivacyChange?.(data.privacyEnabled ?? false);
+      onPrivacyChangeRef.current?.(data.privacyEnabled ?? false);
     } catch {
       setPrivacyEnabled(false);
     } finally {
       setLoading(false);
     }
-  }, [name, onPrivacyChange]);
+  }, [baseName]);
 
   useEffect(() => {
     if (name) fetchPrivacy();
@@ -40,7 +47,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
+          name: baseName,
           enabled: newState,
           walletAddress,
         }),
@@ -48,7 +55,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
       const data = await res.json() as { error?: string };
       if (res.ok) {
         setPrivacyEnabled(newState);
-        onPrivacyChange?.(newState);
+        onPrivacyChangeRef.current?.(newState);
       } else {
         setToggleError(data.error || 'Failed to update privacy');
       }

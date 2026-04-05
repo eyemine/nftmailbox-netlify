@@ -376,8 +376,8 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Privacy toggle — all accounts */}
-            {selectedName && preferredWallet && (
+            {/* Privacy toggle — agent accounts only (label or email has trailing _) */}
+            {selectedName && preferredWallet && (selectedName.label.endsWith('_') || selectedName.email.includes('_@')) && (
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
