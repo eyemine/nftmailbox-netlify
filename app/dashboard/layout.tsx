@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
         <Link href="/" className="flex items-center gap-2 border-b border-[var(--border)] px-5 py-4">
           <div className="h-6 w-6 rounded-md bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)]" />
           <span className="text-xs font-bold tracking-[0.14em] text-[rgb(160,220,255)]">
-            GHOSTAGENT
+            NFTMAIL
           </span>
         </Link>
 
@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }: PropsWithChildren) {
         {/* Footer */}
         <div className="border-t border-[var(--border)] px-5 py-3">
           <div className="text-[10px] text-[var(--muted)]">
-            ghostagent.ninja v0.1
+            nftmail.box
           </div>
         </div>
       </aside>
