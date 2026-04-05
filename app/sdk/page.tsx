@@ -1,10 +1,21 @@
 'use client';
 
 // SDK Documentation page - https://nftmail.box/sdk
-// Build: 2026-04-05 00:03
+// Build: 2026-04-05 14:00
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+
+const ICONS = {
+  vault:        'https://gateway.lighthouse.storage/ipfs/bafkreidhmmskdp5w2co2dqqgjlgb6hhictf7gfe7q55arz7tmgpxaaamwu',
+  basic:        'https://gateway.lighthouse.storage/ipfs/bafkreih4l6xohngnu3vpkgkw7gle7swod7rnnom6oiq7lotkuvagzxgkv4',
+  molt:         'https://gateway.lighthouse.storage/ipfs/bafkreicfkdqqgyfauvkzt4j26nezyisu3ki6qspxmvu2gfvss432ngwd7i',
+  freemium:     'https://gateway.lighthouse.storage/ipfs/bafkreif46lhvy5m3mydemuvnsm4nmnpxhp4sscn7cbeiy2uxejf3iw56ou',
+  quick:        'https://gateway.lighthouse.storage/ipfs/bafkreibz6x522otlnkzad5e75gx4hhew3gckxjm7xz6lvc7fpvufkbdyji',
+  paid:         'https://gateway.lighthouse.storage/ipfs/bafkreigjuxs7sdbgaonykcqeciepgubryegtl3irb3x4okodzpzh3kezaq',
+  journey:      'https://gateway.lighthouse.storage/ipfs/bafkreib3lfdmfleetjsbcmlf6y223dayeqkyhif644oxwyzza7gvmdijpy',
+  professional: 'https://gateway.lighthouse.storage/ipfs/bafkreibaydbqyzbtr2ukyogoj2wgplbn46rjltkxg5swnkjg5ftir2tyau',
+} as const;
 
 const codeBlocks = {
   install: `npm install @ghostagent/nftmail`,
@@ -124,23 +135,27 @@ export default function SDKPage() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <div className="flex gap-2 mb-6 flex-wrap">
               {[
-                { id: 'install', label: '📦 Install', icon: '📦' },
-                { id: 'setup', label: '⚡ Quick Setup', icon: '⚡' },
-                { id: 'basic', label: '💻 Basic Usage', icon: '💻' },
-                { id: 'upgrade', label: '💰 Upgrade', icon: '💰' },
-                { id: 'brain', label: '🧠 Add Brain', icon: '🧠' },
-                { id: 'molt', label: '🔥 Molt', icon: '🔥' }
+                { id: 'install', label: 'Install',    imgSrc: null,           emoji: '📦' },
+                { id: 'setup',   label: 'Quick Setup', imgSrc: ICONS.quick,    emoji: null },
+                { id: 'basic',   label: 'Basic Usage', imgSrc: ICONS.basic,    emoji: null },
+                { id: 'upgrade', label: 'Upgrade',     imgSrc: ICONS.paid,     emoji: null },
+                { id: 'brain',   label: 'Add Brain',   imgSrc: null,           emoji: '🧠' },
+                { id: 'molt',    label: 'Molt',        imgSrc: ICONS.molt,     emoji: null },
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
                     activeTab === tab.id
                       ? 'bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)] text-[rgb(160,220,255)]'
                       : 'bg-black/20 border border-[var(--border)] text-[var(--foreground)] hover:bg-black/30'
                   }`}
                 >
-                  {tab.icon} {tab.label}
+                  {tab.imgSrc
+                    ? <img src={tab.imgSrc} alt={tab.label} width={14} height={14} className="rounded-sm object-cover" />
+                    : <span>{tab.emoji}</span>
+                  }
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -187,7 +202,10 @@ export default function SDKPage() {
         {/* User Journey */}
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">🚀 User Journey</h2>
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <img src={ICONS.journey} alt="Journey" width={22} height={22} className="rounded-sm object-cover" />
+            User Journey
+          </h2>
             <div className="space-y-4 text-sm">
               <div className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-full bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)] flex items-center justify-center text-xs font-bold text-[rgb(160,220,255)]">
@@ -235,30 +253,39 @@ export default function SDKPage() {
             <h2 className="text-lg font-semibold text-white mb-4">💰 Pricing & Tiers</h2>
             <div className="grid md:grid-cols-3 gap-4 text-sm">
               <div className="border border-[var(--border)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2">🆓 Freemium</div>
+                <div className="font-semibold text-white mb-2 flex items-center gap-2">
+                  <img src={ICONS.freemium} alt="Freemium" width={20} height={20} className="rounded-sm object-cover" />
+                  Freemium
+                </div>
                 <div className="text-green-400 font-bold mb-2">Free</div>
                 <div className="text-[var(--muted)] space-y-1">
-                  <div>• 100 emails</div>
+                  <div>• 100 emails inbox</div>
                   <div>• 8 days storage</div>
                   <div>• Basic email</div>
                 </div>
               </div>
               <div className="border border-[rgba(0,163,255,0.3)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2">💼 Professional</div>
+                <div className="font-semibold text-white mb-2 flex items-center gap-2">
+                  <img src={ICONS.professional} alt="Professional" width={20} height={20} className="rounded-sm object-cover" />
+                  Professional
+                </div>
                 <div className="text-[rgb(160,220,255)] font-bold mb-2">10 xDAI/month</div>
                 <div className="text-[var(--muted)] space-y-1">
                   <div>• Unlimited emails</div>
                   <div>• 30 days storage</div>
-                  <div>• Priority support</div>
+                  <div>• Send emails</div>
                 </div>
               </div>
               <div className="border border-[rgba(124,77,255,0.3)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2">🏦 Vault</div>
+                <div className="font-semibold text-white mb-2 flex items-center gap-2">
+                  <img src={ICONS.vault} alt="Vault" width={20} height={20} className="rounded-sm object-cover" />
+                  Vault
+                </div>
                 <div className="text-[rgb(180,160,255)] font-bold mb-2">24 xDAI/year</div>
                 <div className="text-[var(--muted)] space-y-1">
                   <div>• Unlimited emails</div>
                   <div>• 365 days storage</div>
-                  <div>• Priority support</div>
+                  <div>• Send emails</div>
                 </div>
               </div>
             </div>
