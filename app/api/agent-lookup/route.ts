@@ -80,7 +80,7 @@ export interface AgentIdentityGraph {
   // Input normalisation
   inputQuery: string;
   resolvedName: string;           // stripped local-part e.g. "ghostagent"
-  emailAddress: string;           // canonical e.g. "ghostagent_@nftmail.box"
+  emailAddress: string;           // placeholder="ghostagent.agent or ghostagent.agent@nftmail.box"
 
   // Existence
   exists: boolean;
@@ -132,9 +132,9 @@ export interface AgentIdentityGraph {
 function normaliseQuery(q: string): { name: string; isAgent: boolean } {
   // Strip @nftmail.box suffix if present
   const withoutDomain = q.replace(/@nftmail\.box$/i, '').trim().toLowerCase();
-  // Strip trailing underscore to get base name
-  const isAgent = withoutDomain.endsWith('_');
-  const name = isAgent ? withoutDomain.slice(0, -1) : withoutDomain;
+  // Strip .agent suffix to get base name
+  const isAgent = withoutDomain.endsWith('.agent');
+  const name = isAgent ? withoutDomain.slice(0, -6) : withoutDomain;
   return { name, isAgent };
 }
 
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q') ?? '';
 
   if (!q || q.trim().length < 1) {
-    return NextResponse.json({ error: 'Missing q parameter (e.g. ?q=ghostagent_)' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing q parameter (e.g. ?q=ghostagent.agent)' }, { status: 400 });
   }
 
   const { name, isAgent } = normaliseQuery(q);
@@ -151,8 +151,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Empty name after normalisation' }, { status: 400 });
   }
 
-  // Always resolve as agent_ first (the underscore suffix path)
-  const lookupName = `${name}_`;
+  // Always resolve as agent first (the .agent suffix path)
+  const lookupName = `${name}.agent`;
 
   try {
     // ── 1. resolveAddress from worker ─────────────────────────────────────
@@ -219,7 +219,7 @@ export async function GET(req: NextRequest) {
     const graph: AgentIdentityGraph = {
       inputQuery: q,
       resolvedName: name,
-      emailAddress: `${name}_@nftmail.box`,
+      emailAddress: `${name}.agent@nftmail.box`,
 
       exists: resolved.exists ?? false,
       stream: resolved.stream ?? 'agent',

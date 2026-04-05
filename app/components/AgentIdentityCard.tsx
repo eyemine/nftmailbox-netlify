@@ -131,7 +131,7 @@ export function AgentIdentityCard({ name: initialName }: AgentIdentityCardProps)
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && lookup(query)}
-            placeholder="ghostagent_ or ghostagent_@nftmail.box"
+            placeholder="ghostagent.agent or ghostagent.agent@nftmail.box"
             className="flex-1 rounded-lg border border-[rgba(176,128,92,0.25)] bg-black/30 px-3 py-2 text-sm text-[#f2eee4] outline-none placeholder:text-[var(--muted)] focus:border-[rgba(176,128,92,0.45)] transition-colors font-mono"
           />
           <button

@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid nftmail.box email' }, { status: 400 });
     }
 
-    // Strip @nftmail.box and strip trailing _ (agent alias → identity name)
+    // Strip @nftmail.box and strip .agent suffix (agent alias → identity name)
     const localPart = email.split('@')[0];
-    const agentName = localPart.endsWith('_') ? localPart.slice(0, -1) : localPart;
+    const agentName = localPart.endsWith('.agent') ? localPart.slice(0, -6) : localPart;
 
     let workerError = '';
     let kvMessages: any[] = [];

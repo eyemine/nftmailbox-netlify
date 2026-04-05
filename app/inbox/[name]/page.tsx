@@ -11,7 +11,7 @@ import { ComposeEmail } from '../../components/ComposeEmail';
 function isAgentAddress(addr: string): boolean {
   if (!addr) return false;
   const local = addr.includes('@') ? addr.split('@')[0] : addr;
-  return local.endsWith('_');
+  return local.endsWith('.agent');
 }
 
 function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) {
@@ -153,7 +153,7 @@ export default function InboxPage() {
   const params = useParams();
   const router = useRouter();
   const name = params.name as string;
-  const isAgent = name?.endsWith('_');
+  const isAgent = name?.endsWith('.agent');
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
@@ -218,7 +218,7 @@ export default function InboxPage() {
     return false;
   }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
 
-  const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
+  const agentName = name?.endsWith('.agent') ? name.slice(0, -6) : name;
 
   // ECIES decrypt: only active for agent inboxes where owner is authenticated
   const eciesAgent = isAgent && isOwner ? agentName : null;
