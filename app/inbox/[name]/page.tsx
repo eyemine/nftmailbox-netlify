@@ -299,28 +299,39 @@ export default function InboxPage() {
           } catch {}
         }
 
-        // Fetch inbox messages from KV worker
+        // Fetch inbox messages from KV worker via getBlindInbox
         try {
           const kvRes = await fetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getInbox', localPart: name }),
+            body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
           });
           if (kvRes.ok) {
-            const kvData = await kvRes.json() as { messages?: any[] };
-            const kvMessages = (kvData.messages || []).map((m: any) => ({
-              id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
-              subject: m.subject || '(no subject)',
-              sender: m.from || m.senderAgent || 'unknown',
-              fromAddress: m.from || '',
-              receivedTime: m.receivedAt ? new Date(m.receivedAt).toISOString() : '',
-              summary: m.content || '',
-              encrypted: !!m.encrypted,
-              contentHash: '',
-              type: m.channel || 'a2a',
-              decayPct: 0,
-              expiresAt: '',
-            }));
+            const kvData = await kvRes.json() as { messages?: any[]; decayDays?: number };
+            const acctDecayDays: number | null = kvData.decayDays ?? null;
+            const now = Date.now();
+            const kvMessages = (kvData.messages || []).map((m: any) => {
+              const isEnc = m.encrypted === true;
+              const receivedMs = m.receivedAt || now;
+              const frozen = m.frozen === true;
+              const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
+              const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
+              const ageMs = now - receivedMs;
+              return {
+                id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
+                subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
+                sender: isEnc ? '' : (m.payload?.from || 'unknown'),
+                fromAddress: isEnc ? '' : (m.payload?.from || ''),
+                receivedTime: new Date(receivedMs).toISOString(),
+                summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
+                encrypted: isEnc,
+                contentHash: m.envelope?.contentHash || m.plaintextHash || '',
+                type: m.type || 'a2a',
+                frozen,
+                decayPct: frozen ? 0 : Math.min(100, Math.round((ageMs / decayMs) * 100)),
+                expiresAt: frozen ? null : new Date(receivedMs + decayMs).toISOString(),
+              };
+            }).filter((m: any) => m.frozen || m.decayPct < 100);
             setMessages(kvMessages);
           }
         } catch {}
