@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
 
     const { fromEmail, toAddress, subject, content, html } = body;
 
-    if (!fromEmail || !fromEmail.endsWith('@nftmail.box')) {
-      return NextResponse.json({ error: 'Invalid sender — must be @nftmail.box' }, { status: 400 });
+    if (!fromEmail || (!fromEmail.endsWith('@nftmail.box') && !fromEmail.endsWith('@ghostmail.box'))) {
+      return NextResponse.json({ error: 'Invalid sender — must be @nftmail.box or @ghostmail.box' }, { status: 400 });
     }
     if (!toAddress || !toAddress.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
@@ -38,7 +38,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'MAILGUN_API_KEY not configured' }, { status: 503 });
     }
 
-    const label = fromEmail.replace('@nftmail.box', '');
+    const label = fromEmail.replace('@nftmail.box', '').replace('@ghostmail.box', '');
+    const mailgunDomain = fromEmail.endsWith('@ghostmail.box')
+      ? (process.env.MAILGUN_GHOSTMAIL_DOMAIN || 'mg.ghostmail.box')
+      : MAILGUN_DOMAIN;
     const form = new URLSearchParams();
     form.set('from', `${label} <${fromEmail}>`);
     form.set('to', toAddress);
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
       form.set('text', content || '');
     }
 
-    const res = await fetch(`${MAILGUN_API_BASE}/${MAILGUN_DOMAIN}/messages`, {
+    const res = await fetch(`${MAILGUN_API_BASE}/${mailgunDomain}/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${btoa(`api:${apiKey}`)}`,

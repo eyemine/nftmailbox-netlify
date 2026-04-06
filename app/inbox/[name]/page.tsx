@@ -1093,6 +1093,7 @@ export default function InboxPage() {
             <ComposeEmail
               label={name}
               ownerWallet={user?.wallet?.address || ''}
+              domains={(isAgent || isAgentAlias) ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />

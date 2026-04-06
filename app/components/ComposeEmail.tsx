@@ -10,6 +10,7 @@ interface ComposeEmailProps {
   defaultTo?: string;
   defaultSubject?: string;
   defaultBody?: string;
+  domains?: string[];        // available FROM domains, defaults to ['nftmail.box']
 }
 
 type SendState = 'idle' | 'sending' | 'sent' | 'error';
@@ -24,7 +25,7 @@ const MARKDOWN_TIPS = [
   ['[text](url)', 'Link'],
 ];
 
-export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = '', defaultSubject = '', defaultBody = '' }: ComposeEmailProps) {
+export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = '', defaultSubject = '', defaultBody = '', domains = ['nftmail.box'] }: ComposeEmailProps) {
   const [to, setTo] = useState(defaultTo);
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
@@ -32,9 +33,10 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
   const [error, setError] = useState('');
   const [sentInfo, setSentInfo] = useState<{ messageId: string; to: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [fromDomain, setFromDomain] = useState(domains[0] || 'nftmail.box');
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
-  const fromEmail = `${label}@nftmail.box`;
+  const fromEmail = `${label}@${fromDomain}`;
   const canSend = to.trim() && to.includes('@') && (subject.trim() || body.trim());
 
   const insertMarkdown = useCallback((prefix: string, suffix = '') => {
@@ -58,10 +60,15 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
     setSendState('sending');
     setError('');
     try {
-      const res = await fetch('/api/send-email', {
+      const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, ownerWallet, to: to.trim(), subject: subject.trim(), body }),
+        body: JSON.stringify({
+          fromEmail: `${label}@${fromDomain}`,
+          toAddress: to.trim(),
+          subject: subject.trim(),
+          content: body,
+        }),
       });
       const data = await res.json() as any;
       if (!res.ok) throw new Error(data.error || 'Send failed');
@@ -106,10 +113,23 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* From (read-only) */}
+      {/* From */}
       <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
         <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">FROM</span>
-        <span className="text-xs text-[rgb(160,220,255)]">{fromEmail}</span>
+        {domains.length > 1 ? (
+          <select
+            value={fromDomain}
+            onChange={e => setFromDomain(e.target.value)}
+            className="flex-1 bg-transparent text-xs text-[rgb(160,220,255)] outline-none cursor-pointer"
+            disabled={sendState === 'sending'}
+          >
+            {domains.map(d => (
+              <option key={d} value={d} className="bg-[#0a0b10] text-white">{label}@{d}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-xs text-[rgb(160,220,255)]">{fromEmail}</span>
+        )}
       </div>
 
       {/* To */}
