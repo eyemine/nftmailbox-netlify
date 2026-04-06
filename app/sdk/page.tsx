@@ -129,7 +129,7 @@ export default function SDKPage() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/eyemine/ghostagent-ninja/pkgs/npm/nftmail"
+              href="https://github.com/eyemine/ghostagent-ninja/tree/main/packages/nftmail#option-2-github-packages-npm-alternative"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-[var(--border)] bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
