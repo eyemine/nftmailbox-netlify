@@ -154,7 +154,7 @@ export default function InboxPage() {
   const router = useRouter();
   const name = params.name as string;
   const isAgent = name?.endsWith('.agent');
-  const isAgentAlias = !isAgent && !!(name?.endsWith('_') || name?.endsWith('-'));
+  const isAgentAlias = !isAgent && !!name?.endsWith('_');
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
