@@ -26,13 +26,13 @@ export async function generateApiSecret(): Promise<string> {
     .join('');
 }
 
-export function createSignature(
+export async function createSignature(
   apiSecret: string,
   timestamp: string,
   method: string,
   path: string,
   body?: string
-): string {
+): Promise<string> {
   const data = `${timestamp}:${method}:${path}:${body || ''}`;
   const encoder = new TextEncoder();
   const key = encoder.encode(apiSecret);
