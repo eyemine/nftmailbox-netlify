@@ -1030,6 +1030,14 @@ export default function InboxPage() {
           )}
           </div>
 
+          {/* Exposed warning for glassbox agents */}
+          {(isAgent || isAgentAlias) && effectivePrivacyTier === 'exposed' && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2">
+              <svg className="h-3.5 w-3.5 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              <span className="text-[10px] text-red-300">This inbox is publicly exposed. All messages are visible to anyone — Glass Box transparency is active.</span>
+            </div>
+          )}
+
           {/* Safe body address + decay bar + Larva warning */}
           {(safeAddress || decayPct !== null || showLarvaWarning || isImago) && (
             <div className="flex flex-col gap-2 px-1">
