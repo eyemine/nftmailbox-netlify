@@ -736,15 +736,35 @@ export default function InboxPage() {
             </span>
           </div>
 
-          {/* ── Owner controls: Dashboard + Compose ── */}
+          {/* ── Owner controls: Dashboard + Privacy toggle ── */}
           {isOwner && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Link
                 href={`/dashboard?email=${encodeURIComponent(`${agentName}@nftmail.box`)}`}
                 className="rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
               >
                 Dashboard
               </Link>
+              {privacyTier !== 'hard-privacy' && (
+                <button
+                  onClick={handlePrivacyToggle}
+                  disabled={togglingPrivacy}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
+                    privacyTier === 'private'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                      : 'border-red-500/30 bg-red-500/10 text-red-300'
+                  } disabled:opacity-50`}
+                >
+                  {togglingPrivacy ? (
+                    <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                  ) : privacyTier === 'private' ? (
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                  ) : (
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                  )}
+                  {privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
+                </button>
+              )}
             </div>
           )}
 
