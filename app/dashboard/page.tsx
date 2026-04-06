@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const { authenticated, login, logout, ready, user } = usePrivy();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
+  const isAgentAlias = selectedName?.label?.endsWith('_') || false;
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [inboxTier, setInboxTier] = useState<string>('');
   const [inboxNote, setInboxNote] = useState<string>('');
@@ -92,6 +93,10 @@ export default function DashboardPage() {
   // Privacy toggle state
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [privacyTier, setPrivacyTier] = useState<string>('exposed');
+  const [isPublicInbox, setIsPublicInbox] = useState(false);
+
+  // Compose domain state (nftmail.box or ghostmail.box)
+  const [composeDomain, setComposeDomain] = useState<'nftmail.box' | 'ghostmail.box'>('nftmail.box');
 
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
@@ -172,9 +177,11 @@ export default function DashboardPage() {
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
       setInboxNote(data.note || '');
-      // Get account tier from resolveAddress — inbox API always returns 'free'
-      const resolveData = await resolveRes.json() as { accountTier?: string };
+      // Get account tier + privacy + glassbox from resolveAddress
+      const resolveData = await resolveRes.json() as { accountTier?: string; privacyTier?: string; isPublic?: boolean };
       setInboxTier(resolveData.accountTier || data.tier || '');
+      setPrivacyTier(resolveData.privacyTier || 'exposed');
+      setIsPublicInbox(resolveData.isPublic === true);
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch inbox');
     } finally {
@@ -205,7 +212,7 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromEmail: selectedName.email,
+          fromEmail: isAgentAlias ? `${selectedName.label}@${composeDomain}` : selectedName.email,
           toAddress: composeTo,
           subject: composeSubject,
           content: composeBody,
@@ -282,7 +289,7 @@ export default function DashboardPage() {
     return 'bg-red-500';
   };
 
-  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
+  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias;
   const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
 
   if (!ready) return null;
@@ -376,8 +383,8 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Privacy toggle — agent accounts only (label or email has .agent suffix) */}
-            {selectedName && preferredWallet && (selectedName.label.endsWith('.agent') || selectedName.email.includes('.agent@')) && (
+            {/* Privacy toggle — agent accounts and _ aliases */}
+            {selectedName && preferredWallet && (selectedName.label.endsWith('.agent') || selectedName.label.endsWith('_') || selectedName.email.includes('.agent@')) && (
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
@@ -386,6 +393,14 @@ export default function DashboardPage() {
             )}
             {selectedName && preferredWallet && (
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
+            )}
+
+            {/* Exposed warning for glassbox agents */}
+            {isPublicInbox && privacyTier === 'exposed' && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/8 px-4 py-2.5">
+                <svg className="h-4 w-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                <span className="text-[10px] text-red-300">This inbox is publicly exposed — Glass Box transparency is active. All messages are visible to anyone.</span>
+              </div>
             )}
 
             {/* Tabs */}
@@ -618,7 +633,18 @@ export default function DashboardPage() {
                 <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${!canSend ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">FROM</label>
-                    <div className="mt-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300">{selectedName?.email}</div>
+                    {isAgentAlias ? (
+                      <select
+                        value={composeDomain}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setComposeDomain(e.target.value as 'nftmail.box' | 'ghostmail.box')}
+                        className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300 outline-none"
+                      >
+                        <option value="nftmail.box" className="bg-black text-white">{selectedName?.label}@nftmail.box</option>
+                        <option value="ghostmail.box" className="bg-black text-white">{selectedName?.label}@ghostmail.box</option>
+                      </select>
+                    ) : (
+                      <div className="mt-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300">{selectedName?.email}</div>
+                    )}
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>
