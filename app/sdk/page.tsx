@@ -134,7 +134,7 @@ export default function SDKPage() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/Ghost-Agency"
+              href="https://github.com/orgs/Ghost-Agency/packages/npm/package/nftmail"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-[var(--border)] bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
@@ -148,7 +148,7 @@ export default function SDKPage() {
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <img src={ICONS.keyFeatures} alt="Key Features" width={44} height={44} className="rounded-sm object-cover" />
+              <img src={ICONS.keyFeatures} alt="Key Features" width={88} height={88} className="rounded-sm object-cover" />
               Key Features
             </h2>
             <div className="grid md:grid-cols-2 gap-4 text-sm">
@@ -195,7 +195,7 @@ export default function SDKPage() {
                 { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid },
                 { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain },
                 { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt },
-                { id: 'curl',    label: 'cURL',          imgSrc: ICONS.quick },
+                { id: 'curl',    label: 'cURL',          imgSrc: ICONS.quick, extraImgSrc: ICONS.quick },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -207,6 +207,7 @@ export default function SDKPage() {
                   }`}
                 >
                   <img src={tab.imgSrc} alt={tab.label} width={28} height={28} className="rounded-sm object-cover" />
+                  {'extraImgSrc' in tab && <img src={(tab as any).extraImgSrc} alt="" width={28} height={28} className="rounded-sm object-cover" />}
                   {tab.label}
                 </button>
               ))}
