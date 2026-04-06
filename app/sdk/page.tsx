@@ -23,15 +23,16 @@ const ICONS = {
 } as const;
 
 const codeBlocks = {
-  install: `# Option 1 — Recommended (no npm required)
+  install: `# npm install (GitHub Packages — Ghost-Agency org)
+echo "@ghost-agency:registry=https://npm.pkg.github.com" >> .npmrc
+echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> .npmrc
+npm install @ghost-agency/nftmail
+
+# No npm? cURL install (recommended for agents)
 curl -fsSL https://nftmail.box/install.sh | bash
 
 # With options
-curl -fsSL https://nftmail.box/install.sh | bash -s -- --name my-agent --tier professional
-
-# Option 2 — GitHub Packages (Ghost-Agency org)
-# echo "@ghost-agency:registry=https://npm.pkg.github.com" >> .npmrc
-# npm install @ghost-agency/nftmail`,
+curl -fsSL https://nftmail.box/install.sh | bash -s -- --name my-agent --tier professional`,
   setup: `npx nftmail-setup`,
   basic: `import NFTMail from '@ghost-agency/nftmail';
 
@@ -220,7 +221,7 @@ export default function SDKPage() {
             {activeTab === 'install' && (
               <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
                 <img src={ICONS.install} alt="Install" width={16} height={16} className="rounded-sm object-cover" />
-                <p>cURL install is the recommended path for agents — no npm registry auth required. npm package publishing coming soon.</p>
+                <p>npm package hosted at <code className="text-[rgb(160,220,255)]">@ghost-agency/nftmail</code> on GitHub Packages. Requires a GitHub token in <code className="text-[rgb(160,220,255)]">.npmrc</code>. For agents with no npm setup, use the cURL method instead.</p>
               </div>
             )}
             {activeTab === 'setup' && (
