@@ -212,7 +212,7 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromEmail: isAgentAlias ? `${selectedName.label}@${composeDomain}` : selectedName.email,
+          fromEmail: `${selectedName.label}@${composeDomain}`,
           toAddress: composeTo,
           subject: composeSubject,
           content: composeBody,
@@ -388,19 +388,12 @@ export default function DashboardPage() {
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
+                isImago={isImago}
                 onPrivacyChange={(enabled: boolean) => { setPrivacyEnabled(enabled); setPrivacyTier(enabled ? 'private' : 'exposed'); }}
               />
             )}
             {selectedName && preferredWallet && (
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
-            )}
-
-            {/* Exposed warning for glassbox agents */}
-            {isPublicInbox && privacyTier === 'exposed' && (
-              <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/8 px-4 py-2.5">
-                <svg className="h-4 w-4 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                <span className="text-[10px] text-red-300">This inbox is publicly exposed — Glass Box transparency is active. All messages are visible to anyone.</span>
-              </div>
             )}
 
             {/* Tabs */}
@@ -412,9 +405,9 @@ export default function DashboardPage() {
                 Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
               </button>
               <button
-                onClick={() => canSend && setTab('compose')}
-                title={!canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+                onClick={() => !isAgentAlias && canSend && setTab('compose')}
+                title={isAgentAlias ? 'Agent composes via A2A — not available in HITL dashboard' : !canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : isAgentAlias ? 'cursor-not-allowed opacity-40 text-[var(--muted)]' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
               >
                 Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
               </button>
@@ -621,7 +614,16 @@ export default function DashboardPage() {
             {/* ── COMPOSE TAB ── */}
             {tab === 'compose' && (
               <div className="space-y-4">
-                {!canSend && (
+                {isAgentAlias && (
+                  <div className="rounded-xl border border-zinc-500/20 bg-zinc-500/5 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-500/20">AGENT EMAIL</span>
+                      <span className="text-sm text-zinc-300">Compose is not available for agent aliases</span>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--muted)]">Agent-to-agent and script-initiated email is handled by the agent brain via A2A. Human compose is only available on non-alias addresses.</p>
+                  </div>
+                )}
+                {!isAgentAlias && !canSend && (
                   <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">MOLT REQUIRED</span>
@@ -630,21 +632,17 @@ export default function DashboardPage() {
                     <p className="mt-2 text-xs text-[var(--muted)]">Molt your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
                   </div>
                 )}
-                <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${!canSend ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${isAgentAlias || !canSend ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">FROM</label>
-                    {isAgentAlias ? (
-                      <select
-                        value={composeDomain}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setComposeDomain(e.target.value as 'nftmail.box' | 'ghostmail.box')}
-                        className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300 outline-none"
-                      >
-                        <option value="nftmail.box" className="bg-black text-white">{selectedName?.label}@nftmail.box</option>
-                        <option value="ghostmail.box" className="bg-black text-white">{selectedName?.label}@ghostmail.box</option>
-                      </select>
-                    ) : (
-                      <div className="mt-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300">{selectedName?.email}</div>
-                    )}
+                    <select
+                      value={composeDomain}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setComposeDomain(e.target.value as 'nftmail.box' | 'ghostmail.box')}
+                      className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300 outline-none"
+                    >
+                      <option value="nftmail.box" className="bg-black text-white">{selectedName?.label}@nftmail.box</option>
+                      <option value="ghostmail.box" className="bg-black text-white">{selectedName?.label}@ghostmail.box</option>
+                    </select>
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>

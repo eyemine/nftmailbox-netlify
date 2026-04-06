@@ -6,9 +6,10 @@ interface TogglePrivacyProps {
   name: string;
   walletAddress: string;
   onPrivacyChange?: (enabled: boolean) => void;
+  isImago?: boolean;
 }
 
-export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePrivacyProps) {
+export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }: TogglePrivacyProps) {
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -134,8 +135,8 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
         <p className="text-[10px] text-red-400 px-1">{toggleError}</p>
       )}
 
-      {/* Upsell nudge when private */}
-      {privacyEnabled && (
+      {/* Upsell nudge when private — not shown for IMAGO (persistent storage) */}
+      {privacyEnabled && !isImago && (
         <div className="rounded-lg border border-violet-500/15 bg-violet-500/5 px-4 py-2">
           <p className="text-[10px] text-violet-300">
             Your data is private, but still ephemeral (8-day decay).{' '}
