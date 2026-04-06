@@ -234,6 +234,8 @@ export default function DashboardPage() {
     if (selectedName) {
       fetchInbox();
       setSelectedMessage(null);
+      setSentMessages([]);
+      setSelectedSent(null);
     }
   }, [selectedName, fetchInbox]);
 
