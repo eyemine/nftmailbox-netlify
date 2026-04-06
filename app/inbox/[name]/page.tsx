@@ -154,15 +154,16 @@ export default function InboxPage() {
   const router = useRouter();
   const name = params.name as string;
   const isAgent = name?.endsWith('.agent');
+  const isAgentAlias = !isAgent && !!(name?.endsWith('_') || name?.endsWith('-'));
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
   useEffect(() => {
-    if (!name || isAgent) return;
+    if (!name || isAgent || isAgentAlias) return;
     if (name.includes('-')) {
       router.replace(`/inbox/${name.replace(/-/g, '.')}`);
     }
-  }, [name, isAgent, router]);
+  }, [name, isAgent, isAgentAlias, router]);
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
@@ -249,10 +250,11 @@ export default function InboxPage() {
     if (!name) return;
     (async () => {
       try {
+        const domain = typeof window !== 'undefined' ? window.location.hostname.replace(/^www\./, '') : 'nftmail.box';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resolveAddress', name }),
+          body: JSON.stringify({ action: 'resolveAddress', name, domain }),
         });
         const data: ResolveResult = await res.json();
         setResolved(data);
@@ -260,6 +262,10 @@ export default function InboxPage() {
 
         // For agents, tld + isPublic are now embedded in resolveAddress response
         if (isAgent && agentName) {
+          setAgentTld((data as any).tld || 'nftmail.gno');
+          setIsGlassbox((data as any).isPublic === true);
+          setClassificationDone(true);
+        } else if (isAgentAlias && agentName) {
           setAgentTld((data as any).tld || 'nftmail.gno');
           setIsGlassbox((data as any).isPublic === true);
           setClassificationDone(true);
@@ -271,7 +277,7 @@ export default function InboxPage() {
       }
       setResolving(false);
     })();
-  }, [name, isAgent, agentName]);
+  }, [name, isAgent, isAgentAlias, agentName]);
 
   // Step 2: Load inbox if account exists
   const loadInbox = useCallback(async () => {
@@ -927,9 +933,9 @@ export default function InboxPage() {
   // - Other agents: private by default, owner can toggle
   // - hard-privacy (IMAGO): always blurred from public regardless
   const isMoltAgent = isAgent && agentTld === 'molt.gno';
-  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = !isAgent
-    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // humans always private
-    : privacyTier;  // agents: use stored tier (molt.gno defaults exposed, others default private)
+  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = (!isAgent && !isAgentAlias)
+    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // pure human stream always private
+    : privacyTier;  // agents + agent aliases: use stored tier (molt.gno = exposed, others = private)
   const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
 
   const tierLabel = effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
@@ -978,7 +984,7 @@ export default function InboxPage() {
             </div>
 
             {/* Privacy toggle: agents only — owner can toggle exposed/private */}
-            {isOwner && isAgent && privacyTier !== 'hard-privacy' && (
+            {isOwner && (isAgent || isAgentAlias) && privacyTier !== 'hard-privacy' && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrivacyToggle}
