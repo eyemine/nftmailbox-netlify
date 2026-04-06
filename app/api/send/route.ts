@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
-const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
+const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'nftmail.box';
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const label = fromEmail.replace('@nftmail.box', '').replace('@ghostmail.box', '');
     const mailgunDomain = fromEmail.endsWith('@ghostmail.box')
-      ? (process.env.MAILGUN_GHOSTMAIL_DOMAIN || 'mg.ghostmail.box')
+      ? (process.env.MAILGUN_GHOSTMAIL_DOMAIN || 'ghostmail.box')
       : MAILGUN_DOMAIN;
     const form = new URLSearchParams();
     form.set('from', `${label} <${fromEmail}>`);
