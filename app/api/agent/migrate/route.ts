@@ -189,4 +189,3 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export default { POST, GET };
