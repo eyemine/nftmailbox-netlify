@@ -99,9 +99,30 @@ export async function POST(req: NextRequest) {
     }
 
     const data = (await res.json()) as Record<string, unknown>;
+    const mailgunMessageId = String(data.id || 'sent');
+
+    // Store in sent folder — non-fatal
+    try {
+      await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'storeSentMessage',
+          localPart: label,
+          payload: {
+            to: toAddress,
+            from: fromEmail,
+            subject: subject || '(no subject)',
+            body: content || '',
+            messageId: mailgunMessageId,
+          },
+        }),
+      });
+    } catch {}
+
     return NextResponse.json({
       success: true,
-      messageId: String(data.id || 'sent'),
+      messageId: mailgunMessageId,
       from: fromEmail,
       to: toAddress,
       via: 'mailgun',

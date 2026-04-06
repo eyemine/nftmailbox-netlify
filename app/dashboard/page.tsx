@@ -56,7 +56,7 @@ interface InboxMessage {
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'compose' | 'killswitch';
+type Tab = 'inbox' | 'sent' | 'compose' | 'killswitch';
 type ViewMode = 'text' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -85,6 +85,12 @@ export default function DashboardPage() {
   const [composeBody, setComposeBody] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string | null>(null);
+
+  // Sent folder state
+  interface SentMessage { id: string; to: string; from: string; subject: string; body: string; sentAt: number; messageId: string; }
+  const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
+  const [loadingSent, setLoadingSent] = useState(false);
+  const [selectedSent, setSelectedSent] = useState<SentMessage | null>(null);
 
   // Kill-switch state
   const [burning, setBurning] = useState(false);
@@ -136,6 +142,35 @@ export default function DashboardPage() {
       if (selectedMessage?.messageId === messageId) setSelectedMessage(null);
     } catch {}
   }, [selectedName, selectedMessage]);
+
+  const handleDeleteSent = useCallback(async (sentId: string) => {
+    if (!selectedName) return;
+    try {
+      await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteSentMessage', localPart: selectedName.label, sentId }),
+      });
+      setSentMessages(prev => prev.filter(m => m.id !== sentId));
+      if (selectedSent?.id === sentId) setSelectedSent(null);
+    } catch {}
+  }, [selectedName, selectedSent]);
+
+  const fetchSentMessages = useCallback(async () => {
+    if (!selectedName) return;
+    const label = selectedName.label;
+    setLoadingSent(true);
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getSentMessages', localPart: label }),
+      });
+      const data = await res.json() as { messages?: SentMessage[] };
+      setSentMessages(data.messages || []);
+    } catch {}
+    finally { setLoadingSent(false); }
+  }, [selectedName]);
 
   // Resolve NFTMail names for connected wallet
   const resolveNames = useCallback(async () => {
@@ -406,6 +441,12 @@ export default function DashboardPage() {
                 Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
               </button>
               <button
+                onClick={() => { setTab('sent'); fetchSentMessages(); }}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sent' ? 'bg-emerald-500/12 text-emerald-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
+              </button>
+              <button
                 onClick={() => !isAgentAlias && canSend && setTab('compose')}
                 title={isAgentAlias ? 'Agent composes via A2A — not available in HITL dashboard' : !canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : isAgentAlias ? 'cursor-not-allowed opacity-40 text-[var(--muted)]' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
@@ -605,6 +646,88 @@ export default function DashboardPage() {
                         </svg>
                         <p className="text-sm text-[var(--muted)]">Select a message to read</p>
                         <Link href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`} className="mt-1 text-[10px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition">Open full inbox →</Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── SENT TAB ── */}
+            {tab === 'sent' && (
+              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
+                  <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SENT{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}</span>
+                  <button onClick={fetchSentMessages} disabled={loadingSent} className="flex items-center gap-1.5 text-[10px] text-[rgb(160,220,255)] hover:text-white transition disabled:opacity-40">
+                    <svg className={`h-3 w-3 ${loadingSent ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                    </svg>
+                    {loadingSent ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="flex" style={{ minHeight: '460px' }}>
+                  {/* Left: sent message list */}
+                  <div className={`flex flex-col border-r border-[var(--border)] ${selectedSent ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
+                    {loadingSent && sentMessages.length === 0 ? (
+                      <div className="flex flex-1 items-center justify-center py-12">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
+                      </div>
+                    ) : sentMessages.length === 0 ? (
+                      <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
+                        <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                        <p className="text-sm text-[var(--muted)]">No sent messages</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
+                        {sentMessages.map(msg => {
+                          const isSelected = selectedSent?.id === msg.id;
+                          return (
+                            <button
+                              key={msg.id}
+                              onClick={() => setSelectedSent(msg)}
+                              className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="truncate text-xs font-semibold text-white">{msg.subject || '(no subject)'}</p>
+                                <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">To: {msg.to}</p>
+                                <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(String(msg.sentAt))}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {/* Right: sent message reading pane */}
+                  <div className={`flex flex-col flex-1 ${selectedSent ? 'flex' : 'hidden md:flex'}`}>
+                    {selectedSent ? (
+                      <>
+                        <button onClick={() => setSelectedSent(null)} className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2 text-[10px] text-[var(--muted)] hover:text-white transition md:hidden">
+                          ← Back to sent
+                        </button>
+                        <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
+                          <p className="text-sm font-semibold text-white">{selectedSent.subject || '(no subject)'}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedSent.to}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedSent.from}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Sent</span> {formatTimeAgo(String(selectedSent.sentAt))}</p>
+                        </div>
+                        <div className="flex justify-end border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
+                          <button title="Delete sent message" onClick={() => handleDeleteSent(selectedSent.id)} className="rounded p-1.5 text-red-400/50 transition hover:text-red-400">
+                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-4" style={{ maxHeight: '380px' }}>
+                          <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedSent.body || '(empty)'}</pre>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col flex-1 items-center justify-center gap-2 text-center py-12 px-6">
+                        <svg className="h-8 w-8 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                        <p className="text-sm text-[var(--muted)]">Select a sent message to view</p>
                       </div>
                     )}
                   </div>
