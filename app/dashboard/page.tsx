@@ -216,6 +216,7 @@ export default function DashboardPage() {
           toAddress: composeTo,
           subject: composeSubject,
           content: composeBody,
+          ownerWallet: walletAddress,
         }),
       });
       const data = await res.json() as { error?: string };

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'nftmail.box';
+const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,9 +17,10 @@ export async function POST(req: NextRequest) {
       subject?: string;
       content?: string;
       html?: string;
+      ownerWallet?: string;
     };
 
-    const { fromEmail, toAddress, subject, content, html } = body;
+    const { fromEmail, toAddress, subject, content, html, ownerWallet } = body;
 
     if (!fromEmail || (!fromEmail.endsWith('@nftmail.box') && !fromEmail.endsWith('@ghostmail.box'))) {
       return NextResponse.json({ error: 'Invalid sender — must be @nftmail.box or @ghostmail.box' }, { status: 400 });
@@ -32,6 +34,32 @@ export async function POST(req: NextRequest) {
     if (!subject?.trim()) {
       return NextResponse.json({ error: 'Subject is required' }, { status: 400 });
     }
+
+    // ── Ownership verification ──────────────────────────────────────────────
+    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
+      return NextResponse.json({ error: 'ownerWallet required' }, { status: 401 });
+    }
+    const localPart = fromEmail.split('@')[0];
+    try {
+      const resolveRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resolveAddress', name: localPart }),
+      });
+      const resolved = await resolveRes.json() as Record<string, unknown>;
+      if (!resolved?.exists) {
+        return NextResponse.json({ error: 'Sender address does not exist' }, { status: 404 });
+      }
+      const onChainOwner = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+      const safe = (resolved.safe as string | undefined)?.toLowerCase();
+      const wallet = ownerWallet.toLowerCase();
+      if (onChainOwner && onChainOwner !== wallet && safe !== wallet) {
+        return NextResponse.json({ error: 'Wallet does not own this address' }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: 'Could not verify sender ownership' }, { status: 503 });
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     const apiKey = process.env.MAILGUN_API_KEY;
     if (!apiKey) {
