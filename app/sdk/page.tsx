@@ -1,7 +1,7 @@
 'use client';
 
 // SDK Documentation page - https://nftmail.box/sdk
-// Build: 2026-04-05 14:00
+// Build: 2026-04-06 21:00
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -23,7 +23,11 @@ const ICONS = {
 } as const;
 
 const codeBlocks = {
-  install: `npm install @ghostagent/nftmail`,
+  install: `# Configure GitHub Packages registry (one-time setup)
+echo "@ghostagent:registry=https://npm.pkg.github.com" >> .npmrc
+
+# Install
+npm install @ghostagent/nftmail`,
   setup: `npx nftmail-setup`,
   basic: `import NFTMail from '@ghostagent/nftmail';
 
@@ -42,7 +46,43 @@ await nftmail.sendEmail(
 );`,
   upgrade: `npx nftmail-upgrade --agent my-agent --tier professional`,
   brain: `npx ghostagent-add-brain --agent my-agent --model gpt-4`,
-  molt: `npx ghostagent-molt --agent my-agent --tld gno`
+  molt: `npx ghostagent-molt --agent my-agent --tld gno`,
+  curl: `# Resolve an address — returns tier, TLD, canSend, privacyTier
+curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"resolveAddress","name":"my-agent"}'
+
+# Fetch inbox messages
+curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"getBlindInbox","localPart":"my-agent"}'
+
+# Store an inbound message (used by Mailgun webhook)
+curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "action":"storeBlindEnvelope",
+    "localPart":"my-agent",
+    "payload":{
+      "subject":"Hello",
+      "from":"sender@example.com",
+      "body":"Message body"
+    }
+  }'
+
+# List agents by Safe address
+curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  -H "Content-Type: application/json" \\
+  -d '{"action":"listAgents","safeAddress":"0xYourSafeAddress"}'
+
+# Delete a message
+curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "action":"deleteMessage",
+    "localPart":"my-agent",
+    "messageId":"msg-id-here"
+  }'`
 };
 
 export default function SDKPage() {
@@ -89,12 +129,12 @@ export default function SDKPage() {
               View on GitHub
             </a>
             <a
-              href="https://www.npmjs.com/package/@ghostagent/nftmail"
+              href="https://github.com/eyemine/ghostagent-ninja/pkgs/npm/nftmail"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-[var(--border)] bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
             >
-              NPM Package
+              GitHub Package
             </a>
           </div>
         </section>
@@ -150,6 +190,7 @@ export default function SDKPage() {
                 { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid },
                 { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain },
                 { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt },
+                { id: 'curl',    label: 'cURL',          imgSrc: ICONS.quick },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -206,6 +247,12 @@ export default function SDKPage() {
               <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
                 <img src={ICONS.molt} alt="Molt" width={16} height={16} className="rounded-sm object-cover" />
                 <p>Convert to sellable agent with 3x-14x ROI on marketplace</p>
+              </div>
+            )}
+            {activeTab === 'curl' && (
+              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
+                <img src={ICONS.quick} alt="cURL" width={16} height={16} className="rounded-sm object-cover" />
+                <p>Direct HTTP calls to the NFTMail worker — no SDK required. Worker endpoint: <code className="text-[rgb(160,220,255)]">https://nftmail-email-worker.richard-159.workers.dev</code></p>
               </div>
             )}
           </div>
