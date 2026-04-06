@@ -307,7 +307,8 @@ export default function InboxPage() {
         }
 
         // Fetch inbox messages from KV worker via getBlindInbox
-        const inboxLocalPart = isAgentAlias ? name : agentName;
+        // For aliases (ghostagent_), fetch from base name (ghostagent) — same inbox, human-stream view
+        const inboxLocalPart = isAgentAlias ? name.replace(/_+$/, '') : agentName;
         try {
           const kvRes = await fetch(WORKER_URL, {
             method: 'POST',
