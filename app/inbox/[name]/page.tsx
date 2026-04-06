@@ -213,11 +213,11 @@ export default function InboxPage() {
       }
       if (addrs.includes(owner)) return true;
     } catch (_) { /* ignore enumeration errors */ }
-    // Fallback for agent inboxes: grant access if authenticated.
+    // Fallback for agent inboxes / agent aliases: grant access if authenticated.
     // ECIES encryption still protects private message content regardless.
-    if (isAgent && authenticated) return true;
+    if ((isAgent || isAgentAlias) && authenticated) return true;
     return false;
-  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
+  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent, isAgentAlias]);
 
   const agentName = name?.endsWith('.agent') ? name.slice(0, -6) : name;
 
@@ -268,6 +268,7 @@ export default function InboxPage() {
         } else if (isAgentAlias && agentName) {
           setAgentTld((data as any).tld || 'nftmail.gno');
           setIsGlassbox((data as any).isPublic === true);
+          setPrivacyTier((data as any).privacyTier || 'exposed');
           setClassificationDone(true);
         } else {
           setClassificationDone(true);
@@ -284,9 +285,9 @@ export default function InboxPage() {
     if (!name || !resolved?.exists) return;
     setLoading(true);
     try {
-      if (isAgent) {
-        // Glassbox agents: fetch audit log from Moltworker proxy
-        if (isGlassbox) {
+      if (isAgent || isAgentAlias) {
+        // Glassbox agents: fetch audit log from Moltworker proxy (only for .agent stream, not aliases)
+        if (isGlassbox && isAgent) {
           try {
             const auditRes = await fetch(`https://${agentName}-proxy.richard-159.workers.dev/audit`);
             if (auditRes.ok) {
@@ -306,11 +307,12 @@ export default function InboxPage() {
         }
 
         // Fetch inbox messages from KV worker via getBlindInbox
+        const inboxLocalPart = isAgentAlias ? name : agentName;
         try {
           const kvRes = await fetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
+            body: JSON.stringify({ action: 'getBlindInbox', localPart: inboxLocalPart }),
           });
           if (kvRes.ok) {
             const kvData = await kvRes.json() as { messages?: any[]; decayDays?: number };
@@ -372,7 +374,7 @@ export default function InboxPage() {
       setError(e?.message || 'Failed to load inbox');
     }
     setLoading(false);
-  }, [name, resolved, isAgent, isGlassbox, agentName]);
+  }, [name, resolved, isAgent, isAgentAlias, isGlassbox, agentName]);
 
   useEffect(() => {
     if (resolved?.exists && classificationDone) loadInbox();
