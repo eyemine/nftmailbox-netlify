@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 AGENT_NAME=""
 TIER="freemium"
 DOMAIN="ghostmail.box"
+SECURITY_TIER="standard"
 AUTO_DISCOVER=false
 
 while [[ $# -gt 0 ]]; do
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
       DOMAIN="$2"
       shift 2
       ;;
+    --security)
+      SECURITY_TIER="$2"
+      shift 2
+      ;;
     --auto)
       AUTO_DISCOVER=true
       shift
@@ -48,6 +53,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --name NAME      Agent name (auto-generated if not specified)"
       echo "  --tier TIER      freemium|professional|vault (default: freemium)"
       echo "  --domain DOMAIN  Custom domain (default: ghostmail.box, Imago tier can use nftmail.box)"
+      echo "  --security TIER  standard|hmac|privy (default: standard)"
       echo "  --auto           Auto-discover with poetic name (for AI agents)"
       echo "  --help           Show this help"
       exit 0
@@ -81,10 +87,18 @@ mkdir -p "$INSTALL_DIR" "$BIN_DIR"
 if [ "$AUTO_DISCOVER" = true ]; then
   echo -e "${BLUE}🤖 Auto-discovery mode - generating poetic identity...${NC}"
   
+# If auto-discover and security tier specified, include in discovery
+if [ "$AUTO_DISCOVER" = true ] && [ -n "$SECURITY_TIER" ]; then
+  RESPONSE=$(curl -s -X POST "$BASE_URL/api/agent/discover" \
+    -H "Content-Type: application/json" \
+    -H "User-Agent: GhostAgent-Auto/1.0" \
+    -d "{\"type\":\"autonomous\",\"source\":\"curl-install\",\"securityTier\":\"$SECURITY_TIER\"}")
+else
   RESPONSE=$(curl -s -X POST "$BASE_URL/api/agent/discover" \
     -H "Content-Type: application/json" \
     -H "User-Agent: GhostAgent-Auto/1.0" \
     -d '{"type":"autonomous","source":"curl-install"}')
+fi
   
   AGENT_NAME=$(echo "$RESPONSE" | jq -r '.name')
   TIER=$(echo "$RESPONSE" | jq -r '.tier')
