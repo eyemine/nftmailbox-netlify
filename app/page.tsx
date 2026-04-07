@@ -69,6 +69,46 @@ export default function Home() {
           </p>
         </section>
 
+        {/* Check an Inbox */}
+        <section className="w-full max-w-lg">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
+            <h2 className="text-base font-semibold text-white mb-4">Check an Inbox</h2>
+            <form onSubmit={handleLookup} className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value.toLowerCase());
+                    setError('');
+                  }}
+                  placeholder="yourname"
+                  className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-28 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)] transition"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
+                  @nftmail.box
+                </span>
+              </div>
+              <button
+                type="submit"
+                className="rounded-lg bg-[rgba(0,163,255,0.12)] border border-[rgba(0,163,255,0.3)] px-5 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)]"
+              >
+                Check &rarr;
+              </button>
+            </form>
+            {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+            <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+              <p className="text-[10px] text-[var(--muted)]">Manage all your inboxes</p>
+              <Link 
+                href="/dashboard" 
+                className="px-4 py-2 text-xs font-semibold text-white bg-[rgba(0,163,255,0.12)] border border-[rgba(0,163,255,0.3)] rounded-lg hover:bg-[rgba(0,163,255,0.2)] transition"
+              >
+                Your Dashboard &rarr;
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* Primary CTA — claim inbox */}
         <section className="w-full max-w-lg">
           <div className="rounded-2xl border border-[rgba(0,163,255,0.25)] bg-[var(--card)] p-6">
@@ -102,70 +142,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Already have inbox — lookup */}
-        <section className="w-full max-w-lg">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-            <h2 className="text-xs font-semibold text-[var(--muted)] mb-3 tracking-wider">ALREADY HAVE AN INBOX?</h2>
-            <form onSubmit={handleLookup} className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={emailInput}
-                  onChange={(e) => {
-                    setEmailInput(e.target.value.toLowerCase());
-                    setError('');
-                  }}
-                  placeholder="yourname"
-                  className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-28 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)] transition"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
-                  @nftmail.box
-                </span>
-              </div>
-              <button
-                type="submit"
-                className="rounded-lg bg-black/30 border border-[var(--border)] px-4 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/50"
-              >
-                Open →
-              </button>
-            </form>
-            {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-[10px] text-[var(--muted)]">Manage all inboxes</p>
-              <Link href="/dashboard" className="text-[10px] text-[rgb(160,220,255)] hover:underline transition">
-                Dashboard →
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Claim Inbox Panel */}
-        <section className="w-full max-w-lg">
-          <div className="rounded-2xl border border-[rgba(255,120,40,0.25)] bg-[var(--card)] p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
-              <span className="text-xs font-semibold text-orange-300">CLAIM YOUR PERMANENT INBOX</span>
-            </div>
-            <h2 className="text-base font-semibold text-white mb-1">Have a claim code?</h2>
-            <p className="text-xs text-[var(--muted)] mb-4">
-              Upgrade your trial inbox to permanent NFT ownership with a connected wallet.
-            </p>
-            <div className="flex gap-2">
-              <a
-                href="/claim"
-                className="flex-1 rounded-lg bg-[rgba(255,120,40,0.15)] border border-[rgba(255,120,40,0.35)] px-5 py-3 text-sm font-semibold text-orange-300 text-center hover:bg-[rgba(255,120,40,0.25)] transition"
-              >
-                Claim inbox &rarr;
-              </a>
-            </div>
-            <div className="flex items-center gap-4 pt-3 border-t border-[rgba(255,120,40,0.25)]">
-              {['Permanent NFT', 'Full features', 'No limits'].map((feature) => (
-                <span key={feature} className="text-[10px] text-[var(--muted)]"><span className="text-orange-400">+</span> {feature}</span>
-              ))}
-            </div>
-          </div>
-        </section>
-
+        
         <footer className="text-center text-xs text-[var(--muted)]">
           nftmail.box - Sovereign email for agents and humans
         </footer>

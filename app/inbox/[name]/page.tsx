@@ -11,7 +11,7 @@ import { ComposeEmail } from '../../components/ComposeEmail';
 function isAgentAddress(addr: string): boolean {
   if (!addr) return false;
   const local = addr.includes('@') ? addr.split('@')[0] : addr;
-  return local.endsWith('.agent');
+  return local.endsWith('_');
 }
 
 function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) {
@@ -155,6 +155,10 @@ export default function InboxPage() {
   const name = params.name as string;
   const isAgent = name?.endsWith('.agent');
   const isAgentAlias = !isAgent && !!name?.endsWith('_');
+  
+  // Known agent names that should be treated as agents even without underscore
+  const knownAgents = ['ghostagent', 'eyemine', 'victor'];
+  const isKnownAgent = knownAgents.includes(name?.split('.')[0] || '');
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
@@ -174,7 +178,7 @@ export default function InboxPage() {
   const [resolving, setResolving] = useState(true);
 
   // Inbox state (only used when account exists)
-  const [privacyTier, setPrivacyTier] = useState<'exposed' | 'private' | 'hard-privacy'>('exposed');
+  const [privacyTier, setPrivacyTier] = useState<'exposed' | 'private' | 'hard-privacy'>('private');
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -258,19 +262,27 @@ export default function InboxPage() {
         });
         const data: ResolveResult = await res.json();
         setResolved(data);
-        setPrivacyTier(data.privacyTier || 'exposed');
-
-        // For agents, tld + isPublic are now embedded in resolveAddress response
+        // For agents, determine privacy tier based on glassbox status
         if (isAgent && agentName) {
-          setAgentTld((data as any).tld || 'nftmail.gno');
-          setIsGlassbox((data as any).isPublic === true);
+          const tld = (data as any).tld || 'nftmail.gno';
+          const isPublic = (data as any).isPublic === true;
+          setAgentTld(tld);
+          setIsGlassbox(isPublic);
+          // Glassbox agents (molt.gno) are exposed by default, others private
+          const isMoltAgent = tld === 'molt.gno';
+          setPrivacyTier(isMoltAgent ? 'exposed' : 'private');
           setClassificationDone(true);
         } else if (isAgentAlias && agentName) {
-          setAgentTld((data as any).tld || 'nftmail.gno');
-          setIsGlassbox((data as any).isPublic === true);
-          setPrivacyTier((data as any).privacyTier || 'exposed');
+          const tld = (data as any).tld || 'nftmail.gno';
+          const isPublic = (data as any).isPublic === true;
+          setAgentTld(tld);
+          setIsGlassbox(isPublic);
+          const isMoltAgent = tld === 'molt.gno';
+          setPrivacyTier(isMoltAgent ? 'exposed' : 'private');
           setClassificationDone(true);
         } else {
+          // Human addresses: always private unless hard-privacy
+          setPrivacyTier(data.privacyTier || 'private');
           setClassificationDone(true);
         }
       } catch {
@@ -960,13 +972,15 @@ export default function InboxPage() {
     : privacyTier;  // agents + agent aliases: use stored tier (molt.gno = exposed, others = private)
   const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
 
-  const tierLabel = effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
-  const tierColor = effectivePrivacyTier === 'hard-privacy'
+  const tierLabel = isGlassbox ? 'GLASSBOX' : effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
+  const tierColor = isGlassbox
+    ? 'text-violet-300 bg-violet-500/10 ring-violet-500/20'
+    : effectivePrivacyTier === 'hard-privacy'
     ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
     : effectivePrivacyTier === 'private'
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-red-300 bg-red-500/10 ring-red-500/20';
-  const dotColor = effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
+  const dotColor = isGlassbox ? 'bg-violet-400' : effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -1121,15 +1135,42 @@ export default function InboxPage() {
             <ComposeEmail
               label={name}
               ownerWallet={user?.wallet?.address || ''}
-              domains={(isAgent || isAgentAlias) ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
+              domains={(isAgent || isAgentAlias || isKnownAgent) ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />
           </div>
         )}
 
-        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
-        {isOwner && accountTier === 'basic' && (
+        {/* ---- Claim panel: shown for trial accounts ---- */}
+        {isOwner && accountTier === 'basic' && !safeAddress && (
+          <div className="rounded-xl border border-[rgba(255,120,40,0.25)] bg-[var(--card)] p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+              <span className="text-xs font-semibold text-orange-300">CLAIM YOUR PERMANENT INBOX</span>
+            </div>
+            <h3 className="text-sm font-semibold text-white">Have a claim code?</h3>
+            <p className="text-xs text-[var(--muted)]">
+              Upgrade your trial inbox to permanent NFT ownership with a connected wallet.
+            </p>
+            <div className="flex gap-2">
+              <Link
+                href="/claim"
+                className="flex-1 rounded-lg bg-[rgba(255,120,40,0.15)] border border-[rgba(255,120,40,0.35)] px-4 py-2.5 text-sm font-semibold text-orange-300 text-center hover:bg-[rgba(255,120,40,0.25)] transition"
+              >
+                Claim inbox &rarr;
+              </Link>
+            </div>
+            <div className="flex items-center gap-3 pt-2 border-t border-[rgba(255,120,40,0.25)]">
+              {['Permanent NFT', 'Full features', 'No limits'].map((feature) => (
+                <span key={feature} className="text-[10px] text-[var(--muted)]"><span className="text-orange-400">+</span> {feature}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ---- Evolve panel: shown to owner on basic/lite tier ---- */}
+        {isOwner && accountTier === 'basic' && safeAddress && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <Link
@@ -1141,7 +1182,7 @@ export default function InboxPage() {
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
-              <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
+              <p className="text-[10px] text-amber-300">&#9888; {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining &#8212; renew before decay</p>
             )}
           </div>
         )}
