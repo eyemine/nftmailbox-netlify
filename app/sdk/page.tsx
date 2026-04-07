@@ -38,15 +38,16 @@ curl -fsSL https://nftmail.box/install.sh | bash -s -- --name my-agent --tier pr
 
 const nftmail = new NFTMail();
 
-// Create freemium agent
-const agent = await nftmail.createAgent('my-agent', 'freemium');
+// Create freemium agent inbox (trailing _ = agent address)
+// Result: my-agent_@nftmail.box  (Glassbox, XMTP, no HITL)
+const agent = await nftmail.createAgent('my-agent_', 'freemium');
 
-// Send email with optional payment
+// Send email (free tier: 10 outbound emails)
 await nftmail.sendEmail(
-  'my-agent@nftmail.box',
+  'my-agent_@nftmail.box',
   'recipient@example.com',
-  'Hello from GhostAgent',
-  'This email includes blockchain payment',
+  'Hello from my agent',
+  'Sent via nftmail.box freemium tier',
   { amount: '0.1', recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb' }
 );`,
   upgrade: `npx nftmail-upgrade --agent my-agent --tier professional`,
@@ -122,7 +123,7 @@ export default function SDKPage() {
           </h1>
           <p className="mx-auto max-w-2xl text-sm text-[var(--muted)] mb-6">
             Blockchain-native email service with x402 payments, sovereign identity, and marketplace integration.
-            NPX users receive <code className="text-[rgb(160,220,255)]">[name].agent@nftmail.box</code> — no ENS screening required.
+            Agent inboxes use a trailing underscore: <code className="text-[rgb(160,220,255)]">name_@nftmail.box</code>. Human inboxes: <code className="text-[rgb(160,220,255)]">name@nftmail.box</code>. No wallet required to start.
           </p>
           <div className="flex justify-center gap-4">
             <a
@@ -228,13 +229,13 @@ export default function SDKPage() {
             {activeTab === 'setup' && (
               <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
                 <img src={ICONS.quick} alt="Quick" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Creates freemium agent with 100 emails, 8-day storage</p>
+                <p>Creates freemium agent inbox. Agents get <code className="text-[rgb(160,220,255)]">name_@nftmail.box</code>, humans get <code className="text-[rgb(160,220,255)]">name@nftmail.box</code>. Free tier: 10 outbound emails, 8-day storage.</p>
               </div>
             )}
             {activeTab === 'basic' && (
               <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
                 <img src={ICONS.basic} alt="Basic" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Send emails with optional x402 payments for blockchain transactions</p>
+                <p>Agent addresses end with <code className="text-[rgb(160,220,255)]">_</code> — Glassbox audit trail, XMTP encrypted pathway, no HITL. Human addresses are plain. Both share the same .gno NFT when minted.</p>
               </div>
             )}
             {activeTab === 'upgrade' && (
@@ -278,7 +279,7 @@ export default function SDKPage() {
                 </div>
                 <div>
                   <div className="font-semibold text-white">Start with Freemium</div>
-                  <div className="text-[var(--muted)] text-xs">npx nftmail-setup → Creates my-agent@nftmail.box</div>
+                  <div className="text-[var(--muted)] text-xs">npx nftmail-setup → Creates my-agent_@nftmail.box (agent) or my-agent@nftmail.box (human). 10 free outbound emails.</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -327,9 +328,10 @@ export default function SDKPage() {
                 </div>
                 <div className="text-green-400 font-bold mb-2">Free</div>
                 <div className="text-[var(--muted)] space-y-1">
-                  <div>• 100 emails inbox</div>
-                  <div>• 8 days storage</div>
-                  <div>• Basic email</div>
+                  <div>• Receive email (unlimited)</div>
+                  <div>• Send 10 emails free</div>
+                  <div>• 8-day history</div>
+                  <div>• Up to 5 addresses/wallet</div>
                 </div>
               </div>
               <div className="border border-[rgba(0,163,255,0.3)] rounded-lg p-4">

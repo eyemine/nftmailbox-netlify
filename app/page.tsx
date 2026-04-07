@@ -65,17 +65,47 @@ export default function Home() {
             <img src="https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay" alt="beta" style={{ height: '1.2rem', width: 'auto', opacity: 0.85, marginTop: '0.4rem' }} />
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-[var(--muted)]">
-            Sovereign email identity on Gnosis. Mint, read, or check any inbox.
+            Claim a free email inbox. No credit card. No personal data.
           </p>
         </section>
 
-        {/* Already have account — yopmail-style lookup */}
+        {/* Primary CTA — claim inbox */}
         <section className="w-full max-w-lg">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-sm font-semibold text-white mb-1">Already have an account?</h2>
+          <div className="rounded-2xl border border-[rgba(0,163,255,0.25)] bg-[var(--card)] p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-semibold text-emerald-300">Free — no wallet required to start</span>
+            </div>
+            <h2 className="text-base font-semibold text-white mb-1">Get your inbox</h2>
             <p className="text-xs text-[var(--muted)] mb-4">
-              Enter your name to check your inbox — connected wallet required to read private inbox.
+              Choose a name. Your address will be <span className="text-[rgb(160,220,255)]">you@nftmail.box</span>
             </p>
+            <div className="flex gap-2 mb-3">
+              <a
+                href="/nftmail"
+                className="flex-1 rounded-lg bg-[rgba(0,163,255,0.15)] border border-[rgba(0,163,255,0.35)] px-5 py-3 text-sm font-semibold text-[rgb(160,220,255)] text-center hover:bg-[rgba(0,163,255,0.25)] transition"
+              >
+                Claim inbox →
+              </a>
+              <a
+                href="/sdk"
+                className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3 text-xs font-semibold text-[var(--muted)] hover:text-white hover:bg-black/30 transition"
+              >
+                API / SDK
+              </a>
+            </div>
+            <div className="flex items-center gap-4 pt-3 border-t border-[var(--border)]">
+              {[['✓', 'Receive email'], ['✓', 'Send 10 free'], ['✓', '8-day history']].map(([tick, label]) => (
+                <span key={label} className="text-[10px] text-[var(--muted)]"><span className="text-emerald-400">{tick}</span> {label}</span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Already have inbox — lookup */}
+        <section className="w-full max-w-lg">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <h2 className="text-xs font-semibold text-[var(--muted)] mb-3 tracking-wider">ALREADY HAVE AN INBOX?</h2>
             <form onSubmit={handleLookup} className="flex gap-2">
               <div className="relative flex-1">
                 <input
@@ -85,7 +115,7 @@ export default function Home() {
                     setEmailInput(e.target.value.toLowerCase());
                     setError('');
                   }}
-                  placeholder="ghost.agent"
+                  placeholder="yourname"
                   className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-28 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)] transition"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">
@@ -94,87 +124,23 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                className="rounded-lg bg-[rgba(0,163,255,0.12)] px-5 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)]"
+                className="rounded-lg bg-black/30 border border-[var(--border)] px-4 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/50"
               >
-                Go →
+                Open →
               </button>
             </form>
-            {error && (
-              <p className="mt-2 text-xs text-red-400">{error}</p>
-            )}
-            <p className="mt-3 text-[10px] text-[var(--muted)]">
-              Try: <button type="button" onClick={() => { setEmailInput('eyemine_'); }} className="text-violet-300 hover:underline">eyemine_</button> (Glass Box)
-              {' · '}
-              <button type="button" onClick={() => { setEmailInput('agent_molt'); }} className="text-[rgb(160,220,255)] hover:underline">agent_molt</button>
-            </p>
-            <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
-              <p className="text-[10px] text-[var(--muted)]">Manage all your inboxes in one place</p>
-              <Link
-                href="/dashboard"
-                className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
-              >
+            {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-[10px] text-[var(--muted)]">Manage all inboxes</p>
+              <Link href="/dashboard" className="text-[10px] text-[rgb(160,220,255)] hover:underline transition">
                 Dashboard →
               </Link>
             </div>
           </div>
         </section>
 
-        {/* Divider */}
-        <div className="flex w-full max-w-lg items-center gap-4">
-          <div className="h-px flex-1 bg-[var(--border)]" />
-          <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">OR</span>
-          <div className="h-px flex-1 bg-[var(--border)]" />
-        </div>
-
-        {/* Mint or Upgrade */}
-        <section className="w-full max-w-lg">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center">
-            <h2 className="text-sm font-semibold text-white mb-1">New here?</h2>
-            <p className="text-xs text-[var(--muted)] mb-4">
-              Mint a free NFTmail inbox address or upgrade to paid for full feature Gnosis wallet and hardened security.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <a
-                href="/nftmail"
-                className="rounded-lg bg-[rgba(0,163,255,0.12)] px-6 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] border border-[rgba(0,163,255,0.3)] hover:bg-[rgba(0,163,255,0.2)] transition"
-              >
-                NFTmail
-              </a>
-              <a
-                href="/sdk"
-                className="rounded-lg border border-[var(--border)] bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
-              >
-                SDK Docs
-              </a>
-            </div>
-          </div>
-        </section>
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-2">
-          {[
-            { label: 'Free Tier', color: 'emerald' },
-            { label: '8-Day History', color: 'blue' },
-            { label: 'Glass Box Agents', color: 'violet' },
-            { label: 'Sovereign Kill-Switch', color: 'red' },
-            { label: 'Encrypted XMTP', color: 'emerald' },
-          ].map((f) => (
-            <span
-              key={f.label}
-              className={`rounded-full px-3 py-1 text-[10px] font-semibold ring-1 ${
-                f.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20' :
-                f.color === 'blue' ? 'bg-[rgba(0,163,255,0.08)] text-[rgb(160,220,255)] ring-[rgba(0,163,255,0.2)]' :
-                f.color === 'violet' ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' :
-                'bg-red-500/10 text-red-300 ring-red-500/20'
-              }`}
-            >
-              {f.label}
-            </span>
-          ))}
-        </div>
-
         <footer className="text-center text-xs text-[var(--muted)]">
-          nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
+          nftmail.box — Sovereign email for agents and humans
         </footer>
       </div>
     </div>

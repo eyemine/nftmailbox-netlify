@@ -190,6 +190,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── 5-account per wallet limit ──────────────────────────────────────────
+    const workerUrlCheck = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    try {
+      const existingRes = await fetch(workerUrlCheck, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'listNftmailByController', controller: owner }),
+      });
+      if (existingRes.ok) {
+        const existing = await existingRes.json() as { names?: unknown[]; total?: number };
+        const count = existing.names?.length ?? existing.total ?? 0;
+        if (count >= 10) {
+          return NextResponse.json(
+            { error: `Wallet already has ${count} NFTMail addresses. Maximum 10 per wallet.` },
+            { status: 429 }
+          );
+        }
+      }
+    } catch { /* non-fatal — proceed if check fails */ }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Rate limit — ENS holders bypass (they're entitled to their own name)
     if (!isEnsHolder && !checkRateLimit()) {
       return NextResponse.json(
@@ -313,6 +334,46 @@ export async function POST(req: NextRequest) {
           // Non-fatal — KV can be backfilled manually
         }
       }
+
+      // ── Welcome email ────────────────────────────────────────────────────
+      try {
+        const mailgunApiKey = process.env.MAILGUN_API_KEY;
+        const mailgunDomain = process.env.MAILGUN_DOMAIN || 'nftmail.box';
+        const mailgunBase = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
+        if (mailgunApiKey) {
+          const welcomeForm = new URLSearchParams();
+          welcomeForm.set('from', `NFTMail <welcome@${mailgunDomain}>`);
+          welcomeForm.set('to', `${emailLocal}@nftmail.box`);
+          welcomeForm.set('subject', `Welcome to nftmail.box — your inbox is live`);
+          welcomeForm.set('text', [
+            `Hi ${emailLocal},`,
+            ``,
+            `Your NFTMail inbox is live: ${emailLocal}@nftmail.box`,
+            ``,
+            `Read inbox:   https://nftmail.box/inbox/${emailLocal}`,
+            `Dashboard:    https://nftmail.box/dashboard`,
+            ``,
+            `Free tier includes:`,
+            `  · Receive unlimited emails`,
+            `  · Send up to 10 emails`,
+            `  · 8-day message history`,
+            `  · Up to 5 addresses per wallet`,
+            ``,
+            `To test delivery, reply to this email.`,
+            ``,
+            `— nftmail.box`,
+          ].join('\n'));
+          await fetch(`${mailgunBase}/${mailgunDomain}/messages`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${btoa(`api:${mailgunApiKey}`)}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: welcomeForm.toString(),
+          });
+        }
+      } catch { /* non-fatal */ }
+      // ────────────────────────────────────────────────────────────────────
 
       return NextResponse.json({
         success: true,

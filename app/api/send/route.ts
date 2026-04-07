@@ -56,6 +56,23 @@ export async function POST(req: NextRequest) {
       if (onChainOwner && onChainOwner !== wallet && safe !== wallet) {
         return NextResponse.json({ error: 'Wallet does not own this address' }, { status: 403 });
       }
+
+      // ── Freemium send limit (10 emails for basic tier) ──────────────────
+      const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
+      const sendCountRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'checkAndIncrementSendCount', localPart: localPart, tier: accountTier }),
+      });
+      const sendCount = await sendCountRes.json() as { allowed: boolean; remaining: number | null; count: number; limit: number | null };
+      if (!sendCount.allowed) {
+        return NextResponse.json({
+          error: `Free tier send limit reached (${sendCount.limit} emails). Upgrade to PUPA to continue sending.`,
+          upgradeUrl: '/nftmail',
+          tier: 'basic',
+          sendCount: sendCount.count,
+        }, { status: 402 });
+      }
     } catch {
       return NextResponse.json({ error: 'Could not verify sender ownership' }, { status: 503 });
     }
