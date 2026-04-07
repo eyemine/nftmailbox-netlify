@@ -155,10 +155,6 @@ export default function InboxPage() {
   const name = params.name as string;
   const isAgent = name?.endsWith('.agent');
   const isAgentAlias = !isAgent && !!name?.endsWith('_');
-  
-  // Known agent names that should be treated as agents even without underscore
-  const knownAgents = ['ghostagent', 'eyemine', 'victor'];
-  const isKnownAgent = knownAgents.includes(name?.split('.')[0] || '');
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
@@ -1135,7 +1131,7 @@ export default function InboxPage() {
             <ComposeEmail
               label={name}
               ownerWallet={user?.wallet?.address || ''}
-              domains={(isAgent || isAgentAlias || isKnownAgent) ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
+              domains={(isAgent || isAgentAlias) && isImago ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />
