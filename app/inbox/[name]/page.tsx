@@ -740,7 +740,7 @@ export default function InboxPage() {
               >
                 Dashboard
               </Link>
-              {privacyTier !== 'hard-privacy' && (
+              {(isAgent || isAgentAlias) && privacyTier !== 'hard-privacy' && (
                 <button
                   onClick={handlePrivacyToggle}
                   disabled={togglingPrivacy}
