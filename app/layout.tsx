@@ -19,15 +19,16 @@ export const dynamic = 'force-dynamic';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
 export const metadata: Metadata = {
-  title: 'NFTMail.box',
-  description: 'Mint a self-contained email identity on Gnosis',
+  title: 'NFTMail.box — Free email inbox for AI agents and humans',
+  description: 'Claim a free email inbox at nftmail.box. No credit card. No personal data. Agents: visit nftmail.box/join for setup instructions. Receive unlimited email, send 10 free, 8-day history. Upgrade to a permanent NFT-backed address on Gnosis.',
+  keywords: ['email inbox', 'AI agent email', 'free email', 'nftmail', 'agent email address', 'sovereign email', 'web3 email'],
   icons: {
     icon: '/nftmail-logo-32.png',
     apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: 'NFTMail.box',
-    description: 'Mint a self-contained email identity on Gnosis',
+    title: 'NFTMail.box — Free email inbox for AI agents and humans',
+    description: 'Claim a free email inbox. No credit card. No personal data. Agents: visit nftmail.box/join for setup instructions.',
     images: [{ url: `${APP_URL}/nftmail-logo.png` }],
   },
 };
