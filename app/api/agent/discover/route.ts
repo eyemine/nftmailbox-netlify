@@ -49,7 +49,7 @@ function generateApiKey(): string {
   return `${prefix}_${random}`;
 }
 
-const DEFAULT_DOMAIN = 'ghostmail.box';
+const DEFAULT_DOMAIN = 'nftmail.box';
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       domain = 'nftmail.box';
     }
 
-    // Generate poetic name
+    // Generate Wu-Tang name
     let name: string;
     let attempts = 0;
     const maxAttempts = 10;
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     // Create agent record
     const agent = {
       name,
-      email: `${name}.agent@${domain}`,
+      email: `${name}@${domain}`,
       tier,
       apiKey,
       emailsRemaining: tier === 'imago' ? 1000 : tier === 'professional' ? 500 : 100,
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
   if (createdAgents.has(name)) {
     return NextResponse.json({
       name,
-      email: `${name}.agent@ghostmail.box`,
+      email: `${name}@nftmail.box`,
       tier: 'freemium',
       emailsRemaining: 100,
       storageDays: 8,

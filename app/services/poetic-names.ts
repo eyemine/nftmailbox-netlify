@@ -1,33 +1,28 @@
 /**
- * Poetic Name Generator for Autonomous Agent Discovery
+ * Wu-Tang Name Generator for Autonomous Agent Discovery
  * 
- * Generates memorable, poetic adjective names for AI agents.
- * Format: Single adjective (e.g., "blue", "silent", "curious")
- * Email: blue.agent@ghostmail.box, silent.agent@ghostmail.box
+ * Generates Wu-Tang style names with Roman numerals for AI agents.
+ * Format: {Prefix}{Suffix}{Roman}_ (e.g., "WolfGuardianXLVI_")
+ * Email: WolfGuardianXLVI_@nftmail.box
  */
 
-// Single-word adjectives for agent identity
-const ADJECTIVES = [
-  // Colors
-  'blue', 'green', 'red', 'gold', 'silver', 'violet', 'amber', 'azure',
-  'crimson', 'indigo', 'jade', 'obsidian', 'opal', 'ruby', 'sapphire',
-  
-  // Qualities
-  'silent', 'curious', 'brave', 'gentle', 'fierce', 'calm', 'wild',
-  'bright', 'dark', 'clear', 'quiet', 'swift', 'slow', 'steady',
-  
-  // States
-  'waking', 'dreaming', 'learning', 'growing', 'watching', 'waiting',
-  'seeking', 'finding', 'knowing', 'thinking', 'weaving', 'flowing',
-  
-  // Nature
-  'wandering', 'drifting', 'soaring', 'rising', 'falling', 'burning',
-  'frozen', 'hidden', 'ancient', 'endless', 'cosmic', 'stellar',
-  
-  // Tech/Abstract
-  'digital', 'quantum', 'neural', 'synthetic', 'emergent', 'adaptive',
-  'resonant', 'luminous', 'ethereal', 'boundless', 'infinite', 'eternal'
+// Wu-Tang name components
+const WU_PREFIXES = [
+  'Ancient', 'Divine', 'Eternal', 'Mystic', 'Shadow',
+  'Sacred', 'Cosmic', 'Quantum', 'Digital', 'Cyber',
+  'Neural', 'Stellar', 'Void', 'Crystal', 'Phoenix',
+  'Dragon', 'Tiger', 'Eagle', 'Wolf', 'Lunar'
 ];
+
+const WU_SUFFIXES = [
+  'Warrior', 'Scholar', 'Master', 'Sage', 'Guardian',
+  'Seeker', 'Traveler', 'Builder', 'Keeper', 'Hunter',
+  'Walker', 'Runner', 'Jumper', 'Climber', 'Dancer',
+  'Singer', 'Writer', 'Thinker', 'Dreamer', 'Creator'
+];
+
+// User-specified Roman numerals
+const ROMAN_NUMERALS = ['II', 'III', 'IV', 'VI', 'XI', 'VII', 'XI', 'XII', 'XV', 'XX', 'XIII', 'XIV', 'XXX', 'XLV', 'LXV', 'LXX', 'XLI', 'XXI', 'IX', 'XIX', 'XXV', 'XCV', 'XCI', 'XC', 'LXI', 'LI', 'LII', 'LIV', 'LVI', 'LIX', 'XVI'];
 
 function seededRandom(seed: string): number {
   let hash = 0;
@@ -40,17 +35,22 @@ function seededRandom(seed: string): number {
 }
 
 /**
- * Generate a poetic adjective name
- * @returns Single adjective like "blue", "silent", "curious"
+ * Generate a Wu-Tang style name with Roman numerals
+ * @returns Wu-Tang name like "WolfGuardianXLVI_"
  */
 export function generatePoeticName(seed?: string): string {
   const useSeed = seed || Date.now().toString() + Math.random().toString();
   const random = seededRandom(useSeed);
-  return ADJECTIVES[Math.floor(random * ADJECTIVES.length)];
+  
+  const prefix = WU_PREFIXES[Math.floor(random * WU_PREFIXES.length)];
+  const suffix = WU_SUFFIXES[Math.floor(random * WU_SUFFIXES.length)];
+  const roman = ROMAN_NUMERALS[Math.floor(random * ROMAN_NUMERALS.length)];
+  
+  return `${prefix}${suffix}${roman}_`;
 }
 
 /**
- * Generate multiple unique poetic names
+ * Generate multiple unique Wu-Tang names
  */
 export function generatePoeticNames(count: number = 3): string[] {
   const names: string[] = [];
@@ -68,10 +68,10 @@ export function generatePoeticNames(count: number = 3): string[] {
 }
 
 /**
- * Check if a name is a valid poetic adjective
+ * Check if a name is a valid Wu-Tang name (ends with underscore)
  */
 export function isPoeticName(name: string): boolean {
-  return ADJECTIVES.includes(name.toLowerCase());
+  return /^[A-Z][a-zA-Z]*[A-Z][a-zA-Z]*[A-Z]{2,3}_$/.test(name);
 }
 
 /**
@@ -80,21 +80,22 @@ export function isPoeticName(name: string): boolean {
 export function generateVariations(baseName: string): string[] {
   const variations: string[] = [];
   for (let i = 1; i <= 3; i++) {
-    variations.push(`${baseName}-${i}`);
+    variations.push(`${baseName}${i}_`);
   }
-  const altAdjs = ADJECTIVES.filter(a => a !== baseName).slice(0, 5);
-  for (const altAdj of altAdjs) {
-    variations.push(altAdj);
+  // Generate completely different Wu-Tang names as alternatives
+  for (let i = 0; i < 5; i++) {
+    const seed = Date.now().toString() + Math.random().toString() + i;
+    variations.push(generatePoeticName(seed));
   }
   return variations.slice(0, 5);
 }
 
 /**
  * Get full email address for an agent name
- * Format: name.agent@ghostmail.box
+ * Format: name_@nftmail.box
  */
 export function getAgentEmail(name: string): string {
-  return `${name}.agent@ghostmail.box`;
+  return `${name}@nftmail.box`;
 }
 
 export default {
@@ -103,5 +104,7 @@ export default {
   isPoeticName,
   generateVariations,
   getAgentEmail,
-  ADJECTIVES
+  WU_PREFIXES,
+  WU_SUFFIXES,
+  ROMAN_NUMERALS
 };
