@@ -258,29 +258,16 @@ export default function InboxPage() {
         });
         const data: ResolveResult = await res.json();
         setResolved(data);
-        // For agents, determine privacy tier based on glassbox status
-        if (isAgent && agentName) {
+        // Use the stored privacy tier from the worker (respects toggles + TLD defaults)
+        setPrivacyTier(data.privacyTier || 'private');
+
+        if ((isAgent || isAgentAlias) && agentName) {
           const tld = (data as any).tld || 'nftmail.gno';
           const isPublic = (data as any).isPublic === true;
           setAgentTld(tld);
           setIsGlassbox(isPublic);
-          // Glassbox agents (molt.gno) are exposed by default, others private
-          const isMoltAgent = tld === 'molt.gno';
-          setPrivacyTier(isMoltAgent ? 'exposed' : 'private');
-          setClassificationDone(true);
-        } else if (isAgentAlias && agentName) {
-          const tld = (data as any).tld || 'nftmail.gno';
-          const isPublic = (data as any).isPublic === true;
-          setAgentTld(tld);
-          setIsGlassbox(isPublic);
-          const isMoltAgent = tld === 'molt.gno';
-          setPrivacyTier(isMoltAgent ? 'exposed' : 'private');
-          setClassificationDone(true);
-        } else {
-          // Human addresses: always private unless hard-privacy
-          setPrivacyTier(data.privacyTier || 'private');
-          setClassificationDone(true);
         }
+        setClassificationDone(true);
       } catch {
         setResolved({ name, exists: false, stream: 'unknown', privacyTier: 'exposed', hasMessages: false, hasEciesKey: false, hasZohoSeat: false, availability: { status: 'invalid', type: 'error', message: 'Failed to resolve address' } });
       }
@@ -957,26 +944,24 @@ export default function InboxPage() {
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
 
-  // Privacy model:
-  // - Human stream: always private from public (blurred unless owner)
-  // - Molt.gno agent (glassbox): exposed by default, owner can toggle
-  // - Other agents: private by default, owner can toggle
-  // - hard-privacy (IMAGO): always blurred from public regardless
+  // Privacy model: use the stored tier from the worker for all account types.
+  // Worker handles TLD defaults (molt/openclaw/picoclaw = exposed, nftmail/vault/agent = private).
+  // Human streams without agent status are always private from public (blurred unless owner).
   const isMoltAgent = isAgent && agentTld === 'molt.gno';
   const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = (!isAgent && !isAgentAlias)
     ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // pure human stream always private
-    : privacyTier;  // agents + agent aliases: use stored tier (molt.gno = exposed, others = private)
+    : privacyTier;  // agents + agent aliases: use stored tier from worker
   const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
 
-  const tierLabel = isGlassbox ? 'GLASSBOX' : effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
-  const tierColor = isGlassbox
+  const tierLabel = (isGlassbox && effectivePrivacyTier === 'exposed') ? 'GLASSBOX' : effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
+  const tierColor = (isGlassbox && effectivePrivacyTier === 'exposed')
     ? 'text-violet-300 bg-violet-500/10 ring-violet-500/20'
     : effectivePrivacyTier === 'hard-privacy'
     ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
     : effectivePrivacyTier === 'private'
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-red-300 bg-red-500/10 ring-red-500/20';
-  const dotColor = isGlassbox ? 'bg-violet-400' : effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
+  const dotColor = (isGlassbox && effectivePrivacyTier === 'exposed') ? 'bg-violet-400' : effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
