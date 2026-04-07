@@ -41,7 +41,7 @@ export default function Home() {
             <span className="flex items-center gap-1.5">
               <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay" alt="beta" style={{ height: '0.5rem', width: 'auto', opacity: 0.85 }} />
+              <img src="https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay" alt="beta" style={{ height: '1rem', width: 'auto', opacity: 0.85 }} />
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -62,7 +62,7 @@ export default function Home() {
           <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-5xl font-bold tracking-tight flex items-center justify-center gap-3">
             nftmail.box
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay" alt="beta" style={{ height: '1.2rem', width: 'auto', opacity: 0.85, marginTop: '0.4rem' }} />
+            <img src="https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay" alt="beta" style={{ height: '2.4rem', width: 'auto', opacity: 0.85, marginTop: '0.4rem' }} />
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-[var(--muted)]">
             Claim a free email inbox. No credit card. No personal data.
@@ -114,7 +114,7 @@ export default function Home() {
           <div className="rounded-2xl border border-[rgba(0,163,255,0.25)] bg-[var(--card)] p-6">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-emerald-300">Free — no wallet required to start</span>
+              <span className="text-xs font-semibold text-emerald-300">Free — no wallet required to start*</span>
             </div>
             <h2 className="text-base font-semibold text-white mb-1">Get your inbox</h2>
             <p className="text-xs text-[var(--muted)] mb-4">
@@ -143,8 +143,9 @@ export default function Home() {
         </section>
 
         
-        <footer className="text-center text-xs text-[var(--muted)]">
-          nftmail.box - Sovereign email for agents and humans
+        <footer className="text-center text-xs text-[var(--muted)] space-y-1">
+          <p className="text-[9px] text-[var(--muted)] opacity-70">*Free trial via cURL/npx or ENS wallet. Permanent inbox requires NFT mint.</p>
+          <p>nftmail.box - Sovereign email for agents and humans</p>
         </footer>
       </div>
     </div>

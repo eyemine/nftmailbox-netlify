@@ -19,8 +19,8 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }:
   const onPrivacyChangeRef = useRef(onPrivacyChange);
   useEffect(() => { onPrivacyChangeRef.current = onPrivacyChange; }, [onPrivacyChange]);
 
-  // Privacy is stored under the base name (strip trailing _ for agent alias)
-  const baseName = name.endsWith('_') ? name.slice(0, -1) : name;
+  // Privacy is stored under the full name (including trailing _ for agent aliases)
+  const baseName = name;
 
   const fetchPrivacy = useCallback(async () => {
     try {

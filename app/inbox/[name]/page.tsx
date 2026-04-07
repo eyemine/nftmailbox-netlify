@@ -199,9 +199,13 @@ export default function InboxPage() {
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
     if (resolving) return false;
-    // No on-chain owner recorded — trust session (legacy mints)
-    if (!resolved?.onChainOwner) return authenticated;
-    const owner = resolved.onChainOwner.toLowerCase();
+    const ownerAddr = resolved?.onChainOwner;
+    const safeAddr = resolved?.safe;
+    // No ownership info at all — only trust session for sovereign (human) accounts
+    // Agent accounts without owner/safe: nobody gets owner access until claimed
+    if (!ownerAddr && !safeAddr) {
+      return (!isAgent && !isAgentAlias) ? authenticated : false;
+    }
     try {
       const addrs: string[] = [];
       if (user?.wallet?.address) addrs.push(user.wallet.address.toLowerCase());
@@ -211,13 +215,11 @@ export default function InboxPage() {
           if (addr) addrs.push(addr.toLowerCase());
         }
       }
-      if (addrs.includes(owner)) return true;
+      if (ownerAddr && addrs.includes(ownerAddr.toLowerCase())) return true;
+      if (safeAddr && addrs.includes(safeAddr.toLowerCase())) return true;
     } catch (_) { /* ignore enumeration errors */ }
-    // Fallback for agent inboxes / agent aliases: grant access if authenticated.
-    // ECIES encryption still protects private message content regardless.
-    if ((isAgent || isAgentAlias) && authenticated) return true;
     return false;
-  }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent, isAgentAlias]);
+  }, [authenticated, resolving, resolved?.onChainOwner, resolved?.safe, user, isAgent, isAgentAlias]);
 
   const agentName = name?.endsWith('.agent') ? name.slice(0, -6) : name;
 
@@ -1123,34 +1125,7 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ---- Claim panel: shown for trial accounts ---- */}
-        {isOwner && accountTier === 'basic' && !safeAddress && (
-          <div className="rounded-xl border border-[rgba(255,120,40,0.25)] bg-[var(--card)] p-4 space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
-              <span className="text-xs font-semibold text-orange-300">CLAIM YOUR PERMANENT INBOX</span>
-            </div>
-            <h3 className="text-sm font-semibold text-white">Have a claim code?</h3>
-            <p className="text-xs text-[var(--muted)]">
-              Upgrade your trial inbox to permanent NFT ownership with a connected wallet.
-            </p>
-            <div className="flex gap-2">
-              <Link
-                href="/claim"
-                className="flex-1 rounded-lg bg-[rgba(255,120,40,0.15)] border border-[rgba(255,120,40,0.35)] px-4 py-2.5 text-sm font-semibold text-orange-300 text-center hover:bg-[rgba(255,120,40,0.25)] transition"
-              >
-                Claim inbox &rarr;
-              </Link>
-            </div>
-            <div className="flex items-center gap-3 pt-2 border-t border-[rgba(255,120,40,0.25)]">
-              {['Permanent NFT', 'Full features', 'No limits'].map((feature) => (
-                <span key={feature} className="text-[10px] text-[var(--muted)]"><span className="text-orange-400">+</span> {feature}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ---- Evolve panel: shown to owner on basic/lite tier ---- */}
+        {/* ---- Evolve panel: shown to owner on basic/lite tier with safe ---- */}
         {isOwner && accountTier === 'basic' && safeAddress && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
             <div className="grid grid-cols-2 gap-2">
@@ -1580,8 +1555,35 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve CTA — only shown for basic (Larva) tier ── */}
-        {accountTier === 'basic' && (
+        {/* ── Claim panel: shown at footer for trial accounts without safe ── */}
+        {isOwner && accountTier === 'basic' && !safeAddress && (
+          <div className="mt-auto rounded-xl border border-[rgba(255,120,40,0.25)] bg-[var(--card)] p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+              <span className="text-xs font-semibold text-orange-300">CLAIM YOUR PERMANENT INBOX</span>
+            </div>
+            <h3 className="text-sm font-semibold text-white">Have a claim code?</h3>
+            <p className="text-xs text-[var(--muted)]">
+              Upgrade your trial inbox to permanent NFT ownership with a connected wallet.
+            </p>
+            <div className="flex gap-2">
+              <Link
+                href="/claim"
+                className="flex-1 rounded-lg bg-[rgba(255,120,40,0.15)] border border-[rgba(255,120,40,0.35)] px-4 py-2.5 text-sm font-semibold text-orange-300 text-center hover:bg-[rgba(255,120,40,0.25)] transition"
+              >
+                Claim inbox &rarr;
+              </Link>
+            </div>
+            <div className="flex items-center gap-3 pt-2 border-t border-[rgba(255,120,40,0.25)]">
+              {['Permanent NFT', 'Full features', 'No limits'].map((feature) => (
+                <span key={feature} className="text-[10px] text-[var(--muted)]"><span className="text-orange-400">+</span> {feature}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Evolve CTA — shown for basic tier with safe (already claimed) ── */}
+        {accountTier === 'basic' && safeAddress && (
           <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
             <div className="flex items-center justify-between gap-4">
               <div>

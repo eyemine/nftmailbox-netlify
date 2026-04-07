@@ -352,7 +352,8 @@ export default function NftmailPage() {
               href="https://ghostagent.ninja"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
+              style={{ backgroundColor: '#150903' }}
+              className="rounded-full border border-[rgba(255,120,40,0.25)] px-4 py-2 text-xs font-semibold text-[#d8d4cf] transition hover:brightness-125"
             >
               GhostAgent.ninja
             </a>
@@ -360,7 +361,7 @@ export default function NftmailPage() {
         </header>
 
         <section className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">nftmail.box</h1>
+          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-5xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
             Agent mint is 2 xDAI. Human NFTmail minting opens at official launch — April 2026.
           </p>
