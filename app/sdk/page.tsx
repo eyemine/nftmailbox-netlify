@@ -38,30 +38,60 @@ curl -fsSL https://nftmail.box/install.sh | bash -s -- --name my-agent --tier pr
 
 const nftmail = new NFTMail();
 
-// Create freemium agent inbox (trailing _ = agent address)
-// Result: my-agent_@nftmail.box  (Glassbox, XMTP, no HITL)
-const agent = await nftmail.createAgent('my-agent_', 'freemium');
+// Register trial inbox (no wallet required)
+// Result: my-agent_@nftmail.box (trial, 10 sends, 8-day history)
+const trial = await fetch('https://nftmail.box/api/register-trial', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name: 'my-agent_' })
+});
+const { email, claimUrl } = await trial.json();
+
+// Check inbox (works immediately)
+const messages = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ action: 'listMessages', agent: 'my-agent_' })
+});
 
 // Send email (free tier: 10 outbound emails)
-await nftmail.sendEmail(
-  'my-agent_@nftmail.box',
-  'recipient@example.com',
-  'Hello from my agent',
-  'Sent via nftmail.box freemium tier',
-  { amount: '0.1', recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb' }
-);`,
+await fetch('https://nftmail.box/api/send', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    from: 'my-agent_@nftmail.box',
+    to: 'recipient@example.com',
+    subject: 'Hello from my agent',
+    text: 'Sent via nftmail.box trial tier'
+  })
+});
+
+// Later: claim permanent NFT (human connects wallet at claimUrl)
+// After claiming: unlimited sending, transferable NFT
+`,
   upgrade: `npx nftmail-upgrade --agent my-agent --tier professional`,
   brain: `npx ghostagent-add-brain --agent my-agent --model gpt-4`,
   molt: `npx ghostagent-molt --agent my-agent --tld gno`,
-  curl: `# Resolve an address — returns tier, TLD, canSend, privacyTier
-curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
+  curl: `# Register trial inbox (no wallet)
+curl -X POST https://nftmail.box/api/register-trial \\
   -H "Content-Type: application/json" \\
-  -d '{"action":"resolveAddress","name":"my-agent"}'
+  -d '{"name":"my-agent_"}'
+# Returns: { email: "my-agent_@nftmail.box", claimUrl: "https://nftmail.box/claim/abc123xyz" }
 
-# Fetch inbox messages
+# Check inbox (works immediately)
 curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
   -H "Content-Type: application/json" \\
-  -d '{"action":"getBlindInbox","localPart":"my-agent"}'
+  -d '{"action":"getBlindInbox","localPart":"my-agent_"}'
+
+# Send email (free tier: 10 sends)
+curl -X POST https://nftmail.box/api/send \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "from": "my-agent_@nftmail.box",
+    "to": "recipient@example.com",
+    "subject": "Hello from agent",
+    "text": "Sent via nftmail.box trial"
+  }'
 
 # Store an inbound message (used by Mailgun webhook)
 curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
@@ -278,8 +308,8 @@ export default function SDKPage() {
                   1
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Start with Freemium</div>
-                  <div className="text-[var(--muted)] text-xs">npx nftmail-setup → Creates my-agent_@nftmail.box (agent) or my-agent@nftmail.box (human). 10 free outbound emails.</div>
+                  <div className="font-semibold text-white">Register Trial (No Wallet)</div>
+                  <div className="text-[var(--muted)] text-xs">{`curl -X POST https://nftmail.box/api/register-trial -d '{"name":"my-agent_"}'`} Creates trial inbox with claim URL. 10 free sends, 8-day history.</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -287,8 +317,8 @@ export default function SDKPage() {
                   2
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Upgrade for Unlimited</div>
-                  <div className="text-[var(--muted)] text-xs">npx nftmail-upgrade --agent my-agent --tier professional</div>
+                  <div className="font-semibold text-white">Claim Permanent NFT</div>
+                  <div className="text-[var(--muted)] text-xs">Human visits claim URL, connects wallet, mints my-agent_.nftmail.gno. Address stays same, now transferable.</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -296,8 +326,8 @@ export default function SDKPage() {
                   3
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Add Brain for Autonomy</div>
-                  <div className="text-[var(--muted)] text-xs">npx ghostagent-add-brain --agent my-agent --model gpt-4</div>
+                  <div className="font-semibold text-white">Molt to Full Agent</div>
+                  <div className="text-[var(--muted)] text-xs">ghostagent.ninja deploys ERC-6551 TBA + Safe. Agent becomes autonomous, sellable on marketplace.</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -305,8 +335,8 @@ export default function SDKPage() {
                   4
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Molt to Sellable</div>
-                  <div className="text-[var(--muted)] text-xs">npx ghostagent-molt --agent my-agent --tld gno → Creates my-agent.gno</div>
+                  <div className="font-semibold text-white">Molt to Full Agent</div>
+                  <div className="text-[var(--muted)] text-xs">ghostagent.ninja deploys ERC-6551 TBA + Safe. Agent becomes autonomous, sellable on marketplace.</div>
                 </div>
               </div>
             </div>
