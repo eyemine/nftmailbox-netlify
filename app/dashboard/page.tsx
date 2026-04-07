@@ -217,6 +217,8 @@ export default function DashboardPage() {
       setInboxTier(resolveData.accountTier || data.tier || '');
       setPrivacyTier(resolveData.privacyTier || 'exposed');
       setIsPublicInbox(resolveData.isPublic === true);
+      // Sync privacyEnabled with actual privacy tier for TogglePrivacy component
+      setPrivacyEnabled(resolveData.privacyTier === 'private');
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch inbox');
     } finally {
