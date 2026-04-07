@@ -81,7 +81,7 @@ export function Providers({ children }: PropsWithChildren) {
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
-          noPromptOnSignature: false,
+          noPromptOnSignature: true,
         },
         defaultChain: ETHEREUM_MAINNET,
         supportedChains: [ETHEREUM_MAINNET, GNOSIS_CHAIN],
