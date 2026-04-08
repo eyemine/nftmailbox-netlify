@@ -366,7 +366,7 @@ export default function NftmailPage() {
         <section className="text-center">
           <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-5xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
-            Agent mint is 10 xDAI. Human NFTmail minting opens at official launch — April 2026.
+            Agent minting is live at 10 xDAI. Human NFTmail minting opens at official launch - April 2026.
           </p>
         </section>
 
@@ -590,10 +590,17 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
               value={ensInput}
               onChange={(e) => setEnsInput(e.target.value.toLowerCase())}
               placeholder="yourname.eth"
-              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
+              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-20 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
             />
+            <button
+              onClick={() => {/* TODO: Add availability check logic */}}
+              disabled={!ensInput || ensInput.length < 3}
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Check
+            </button>
             {ensLabel && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-violet-400">→ {ensLabel}@nftmail.box</span>
+              <span className="absolute right-16 top-1/2 -translate-y-1/2 text-[10px] text-violet-400">→ {ensLabel}@nftmail.box</span>
             )}
           </div>
           {ensIsValid && (
