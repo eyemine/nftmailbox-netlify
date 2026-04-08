@@ -201,7 +201,9 @@ export default function InboxPage() {
     if (resolving) return false;
     const ownerAddr = resolved?.onChainOwner;
     const safeAddr = resolved?.safe;
-    // No ownership info at all — only trust session for sovereign (human) accounts
+    
+        
+    // No ownership info at all - only trust session for sovereign (human) accounts
     // Agent accounts without owner/safe: nobody gets owner access until claimed
     if (!ownerAddr && !safeAddr) {
       return (!isAgent && !isAgentAlias) ? authenticated : false;
@@ -219,7 +221,7 @@ export default function InboxPage() {
       if (safeAddr && addrs.includes(safeAddr.toLowerCase())) return true;
     } catch (_) { /* ignore enumeration errors */ }
     return false;
-  }, [authenticated, resolving, resolved?.onChainOwner, resolved?.safe, user, isAgent, isAgentAlias]);
+  }, [authenticated, resolving, resolved?.onChainOwner, resolved?.safe, user, isAgent, isAgentAlias, name]);
 
   const agentName = name?.endsWith('.agent') ? name.slice(0, -6) : name;
 

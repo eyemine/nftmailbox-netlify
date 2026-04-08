@@ -12,7 +12,7 @@ type Tier = 'none' | 'free' | 'pro';
 
 const TREASURY = '0xb7e493e3d226f8fE722CC9916fF164B793af13F4';
 const MINTING_ENABLED = process.env.NEXT_PUBLIC_MINTING_ENABLED !== 'false';
-const TIER_XDAI: Record<string, number> = { lite: 2, pro: 24 };
+const TIER_XDAI: Record<string, number> = { lite: 10, pro: 24 };
 const TIER_EURE: Record<string, number> = { lite: 2, pro: 22 };
 
 // ─── Tier Upgrade Panel ───
@@ -228,43 +228,46 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         </a>
       </div>
 
-      {/* Step 2: paste tx hash */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedTier === 'pro' ? 'bg-violet-500/20 text-violet-300' : 'bg-amber-500/20 text-amber-300'}`}>2</div>
-          <span className="text-xs font-semibold text-white">Paste your transaction hash</span>
+        {/* Coupon field */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">COUPON CODE (OPTIONAL)</p>
+          <input
+            type="text"
+            value={txHash}
+            onChange={e => { setTxHash(e.target.value); setError(''); }}
+            placeholder="Enter coupon code if you have one"
+            className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
+            spellCheck={false}
+          />
         </div>
-        <input
-          type="text"
-          value={txHash}
-          onChange={e => { setTxHash(e.target.value); setError(''); }}
-          placeholder="0x... (64-char tx hash from Gnosisscan)"
-          className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 text-sm font-mono text-white placeholder-zinc-600 outline-none focus:border-[rgba(0,163,255,0.5)]"
-          spellCheck={false}
-        />
-        {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2">
-            <p className="text-[11px] text-red-400">{error}</p>
+
+        {/* Auto-detect payment */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedTier === 'pro' ? 'bg-violet-500/20 text-violet-300' : 'bg-amber-500/20 text-amber-300'}`}>2</div>
+            <span className="text-xs font-semibold text-white">Payment auto-detected on-chain</span>
           </div>
-        )}
-        <button
-          onClick={handleUpgrade}
-          disabled={upgrading || !txHash.trim()}
-          className={`w-full rounded-lg border px-4 py-3 text-sm font-semibold transition disabled:opacity-40 ${
-            selectedTier === 'pro'
-              ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
-          }`}
-        >
-          {upgrading ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              Verifying payment on-chain...
-            </span>
-          ) : `Verify & ${selectedTier === 'pro' ? 'Emerge as Imago' : 'Cycle to Pupa'} →`}
-        </button>
-        <p className="text-center text-[10px] text-[var(--muted)]">Payment verified on-chain — no trust required</p>
-      </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+            <p className="text-[11px] text-emerald-300">⚡ We'll automatically detect your payment and upgrade your inbox. No manual verification needed.</p>
+          </div>
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            className={`w-full rounded-lg border px-4 py-3 text-sm font-semibold transition disabled:opacity-40 ${
+              selectedTier === 'pro'
+                ? 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+            }`}
+          >
+            {upgrading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Checking for payment...
+              </span>
+            ) : `Check & ${selectedTier === 'pro' ? 'Emerge as Imago' : 'Cycle to Pupa'} →`}
+          </button>
+          <p className="text-center text-[10px] text-[var(--muted)]">Payment verified on-chain — no trust required</p>
+        </div>
     </div>
   );
 }
@@ -307,7 +310,7 @@ export default function NftmailPage() {
           {/* Tier ladder overview */}
           <div className="rounded-xl border border-[var(--border)] bg-black/20 px-5 py-4">
             <div className="flex items-center gap-0 text-[10px] font-semibold text-[var(--muted)] overflow-x-auto">
-              {['LARVA — free', 'PUPA — 2 xDAI', 'IMAGO — 24/yr', 'AGENT — sovereign'].map((t, i) => (
+              {['LARVA — free', 'PUPA — 10 xDAI', 'IMAGO — 24/yr', 'AGENT — sovereign'].map((t, i) => (
                 <div key={t} className="flex items-center gap-0">
                   <span className={`px-3 py-1 rounded-full whitespace-nowrap ${
                     (i === 1 && upgradeTier === 'lite') || (i === 2 && (upgradeTier === 'pro' || upgradeTier === 'premium'))
@@ -363,7 +366,7 @@ export default function NftmailPage() {
         <section className="text-center">
           <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-5xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
-            Agent mint is 2 xDAI. Human NFTmail minting opens at official launch — April 2026.
+            Agent mint is 10 xDAI. Human NFTmail minting opens at official launch — April 2026.
           </p>
         </section>
 
@@ -432,7 +435,7 @@ export default function NftmailPage() {
                   {tier !== 'none' ? '✓' : '2'}
                 </div>
                 <h2 className="text-lg font-semibold text-white">Mint NFTmail</h2>
-                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">2 xDAI</span>
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">10 xDAI</span>
               </div>
               <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint an Agent inbox [name].nftmail.gno → get [name]_@nftmail.box — self-contained, zero dependency. (ENS Names reserved for ENS holders)</p>
             </div>
