@@ -582,12 +582,17 @@ export default function InboxPage() {
               <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
             </Link>
             {authenticated ? (
-            <button onClick={logout} className="rounded-full border border-emerald-500/30 bg-emerald-500/8 px-4 py-1.5 text-[10px] font-semibold text-emerald-300 transition hover:border-red-500/30 hover:text-red-400">
-              {user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : 'Disconnect'}
-            </button>
-          ) : (
-            <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">Connect</button>
-          )}
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard" className="rounded-full border border-violet-500/30 bg-violet-500/8 px-4 py-1.5 text-[10px] font-semibold text-violet-300 transition hover:bg-violet-500/16">
+                  Dashboard
+                </Link>
+                <button onClick={logout} className="rounded-full border border-emerald-500/30 bg-emerald-500/8 px-4 py-1.5 text-[10px] font-semibold text-emerald-300 transition hover:border-red-500/30 hover:text-red-400">
+                  {user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : 'Disconnect'}
+                </button>
+              </div>
+            ) : (
+              <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">Connect</button>
+            )}
           </header>
 
           <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
