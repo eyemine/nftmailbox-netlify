@@ -203,6 +203,20 @@ export default function InboxPage() {
     const safeAddr = resolved?.safe;
     
         
+    // For agent aliases without ownership, check if user owns the base agent
+    if (isAgentAlias && !ownerAddr && !safeAddr && name?.endsWith('_')) {
+      const baseName = name.slice(0, -1);
+      // If user wallet address matches base name pattern (e.g., 0x4b352... owns rgbanksy_)
+      if (user?.wallet?.address) {
+        const userAddr = user.wallet.address.toLowerCase();
+        // Extract hex part from wallet (0x4b352375...) and check if it matches base name
+        const walletHex = userAddr.slice(2); // Remove 0x
+        if (baseName.toLowerCase() === walletHex || userAddr === `0x${baseName}`) {
+          return true;
+        }
+      }
+    }
+    
     // No ownership info at all - only trust session for sovereign (human) accounts
     // Agent accounts without owner/safe: nobody gets owner access until claimed
     if (!ownerAddr && !safeAddr) {
