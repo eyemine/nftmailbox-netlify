@@ -436,33 +436,49 @@ export default function DashboardPage() {
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
             )}
 
-            {/* Tabs */}
-            <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
-              <button
-                onClick={() => setTab('inbox')}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
-              >
-                Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
-              </button>
-              <button
-                onClick={() => { setTab('sent'); fetchSentMessages(); }}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sent' ? 'bg-emerald-500/12 text-emerald-300' : 'text-[var(--muted)] hover:text-white/60'}`}
-              >
-                Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
-              </button>
-              <button
-                onClick={() => !isAgentAlias && canSend && setTab('compose')}
-                title={isAgentAlias ? 'Agent composes via A2A — not available in HITL dashboard' : !canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : isAgentAlias ? 'cursor-not-allowed opacity-40 text-[var(--muted)]' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
-              >
-                Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
-              </button>
-              <button
-                onClick={() => setTab('killswitch')}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
-              >
-                Burn
-              </button>
+            {/* Header with View Inbox button */}
+            <div className="flex items-center justify-between gap-3">
+              {/* Tabs */}
+              <div className="flex-1 flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
+                <button
+                  onClick={() => setTab('inbox')}
+                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
+                >
+                  Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
+                </button>
+                <button
+                  onClick={() => { setTab('sent'); fetchSentMessages(); }}
+                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sent' ? 'bg-emerald-500/12 text-emerald-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+                >
+                  Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
+                </button>
+                <button
+                  onClick={() => !isAgentAlias && canSend && setTab('compose')}
+                  title={isAgentAlias ? 'Agent composes via A2A - not available in HITL dashboard' : !canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
+                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : isAgentAlias ? 'cursor-not-allowed opacity-40 text-[var(--muted)]' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+                >
+                  Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
+                </button>
+                <button
+                  onClick={() => setTab('killswitch')}
+                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+                >
+                  Burn
+                </button>
+              </div>
+              
+              {/* View Inbox button */}
+              {selectedName && (
+                <a
+                  href={`/inbox/${selectedName.label}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
+                >
+                  <span>View Inbox</span>
+                  <span className="text-[10px] opacity-60">opens in new tab</span>
+                </a>
+              )}
             </div>
 
             {/* ── INBOX TAB ── */}

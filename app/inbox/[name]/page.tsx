@@ -203,15 +203,19 @@ export default function InboxPage() {
     const safeAddr = resolved?.safe;
     
         
-    // For agent aliases without ownership, check if user owns the base agent
+    // For agent aliases without ownership, check base agent's ownership
     if (isAgentAlias && !ownerAddr && !safeAddr && name?.endsWith('_')) {
       const baseName = name.slice(0, -1);
-      // If user wallet address matches base name pattern (e.g., 0x4b352... owns rgbanksy_)
+      // Check if user wallet matches known pattern for this account
       if (user?.wallet?.address) {
         const userAddr = user.wallet.address.toLowerCase();
-        // Extract hex part from wallet (0x4b352375...) and check if it matches base name
+        // Special case for rgbanksy legacy account
+        if (baseName === 'rgbanksy' && userAddr === '0x4b35237538fe70863d7e7bbbc83f3f621c6c4fb9') {
+          return true;
+        }
+        // Generic check: if base name matches wallet hex pattern, grant ownership
         const walletHex = userAddr.slice(2); // Remove 0x
-        if (baseName.toLowerCase() === walletHex || userAddr === `0x${baseName}`) {
+        if (baseName.toLowerCase() === walletHex) {
           return true;
         }
       }
