@@ -24,6 +24,39 @@ function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) 
   );
 }
 
+function MsgBodyView({ body, bodyHtml }: { body: string; bodyHtml: string }) {
+  const [tab, setTab] = useState<'text' | 'html'>('text');
+  const hasHtml = bodyHtml && bodyHtml.includes('<');
+  const plainText = stripHtml(body || bodyHtml || '');
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-black/20 overflow-hidden">
+      {hasHtml && (
+        <div className="flex border-b border-[var(--border)]">
+          {(['text', 'html'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-3 py-1 text-[10px] font-semibold tracking-wider transition ${tab === t ? 'bg-white/5 text-white' : 'text-[var(--muted)] hover:text-white'}`}>
+              {t.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === 'html' && hasHtml ? (
+        <iframe
+          srcDoc={bodyHtml}
+          sandbox="allow-same-origin"
+          className="w-full min-h-[200px] bg-white"
+          style={{ border: 'none' }}
+          title="Email HTML"
+        />
+      ) : (
+        <p className="px-4 py-3 text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
+          {plainText || '(no content)'}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function stripHtml(html: unknown): string {
   if (html === null || html === undefined) return '';
   const s = String(html)
@@ -74,6 +107,8 @@ interface InboxMessage {
   expiresAt: string | null;
   frozen?: boolean;
   decayDays?: number | null;
+  body?: string;
+  bodyHtml?: string;
 }
 
 interface AuditEntry {
@@ -325,11 +360,13 @@ export default function InboxPage() {
 
         // Fetch inbox messages from KV worker via getBlindInbox
         const inboxLocalPart = isAgentAlias ? name : agentName;
+        const siteDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+        const inboxMailDomain = siteDomain.includes('ghostmail') ? 'ghostmail' : 'nftmail';
         try {
           const kvRes = await fetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getBlindInbox', localPart: inboxLocalPart }),
+            body: JSON.stringify({ action: 'getBlindInbox', localPart: inboxLocalPart, ...(inboxMailDomain === 'ghostmail' ? { domain: 'ghostmail' } : {}) }),
           });
           if (kvRes.ok) {
             const kvData = await kvRes.json() as { messages?: any[]; decayDays?: number };
@@ -337,7 +374,9 @@ export default function InboxPage() {
             const now = Date.now();
             const kvMessages = (kvData.messages || []).map((m: any) => {
               const isEnc = m.encrypted === true;
-              const receivedMs = m.receivedAt || now;
+              // Guard: receivedAt may be seconds if < 1e12 (pre-2001 in ms = likely seconds)
+              const rawRa = m.receivedAt || 0;
+              const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : rawRa || now;
               const frozen = m.frozen === true;
               const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
               const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
@@ -348,7 +387,9 @@ export default function InboxPage() {
                 sender: isEnc ? '' : (m.payload?.from || 'unknown'),
                 fromAddress: isEnc ? '' : (m.payload?.from || ''),
                 receivedTime: new Date(receivedMs).toISOString(),
-                summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
+                summary: isEnc ? '' : (stripHtml(m.payload?.body || '').slice(0, 200)),
+                body: isEnc ? '' : (m.payload?.body || ''),
+                bodyHtml: isEnc ? '' : (m.payload?.bodyHtml || (m.payload?.body?.includes('<') ? m.payload.body : '')),
                 encrypted: isEnc,
                 contentHash: m.envelope?.contentHash || m.plaintextHash || '',
                 type: m.type || 'a2a',
@@ -1378,11 +1419,7 @@ export default function InboxPage() {
                               <span className="text-white/70">{msg.receivedTime ? formatTimestamp(msg.receivedTime) : ''}</span>
                             </div>
                           </div>
-                          <div className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3">
-                            <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap break-words">
-                              {stripHtml(msg.summary || '(no content)')}
-                            </p>
-                          </div>
+                          <MsgBodyView body={msg.body || ''} bodyHtml={msg.bodyHtml || ''} />
                         </>
                       )}
 
