@@ -209,7 +209,6 @@ export default function DashboardPage() {
         }),
       ]);
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; note?: string };
-      console.log('[debug] /api/inbox returned:', data.messages?.map((m: any) => ({ id: m.messageId, rt: m.receivedTime, raw: m.receivedAt })));
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
       setInboxNote(data.note || '');
@@ -312,13 +311,8 @@ export default function DashboardPage() {
   };
 
   const formatTimeAgo = (ts: string) => {
-    console.log('[debug] formatTimeAgo input:', ts, 'parseInt:', parseInt(ts, 10));
-    let raw = parseInt(ts, 10);
-    // If looks like seconds (< year 2000 in ms), convert to ms
-    // Year 2000 = 946684800000 ms, year 2000 in seconds = 946684800
-    if (!isNaN(raw) && raw < 946684800000) raw = raw * 1000;
-    const epoch = !isNaN(raw) ? raw : (Date.parse(ts) || Date.now());
-    console.log('[debug] formatTimeAgo epoch:', epoch, 'date:', new Date(epoch).toISOString());
+    // Handle both ISO strings and numeric timestamps
+    const epoch = Date.parse(ts) || parseInt(ts, 10) || Date.now();
     const ms = Date.now() - epoch;
     const mins = Math.floor(ms / 60000);
     if (mins < 60) return `${mins}m ago`;
