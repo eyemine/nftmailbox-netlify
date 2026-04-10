@@ -428,7 +428,7 @@ export default function DashboardPage() {
                   rel="noopener noreferrer"
                   className="ml-auto rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
                 >
-                  <span>View Inbox</span>
+                  <span>View Public Inbox</span>
                   <span className="text-[10px] opacity-60">opens in new tab</span>
                 </a>
               )}

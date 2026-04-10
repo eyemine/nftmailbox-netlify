@@ -30,8 +30,12 @@ export async function GET(request: NextRequest) {
         kvMessages = (workerData.messages || []).map((m: any) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
-          const rawRa = m.receivedAt || 0;
-          const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : (rawRa || now);
+          // Defensive timestamp parsing: handle seconds (Unix), milliseconds, or ISO string
+          let rawRa = m.receivedAt || m.timestamp || m.createdAt || 0;
+          if (typeof rawRa === 'string') rawRa = Date.parse(rawRa) || 0;
+          // If < year 2000 in ms (≈946684800000), treat as seconds and convert
+          const receivedMs = rawRa > 0 && rawRa < 946684800000 ? rawRa * 1000 : (rawRa || now);
+          console.log(`[inbox] msg ${m.id}: rawRa=${m.receivedAt}, receivedMs=${receivedMs}, date=${new Date(receivedMs).toISOString()}`);
           const frozen = m.frozen === true;
           const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
           const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
