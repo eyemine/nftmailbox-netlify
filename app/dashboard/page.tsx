@@ -311,9 +311,11 @@ export default function DashboardPage() {
   };
 
   const formatTimeAgo = (ts: string) => {
-    const raw = parseInt(ts, 10);
-    // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
-    const epoch = !isNaN(raw) ? (raw < 1e11 ? raw * 1000 : raw) : (Date.parse(ts) || Date.now());
+    let raw = parseInt(ts, 10);
+    // If looks like seconds (< year 2000 in ms), convert to ms
+    // Year 2000 = 946684800000 ms, year 2000 in seconds = 946684800
+    if (!isNaN(raw) && raw < 946684800000) raw = raw * 1000;
+    const epoch = !isNaN(raw) ? raw : (Date.parse(ts) || Date.now());
     const ms = Date.now() - epoch;
     const mins = Math.floor(ms / 60000);
     if (mins < 60) return `${mins}m ago`;
