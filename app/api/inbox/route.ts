@@ -27,15 +27,19 @@ export async function GET(request: NextRequest) {
         const workerData = await workerRes.json() as Record<string, any>;
         const acctDecayDays: number | null = workerData.decayDays ?? null;
 
-        kvMessages = (workerData.messages || []).map((m: any) => {
+        console.log('[inbox] Worker returned', workerData.messages?.length, 'messages');
+        kvMessages = (workerData.messages || []).map((m: any, idx: number) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
+          // Debug the raw value
+          const rawReceivedAt = m.receivedAt;
+          console.log(`[inbox] msg[${idx}]: raw receivedAt=${rawReceivedAt}, type=${typeof rawReceivedAt}`);
           // Defensive timestamp parsing: handle seconds (Unix), milliseconds, or ISO string
           let rawRa = m.receivedAt || m.timestamp || m.createdAt || 0;
           if (typeof rawRa === 'string') rawRa = Date.parse(rawRa) || 0;
           // If < year 2000 in ms (≈946684800000), treat as seconds and convert
           const receivedMs = rawRa > 0 && rawRa < 946684800000 ? rawRa * 1000 : (rawRa || now);
-          console.log(`[inbox] msg ${m.id}: rawRa=${m.receivedAt}, receivedMs=${receivedMs}, date=${new Date(receivedMs).toISOString()}`);
+          console.log(`[inbox] msg[${idx}]: rawRa=${rawRa}, receivedMs=${receivedMs}, iso=${new Date(receivedMs).toISOString()}`);
           const frozen = m.frozen === true;
           const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
           const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
