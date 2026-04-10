@@ -57,7 +57,7 @@ interface InboxMessage {
 }
 
 type Tab = 'inbox' | 'sent' | 'compose' | 'killswitch';
-type ViewMode = 'text' | 'headers' | 'source';
+type ViewMode = 'text' | 'html' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -390,7 +390,7 @@ export default function DashboardPage() {
         {/* ── Dashboard ── */}
         {authenticated && !loading && names.length > 0 && (
           <>
-            {/* Account selector + tier badge */}
+            {/* Account selector + tier badge + View Inbox */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5">
                 <div className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -421,6 +421,17 @@ export default function DashboardPage() {
                   {isImago ? 'IMAGO' : canSend ? 'PUPA' : 'LARVA'}
                 </span>
               )}
+              {selectedName && (
+                <a
+                  href={`/inbox/${selectedName.label}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
+                >
+                  <span>View Inbox</span>
+                  <span className="text-[10px] opacity-60">opens in new tab</span>
+                </a>
+              )}
             </div>
 
             {/* Privacy toggle — agent accounts and _ aliases */}
@@ -436,9 +447,8 @@ export default function DashboardPage() {
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
             )}
 
-            {/* Header with View Inbox button */}
+            {/* Tabs */}
             <div className="flex items-center justify-between gap-3">
-              {/* Tabs */}
               <div className="flex-1 flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
                 <button
                   onClick={() => setTab('inbox')}
@@ -466,19 +476,6 @@ export default function DashboardPage() {
                   Burn
                 </button>
               </div>
-              
-              {/* View Inbox button */}
-              {selectedName && (
-                <a
-                  href={`/inbox/${selectedName.label}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
-                >
-                  <span>View Inbox</span>
-                  <span className="text-[10px] opacity-60">opens in new tab</span>
-                </a>
-              )}
             </div>
 
             {/* ── INBOX TAB ── */}
@@ -543,7 +540,7 @@ export default function DashboardPage() {
                             <button
                               key={msg.messageId}
                               onClick={() => { setSelectedMessage(msg); markRead(msg.messageId); setViewMode('text'); }}
-                              className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
+                              className={`group w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
                             >
                               <div className="flex items-start gap-2">
                                 <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${!isRead ? 'bg-[rgb(0,163,255)]' : 'bg-transparent'}`} />
@@ -553,11 +550,20 @@ export default function DashboardPage() {
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
                                     <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                                    {!isImago && (
-                                      <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
-                                        <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
-                                      </div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {!isImago && (
+                                        <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
+                                          <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(msg.messageId); }}
+                                        title="Delete"
+                                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-red-400/40 hover:text-red-400 transition"
+                                      >
+                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -588,8 +594,8 @@ export default function DashboardPage() {
                         {/* View mode bar + action buttons */}
                         <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
                           <div className="flex items-center gap-0.5">
-                            {(['text','headers','source'] as ViewMode[]).map(m => (
-                              <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m}</button>
+                            {(['text','html','headers','source'] as ViewMode[]).map(m => (
+                              <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m === 'html' ? 'HTML' : m}</button>
                             ))}
                           </div>
                           <div className="flex items-center gap-0.5">
@@ -647,7 +653,19 @@ export default function DashboardPage() {
                               <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
                             </div>
                           ) : viewMode === 'text' ? (
-                            <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
+                            <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{stripHtml(selectedMessage.body || selectedMessage.summary || '(empty)')}</pre>
+                          ) : viewMode === 'html' ? (
+                            selectedMessage.bodyHtml ? (
+                              <iframe
+                                srcDoc={selectedMessage.bodyHtml}
+                                sandbox="allow-same-origin"
+                                className="w-full min-h-[300px] bg-white rounded"
+                                style={{ border: 'none' }}
+                                title="Email HTML"
+                              />
+                            ) : (
+                              <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(no HTML content)'}</pre>
+                            )
                           ) : viewMode === 'headers' ? (
                             <div className="space-y-1.5 font-mono text-[11px]">
                               {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (

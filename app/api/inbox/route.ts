@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
         kvMessages = (workerData.messages || []).map((m: any) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
-          const receivedMs = m.receivedAt || now;
+          const rawRa = m.receivedAt || 0;
+          const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : (rawRa || now);
           const frozen = m.frozen === true;
           const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
           const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
