@@ -31,7 +31,7 @@ interface MintResult {
   gasless?: boolean;
 }
 
-export function MintNFTMail({ initialName, ensName }: { initialName?: string; ensName?: string }) {
+export function MintNFTMail({ initialName }: { initialName?: string }) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
 
@@ -68,13 +68,12 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
   const emailLocal = name1 && name2 ? `${name1}.${name2}` : name1 ? name1 : '';
   const fullGno = label ? `${label}.nftmail.gno` : '';
   const fullEmail = emailLocal ? `${emailLocal}@nftmail.box` : '';
-  const agentEmail = emailLocal ? `${emailLocal}_@nftmail.box` : ''; // Agent format with underscore
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
   const isSocialLogin = !injectedWallet && !!anyWallet;
 
-  // Debounced on-chain name availability check (includes ENS)
+  // Debounced on-chain name availability check
   useEffect(() => {
     if (checkTimer.current) clearTimeout(checkTimer.current);
     if (!label || name1.length < 2 || (!isSingleName && name2.length < 2)) {
@@ -84,15 +83,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
     setNameStatus('checking');
     checkTimer.current = setTimeout(async () => {
       try {
-        // Check 1: ENS mainnet - is name.eth registered?
-        const ensCheckRes = await fetch('/api/check-ens?name=' + encodeURIComponent(name1));
-        const ensData = await ensCheckRes.json() as { registered?: boolean; owner?: string };
-        if (ensData.registered) {
-          setNameStatus('ens-reserved');
-          return;
-        }
-
-        // Check 2: on-chain GNS registry (label = mac-slave)
+        // Check 1: on-chain GNS registry (label = mac-slave)
         let onChainTaken = false;
         try {
           const publicClient = createPublicClient({ chain: gnosis, transport: http() });
@@ -110,7 +101,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
         }
         if (onChainTaken) { setNameStatus('taken'); return; }
 
-        // Check 3: worker KV — email local-part (dot format: mac.slave) may already be claimed
+        // Check 2: worker KV — email local-part (dot format: mac.slave) may already be claimed
         try {
           const res = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
             method: 'POST',
@@ -121,13 +112,34 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
           if (data.exists) { setNameStatus('taken'); return; }
         } catch {}
 
+        // Check 3: ENS mainnet — if name.eth is registered, reserve for ENS holder
+        try {
+          const ensRes = await fetch(`/api/check-ens?name=${encodeURIComponent(label)}`);
+          const ensData = await ensRes.json() as { checked?: boolean; registered?: boolean | null; owner?: string; error?: string };
+          if (!ensRes.ok || ensData.checked === false || ensData.registered === null) {
+            setNameStatus('ens-reserved');
+            return;
+          }
+          if (ensData.registered === true) {
+            setNameStatus('ens-reserved');
+            return;
+          }
+          if (ensData.registered !== false) {
+            setNameStatus('ens-reserved');
+            return;
+          }
+        } catch {
+          setNameStatus('ens-reserved');
+          return;
+        }
+
         setNameStatus('available');
       } catch {
         setNameStatus('idle');
       }
     }, 500);
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
-  }, [label, name1, name2, emailLocal]);
+  }, [label, name1, name2]);
 
   // Gasless mint — treasury pays gas, user just needs a connected address
   const mintGasless = useCallback(async () => {
@@ -154,12 +166,10 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
     setError(null);
 
     try {
-      // Pass ENS proof if caller confirmed ownership of label.eth
-      const ensProof = ensName ? { name: ensName } : undefined;
       const res = await fetch('/api/gasless-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, owner: ownerAddress, ...(ensProof ? { ensProof } : {}) }),
+        body: JSON.stringify({ label, owner: ownerAddress }),
       });
 
       const data = await res.json() as { error?: string; email?: string; tbaAddress?: string; txHash?: string; label?: string; sponsor?: string; kvRegistered?: boolean };
@@ -310,7 +320,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                 className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
               />
               <p className="mt-1.5 text-[10px] text-[var(--muted)]">
-                Add a second part? Type it below — or mint as <span className="text-white">{name1}_@nftmail.box</span>
+                Add a second part? Type it below — or mint as <span className="text-white">{name1}@nftmail.box</span>
               </p>
               <input
                 type="text"
@@ -319,7 +329,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                   setName2(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
                   setError(null);
                 }}
-                placeholder="optional second part for ENS holders .eth"
+                placeholder="optional second part (e.g. eth)"
                 disabled={step === 'minting'}
                 className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
               />
@@ -355,7 +365,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
           {label && name1.length >= 2 && (isSingleName || name2.length >= 2) && (
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-2">
-                <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail} + {agentEmail}</p>
+                <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
                 {nameStatus === 'checking' && (
                   <span className="text-[10px] text-[var(--muted)] animate-pulse">checking...</span>
                 )}
@@ -366,10 +376,10 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                   <span className="text-[10px] text-red-400 font-semibold">✗ already taken</span>
                 )}
                 {nameStatus === 'ens-reserved' && (
-                  <span className="text-[10px] text-amber-400 font-semibold">⚠ ENS reserved</span>
+                  <span className="text-[10px] text-amber-400 font-semibold">⚠ ENS reserved — {label}.eth is registered. Only the ENS holder can mint this name.</span>
                 )}
               </div>
-              <p className="text-[10px] text-[var(--muted)]">Minting claims both human ({fullEmail}) and agent ({agentEmail}) addresses. Free — 8-day history window. Upgrade to Lite to send &amp; molt.</p>
+              <p className="text-[10px] text-[var(--muted)]">Free — 8-day history window, inbox address permanent. Upgrade to Lite to send &amp; molt.</p>
             </div>
           )}
         </div>
@@ -403,7 +413,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
 
         <button
           onClick={mint}
-          disabled={!label || name1.length < 2 || (!isSingleName && name2.length < 2) || step === 'minting' || step === 'done' || nameStatus === 'taken' || nameStatus === 'checking'}
+          disabled={!label || name1.length < 2 || (!isSingleName && name2.length < 2) || step === 'minting' || step === 'done' || nameStatus === 'taken' || nameStatus === 'checking' || nameStatus === 'ens-reserved'}
           className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             mintMode === 'gasless'
               ? 'border-emerald-500/35 bg-emerald-500/8 text-emerald-300 hover:bg-emerald-500/16 hover:shadow-[0_0_24px_rgba(16,185,129,0.12)]'
