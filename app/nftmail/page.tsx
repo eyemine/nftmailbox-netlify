@@ -532,6 +532,8 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
   const [showManual, setShowManual] = useState(false);
   const [nameType, setNameType] = useState<'human' | 'agent' | 'ens'>('human');
   const [ensInput, setEnsInput] = useState('');
+  const [ensCheckStatus, setEnsCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'ens-reserved'>('idle');
+  const [ensCheckResult, setEnsCheckResult] = useState<{registered?: boolean; owner?: string; name?: string} | null>(null);
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
@@ -546,10 +548,30 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
     ? /^[a-z0-9][a-z0-9._-]*_$/.test(manualName)
     : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);
 
-  // ENS tab helpers
-  const ensLabel = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
-  const ensNameFull = ensLabel ? `${ensLabel}.eth` : '';
-  const ensIsValid = ensLabel.length >= 3;
+  // ENS tab helpers - use ensInput directly for reactivity
+  const ensRaw = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
+  const ensLabel = ensRaw;
+  const ensNameFull = ensRaw ? `${ensRaw}.eth` : '';
+  const ensIsValid = ensRaw.length >= 3;
+
+  // ENS check handler
+  const handleEnsCheck = async () => {
+    if (!ensIsValid) return;
+    setEnsCheckStatus('checking');
+    setEnsCheckResult(null);
+    try {
+      const res = await fetch('/api/check-ens?name=' + encodeURIComponent(ensRaw));
+      const data = await res.json() as { registered?: boolean; owner?: string; name?: string };
+      setEnsCheckResult(data);
+      if (data.registered) {
+        setEnsCheckStatus('ens-reserved');
+      } else {
+        setEnsCheckStatus('available');
+      }
+    } catch {
+      setEnsCheckStatus('idle');
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -582,29 +604,42 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
       ) : nameType === 'ens' ? (
         <div className="space-y-3">
           <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-[11px] text-violet-300/80">
-            Own <strong>name.eth</strong>? Claim <strong>name@nftmail.box</strong> free — server verifies ENS ownership on mainnet.
+            Own <strong>name.eth</strong>? Claim <strong>name.nftmail.gno</strong> → <strong>name@nftmail.box</strong> free — reserved for ENS holders.
           </div>
           <div className="relative">
             <input
               type="text"
               value={ensInput}
-              onChange={(e) => setEnsInput(e.target.value.toLowerCase())}
+              onChange={(e) => {
+                setEnsInput(e.target.value.toLowerCase());
+                setEnsCheckStatus('idle'); // Reset check on change
+              }}
               placeholder="yourname.eth"
-              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-20 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
+              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-24 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
             />
             <button
-              onClick={() => {/* TODO: Add availability check logic */}}
-              disabled={!ensInput || ensInput.length < 3}
+              onClick={handleEnsCheck}
+              disabled={!ensIsValid || ensCheckStatus === 'checking'}
               className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Check
+              {ensCheckStatus === 'checking' ? '...' : 'Check'}
             </button>
-            {ensLabel && (
-              <span className="absolute right-16 top-1/2 -translate-y-1/2 text-[10px] text-violet-400">→ {ensLabel}@nftmail.box</span>
+            {ensRaw && (
+              <span className="absolute right-20 top-1/2 -translate-y-1/2 text-[10px] text-violet-400">→ {ensRaw}@nftmail.box</span>
             )}
           </div>
-          {ensIsValid && (
-            <MintNFTMail initialName={ensLabel} ensName={ensNameFull} />
+          {ensCheckStatus !== 'idle' && ensCheckStatus !== 'checking' && (
+            <div className="flex items-center gap-2 text-[10px]">
+              {ensCheckStatus === 'available' && (
+                <span className="text-emerald-400 font-semibold">✓ Available — {ensRaw}.eth not registered on ENS</span>
+              )}
+              {ensCheckStatus === 'ens-reserved' && (
+                <span className="text-amber-400 font-semibold">⚠ ENS Reserved — {ensRaw}.eth is registered. Only the ENS holder can mint {ensRaw}.nftmail.gno.</span>
+              )}
+            </div>
+          )}
+          {ensIsValid && ensCheckStatus === 'available' && (
+            <MintNFTMail initialName={ensRaw} ensName={ensNameFull} />
           )}
         </div>
       ) : nameType === 'human' ? (

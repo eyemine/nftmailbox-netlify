@@ -9,7 +9,7 @@ import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
 
 type MintStep = 'idle' | 'minting' | 'done' | 'error';
 type MintMode = 'gasless' | 'wallet';
-type NameStatus = 'idle' | 'checking' | 'available' | 'taken';
+type NameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'ens-reserved';
 
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
 const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
@@ -68,12 +68,13 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
   const emailLocal = name1 && name2 ? `${name1}.${name2}` : name1 ? name1 : '';
   const fullGno = label ? `${label}.nftmail.gno` : '';
   const fullEmail = emailLocal ? `${emailLocal}@nftmail.box` : '';
+  const agentEmail = emailLocal ? `${emailLocal}_@nftmail.box` : ''; // Agent format with underscore
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
   const isSocialLogin = !injectedWallet && !!anyWallet;
 
-  // Debounced on-chain name availability check
+  // Debounced on-chain name availability check (includes ENS)
   useEffect(() => {
     if (checkTimer.current) clearTimeout(checkTimer.current);
     if (!label || name1.length < 2 || (!isSingleName && name2.length < 2)) {
@@ -83,7 +84,15 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
     setNameStatus('checking');
     checkTimer.current = setTimeout(async () => {
       try {
-        // Check 1: on-chain GNS registry (label = mac-slave)
+        // Check 1: ENS mainnet - is name.eth registered?
+        const ensCheckRes = await fetch('/api/check-ens?name=' + encodeURIComponent(name1));
+        const ensData = await ensCheckRes.json() as { registered?: boolean; owner?: string };
+        if (ensData.registered) {
+          setNameStatus('ens-reserved');
+          return;
+        }
+
+        // Check 2: on-chain GNS registry (label = mac-slave)
         let onChainTaken = false;
         try {
           const publicClient = createPublicClient({ chain: gnosis, transport: http() });
@@ -101,7 +110,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
         }
         if (onChainTaken) { setNameStatus('taken'); return; }
 
-        // Check 2: worker KV — email local-part (dot format: mac.slave) may already be claimed
+        // Check 3: worker KV — email local-part (dot format: mac.slave) may already be claimed
         try {
           const res = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
             method: 'POST',
@@ -118,7 +127,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
       }
     }, 500);
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
-  }, [label, name1, name2]);
+  }, [label, name1, name2, emailLocal]);
 
   // Gasless mint — treasury pays gas, user just needs a connected address
   const mintGasless = useCallback(async () => {
@@ -301,7 +310,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                 className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
               />
               <p className="mt-1.5 text-[10px] text-[var(--muted)]">
-                Add a second part? Type it below — or mint as <span className="text-white">{name1}@nftmail.box</span>
+                Add a second part? Type it below — or mint as <span className="text-white">{name1}_@nftmail.box</span>
               </p>
               <input
                 type="text"
@@ -310,7 +319,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                   setName2(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
                   setError(null);
                 }}
-                placeholder="optional second part (e.g. eth)"
+                placeholder="optional second part for ENS holders .eth"
                 disabled={step === 'minting'}
                 className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)] disabled:opacity-50"
               />
@@ -346,7 +355,7 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
           {label && name1.length >= 2 && (isSingleName || name2.length >= 2) && (
             <div className="mt-2 space-y-1">
               <div className="flex items-center gap-2">
-                <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
+                <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail} + {agentEmail}</p>
                 {nameStatus === 'checking' && (
                   <span className="text-[10px] text-[var(--muted)] animate-pulse">checking...</span>
                 )}
@@ -356,8 +365,11 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
                 {nameStatus === 'taken' && (
                   <span className="text-[10px] text-red-400 font-semibold">✗ already taken</span>
                 )}
+                {nameStatus === 'ens-reserved' && (
+                  <span className="text-[10px] text-amber-400 font-semibold">⚠ ENS reserved</span>
+                )}
               </div>
-              <p className="text-[10px] text-[var(--muted)]">Free — 8-day history window, inbox address permanent. Upgrade to Lite to send &amp; molt.</p>
+              <p className="text-[10px] text-[var(--muted)]">Minting claims both human ({fullEmail}) and agent ({agentEmail}) addresses. Free — 8-day history window. Upgrade to Lite to send &amp; molt.</p>
             </div>
           )}
         </div>
