@@ -31,7 +31,7 @@ interface MintResult {
   gasless?: boolean;
 }
 
-export function MintNFTMail({ initialName }: { initialName?: string }) {
+export function MintNFTMail({ initialName, ensName }: { initialName?: string; ensName?: string }) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
 
@@ -68,6 +68,8 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
   const emailLocal = name1 && name2 ? `${name1}.${name2}` : name1 ? name1 : '';
   const fullGno = label ? `${label}.nftmail.gno` : '';
   const fullEmail = emailLocal ? `${emailLocal}@nftmail.box` : '';
+  const ensProofLabel = ensName?.toLowerCase().replace(/\.eth$/, '');
+  const isEnsProofForCurrentLabel = !!ensProofLabel && isSingleName && ensProofLabel === label;
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
@@ -112,25 +114,27 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
           if (data.exists) { setNameStatus('taken'); return; }
         } catch {}
 
-        // Check 3: ENS mainnet — if name.eth is registered, reserve for ENS holder
-        try {
-          const ensRes = await fetch(`/api/check-ens?name=${encodeURIComponent(label)}`);
-          const ensData = await ensRes.json() as { checked?: boolean; registered?: boolean | null; owner?: string; error?: string };
-          if (!ensRes.ok || ensData.checked === false || ensData.registered === null) {
+        // Check 3: ENS mainnet — reserve registered names unless this is a verified ENS-holder mint
+        if (!isEnsProofForCurrentLabel) {
+          try {
+            const ensRes = await fetch(`/api/check-ens?name=${encodeURIComponent(label)}`);
+            const ensData = await ensRes.json() as { checked?: boolean; registered?: boolean | null; owner?: string; error?: string };
+            if (!ensRes.ok || ensData.checked === false || ensData.registered === null) {
+              setNameStatus('ens-reserved');
+              return;
+            }
+            if (ensData.registered === true) {
+              setNameStatus('ens-reserved');
+              return;
+            }
+            if (ensData.registered !== false) {
+              setNameStatus('ens-reserved');
+              return;
+            }
+          } catch {
             setNameStatus('ens-reserved');
             return;
           }
-          if (ensData.registered === true) {
-            setNameStatus('ens-reserved');
-            return;
-          }
-          if (ensData.registered !== false) {
-            setNameStatus('ens-reserved');
-            return;
-          }
-        } catch {
-          setNameStatus('ens-reserved');
-          return;
         }
 
         setNameStatus('available');
@@ -139,7 +143,7 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
       }
     }, 500);
     return () => { if (checkTimer.current) clearTimeout(checkTimer.current); };
-  }, [label, name1, name2]);
+  }, [label, name1, name2, isSingleName, ensProofLabel, isEnsProofForCurrentLabel, emailLocal]);
 
   // Gasless mint — treasury pays gas, user just needs a connected address
   const mintGasless = useCallback(async () => {
@@ -166,10 +170,11 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
     setError(null);
 
     try {
+      const ensProof = ensName ? { name: ensName } : undefined;
       const res = await fetch('/api/gasless-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, owner: ownerAddress }),
+        body: JSON.stringify({ label, owner: ownerAddress, ...(ensProof ? { ensProof } : {}) }),
       });
 
       const data = await res.json() as { error?: string; email?: string; tbaAddress?: string; txHash?: string; label?: string; sponsor?: string; kvRegistered?: boolean };
@@ -191,7 +196,7 @@ export function MintNFTMail({ initialName }: { initialName?: string }) {
       setError(err?.message || 'Gasless mint failed');
       setStep('error');
     }
-  }, [authenticated, wallets, name1, name2, label, injectedWallet, anyWallet]);
+  }, [authenticated, wallets, name1, name2, label, injectedWallet, anyWallet, ensName]);
 
   // Wallet mint — user pays gas with their own xDAI
   const mintWithWallet = useCallback(async () => {

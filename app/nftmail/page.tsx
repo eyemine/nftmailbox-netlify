@@ -679,7 +679,9 @@ export default function NftmailPage() {
 function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: string, tba: string) => void; initialName?: string }) {
   const [manualName, setManualName] = useState('');
   const [showManual, setShowManual] = useState(false);
-  const [nameType, setNameType] = useState<'human' | 'agent'>('human');
+  const [nameType, setNameType] = useState<'human' | 'agent' | 'ens'>('human');
+  const [ensInput, setEnsInput] = useState('');
+  const [ensCheckStatus, setEnsCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
@@ -694,15 +696,41 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
     ? /^[a-z0-9][a-z0-9._-]*_$/.test(manualName)
     : /^[a-z0-9][a-z0-9.-]+$/.test(manualName);
 
+  const ensRaw = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
+  const ensNameFull = ensRaw ? `${ensRaw}.eth` : '';
+  const ensIsValid = ensRaw.length >= 3;
+
+  const handleEnsCheck = async () => {
+    if (!ensIsValid) return;
+    setEnsCheckStatus('checking');
+    try {
+      const res = await fetch('/api/check-ens?name=' + encodeURIComponent(ensRaw));
+      const data = await res.json() as { checked?: boolean; registered?: boolean | null };
+      if (!res.ok || data.checked === false || data.registered === null || typeof data.registered !== 'boolean') {
+        setEnsCheckStatus('taken');
+        return;
+      }
+      setEnsCheckStatus(data.registered ? 'available' : 'taken');
+    } catch {
+      setEnsCheckStatus('taken');
+    }
+  };
+
   return (
     <div className="space-y-4">
-      {/* Human / Agent tab selector */}
+      {/* Human / ENS / Agent tab selector */}
       <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
         <button
           onClick={() => { setNameType('human'); setManualName(''); }}
           className={`flex-1 px-3 py-2 transition ${nameType === 'human' ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
         >
           Human
+        </button>
+        <button
+          onClick={() => { setNameType('ens'); setEnsInput(''); setEnsCheckStatus('idle'); }}
+          className={`flex-1 px-3 py-2 transition ${nameType === 'ens' ? 'bg-violet-500/20 text-violet-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+        >
+          ENS Holder
         </button>
         <button
           onClick={() => { setNameType('agent'); setManualName(''); }}
@@ -712,7 +740,41 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
         </button>
       </div>
 
-      {nameType === 'human' ? (
+      {nameType === 'ens' ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-[11px] text-violet-300/80">
+            Own <strong>name.eth</strong>? Claim <strong>name.nftmail.gno</strong> → <strong>name@nftmail.box</strong> free.
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              value={ensInput}
+              onChange={(e) => {
+                setEnsInput(e.target.value.toLowerCase());
+                setEnsCheckStatus('idle');
+              }}
+              placeholder="yourname.eth"
+              className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2.5 pr-24 text-sm text-white placeholder-zinc-600 outline-none focus:border-violet-500/50"
+            />
+            <button
+              onClick={handleEnsCheck}
+              disabled={!ensIsValid || ensCheckStatus === 'checking'}
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-300 transition hover:bg-violet-500/20 disabled:opacity-40"
+            >
+              {ensCheckStatus === 'checking' ? '...' : 'Check'}
+            </button>
+          </div>
+          {ensCheckStatus === 'available' && (
+            <p className="text-[10px] text-emerald-400 font-semibold">✓ ENS found — continue to mint with the wallet that owns {ensRaw}.eth</p>
+          )}
+          {ensCheckStatus === 'taken' && (
+            <p className="text-[10px] text-amber-400 font-semibold">⚠ Cannot use — ENS not found or verification unavailable.</p>
+          )}
+          {ensIsValid && ensCheckStatus === 'available' && (
+            <MintNFTMail initialName={ensRaw} ensName={ensNameFull} />
+          )}
+        </div>
+      ) : nameType === 'human' ? (
         <MintNFTMail initialName={initialName} />
       ) : (
         <>
