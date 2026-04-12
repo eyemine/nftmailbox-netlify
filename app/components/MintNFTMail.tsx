@@ -141,8 +141,7 @@ export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?:
               return;
             }
           } catch {
-            // ENS check failed — allow minting (best-effort check)
-            setNameStatus('available');
+            setNameStatus('ens-reserved');
             return;
           }
         }
@@ -435,7 +434,7 @@ export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?:
         <button
           onClick={mint}
           disabled={!label || !name1 || (!isSingleName && !name2) || step === 'minting' || step === 'done' || nameStatus === 'taken' || nameStatus === 'checking' || nameStatus === 'ens-reserved'}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
             mintMode === 'gasless'
               ? 'border-emerald-500/35 bg-emerald-500/8 text-emerald-300 hover:bg-emerald-500/16 hover:shadow-[0_0_24px_rgba(16,185,129,0.12)]'
               : 'border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_24px_rgba(0,163,255,0.12)]'
