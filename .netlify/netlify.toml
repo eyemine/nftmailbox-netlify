@@ -1,15 +1,15 @@
-functionsDirectory = "/Users/richieogorman/CascadeProjects/ghostagent_ninja/apps/nftmailbox/netlify/functions"
-functionsDirectoryOrigin = "default"
+functionsDirectory = "/Users/richieogorman/CascadeProjects/nftmailbox-netlify/netlify/functions"
+functionsDirectoryOrigin = "ui"
 headersOrigin = "inline"
 redirectsOrigin = "inline"
 
 [build]
-publish = "/Users/richieogorman/CascadeProjects/ghostagent_ninja/apps/nftmailbox/.next"
+publish = "/Users/richieogorman/CascadeProjects/nftmailbox-netlify/.next"
 publishOrigin = "config"
 commandOrigin = "config"
-base = "/Users/richieogorman/CascadeProjects/ghostagent_ninja/apps/nftmailbox"
 command = "npm run build"
-functions = "/Users/richieogorman/CascadeProjects/ghostagent_ninja/apps/nftmailbox/netlify/functions"
+base = "/Users/richieogorman/CascadeProjects/nftmailbox-netlify"
+functions = "/Users/richieogorman/CascadeProjects/nftmailbox-netlify/netlify/functions"
 
 [build.environment]
 NETLIFY_SITE_ID = "1d43da05-ccb8-48f0-95e0-ddfd4df97552"
@@ -36,6 +36,13 @@ port = 3000.0
 schedule = "@hourly"
 
 [functions."*"]
+
+[[plugins]]
+origin = "ui"
+package = "netlify-plugin-bundle-env"
+pinned_version = "0.2"
+
+[plugins.inputs]
 
 [[plugins]]
 origin = "config"
