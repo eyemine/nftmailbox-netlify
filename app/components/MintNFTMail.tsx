@@ -13,6 +13,7 @@ type NameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'ens-reserved';
 
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
 const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
+const DEPLOYER_ADDRESS = '0x1c63C3d9d211641e15cd3aF46De76b4bc84CC382' as const;
 const GNSRegistryABI = [
   {
     inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
@@ -81,6 +82,14 @@ export function MintNFTMail({ initialName, ensName }: { initialName?: string; en
     if (!label || name1.length < 2 || (!isSingleName && name2.length < 2)) {
       setNameStatus('idle');
       return;
+    }
+    // Reserve 1-2 character names for deployer
+    if (label.length <= 2) {
+      const userAddress = anyWallet?.address?.toLowerCase();
+      if (userAddress !== DEPLOYER_ADDRESS.toLowerCase()) {
+        setNameStatus('taken');
+        return;
+      }
     }
     setNameStatus('checking');
     checkTimer.current = setTimeout(async () => {

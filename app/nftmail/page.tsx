@@ -410,7 +410,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
 
 // ─── Main Page Component ───
 export default function NftmailPage() {
-  const [showMintFlow, setShowMintFlow] = useState(false);
+  const [showMintFlow, setShowMintFlow] = useState(true);
   const { authenticated } = usePrivy();
   const searchParams = useSearchParams();
 
@@ -425,8 +425,9 @@ export default function NftmailPage() {
 
   const email = mintedName ? `${mintedName}@nftmail.box` : '';
 
-  // ── Show simplified landing page first ──
-  if (!showMintFlow && !isUpgradeFlow) {
+  // ── Show simplified landing page first (only if explicitly requested via ?landing=true) ──
+  const showLanding = searchParams?.get('landing') === 'true';
+  if (!showMintFlow && !isUpgradeFlow && showLanding) {
     return <AgentLandingPage onClaim={() => setShowMintFlow(true)} />;
   }
 
