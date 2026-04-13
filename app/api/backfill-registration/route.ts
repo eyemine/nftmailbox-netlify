@@ -27,31 +27,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid owner address' }, { status: 400 });
     }
 
+    const rpc =
+      process.env.GNOSIS_RPC_URL ||
+      process.env.NEXT_PUBLIC_GNOSIS_RPC ||
+      'https://rpc.ankr.com/gnosis';
     const publicClient = createPublicClient({
       chain: gnosis,
-      transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
+      transport: http(rpc),
     });
 
     // Verify on-chain: label.nftmail.gno must be owned by the caller
     const labelhash = keccak256(encodePacked(['string'], [label]));
     const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-    let onChainOwner: string;
+    // Verify the subname IS minted on-chain (non-zero owner).
+    // Note: GNS stores the TBA as subnode owner, not the user wallet — so we only
+    // check existence, not strict equality. The caller supplies their wallet as controller.
     try {
-      onChainOwner = await publicClient.readContract({
+      const onChainOwner = await publicClient.readContract({
         address: GNS_REGISTRY,
         abi: GNSRegistryABI,
         functionName: 'owner',
         args: [subnode],
       });
+      if (!onChainOwner || onChainOwner === '0x0000000000000000000000000000000000000000') {
+        return NextResponse.json({ error: `${label}.nftmail.gno is not minted on-chain.` }, { status: 404 });
+      }
     } catch {
-      return NextResponse.json({ error: 'Could not verify on-chain ownership. Try again.' }, { status: 503 });
-    }
-
-    if (!onChainOwner || onChainOwner === '0x0000000000000000000000000000000000000000') {
-      return NextResponse.json({ error: `${label}.nftmail.gno is not minted on-chain.` }, { status: 404 });
-    }
-    if (onChainOwner.toLowerCase() !== owner.toLowerCase()) {
-      return NextResponse.json({ error: `${label}.nftmail.gno is owned by a different address.` }, { status: 403 });
+      return NextResponse.json({ error: 'Could not verify on-chain mint status. Try again.' }, { status: 503 });
     }
 
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: kvJson.error || 'KV registration failed' }, { status: 502 });
     }
 
-    return NextResponse.json({ success: true, label, email: `${label}@nftmail.box`, onChainOwner });
+    return NextResponse.json({ success: true, label, email: `${label}@nftmail.box` });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Backfill failed' }, { status: 500 });
   }
