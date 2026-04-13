@@ -7,6 +7,43 @@ import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
 
+function BackfillButton({ label, owner }: { label: string; owner: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [msg, setMsg] = useState('');
+  const run = async () => {
+    setState('loading');
+    try {
+      const res = await fetch('/api/backfill-registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, owner }),
+      });
+      const d = await res.json() as { success?: boolean; alreadyRegistered?: boolean; error?: string };
+      if (d.success || d.alreadyRegistered) {
+        setState('done');
+        setMsg(d.alreadyRegistered ? 'Already in dashboard ✓' : 'Registered — check your dashboard ✓');
+      } else {
+        setState('error');
+        setMsg(d.error || 'Registration failed');
+      }
+    } catch {
+      setState('error');
+      setMsg('Network error');
+    }
+  };
+  if (state === 'done') return <p className="text-[10px] text-emerald-400">{msg}</p>;
+  if (state === 'error') return <p className="text-[10px] text-red-400">{msg}</p>;
+  return (
+    <button
+      onClick={run}
+      disabled={state === 'loading'}
+      className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5 text-[10px] font-semibold text-amber-300 transition hover:bg-amber-500/15 disabled:opacity-40"
+    >
+      {state === 'loading' ? 'Registering...' : 'Register in dashboard →'}
+    </button>
+  );
+}
+
 type MintStep = 'idle' | 'minting' | 'done' | 'error';
 type MintMode = 'gasless' | 'wallet';
 type NameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'ens-reserved';
@@ -30,6 +67,8 @@ interface MintResult {
   tbaAddress: string;
   txHash: string;
   gasless?: boolean;
+  kvRegistered?: boolean;
+  ownerAddress?: string;
 }
 
 export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { initialName?: string; ensName?: string; agentMode?: boolean; hideName?: boolean }) {
@@ -198,6 +237,8 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
         tbaAddress: data.tbaAddress || '',
         txHash: data.txHash || '',
         gasless: true,
+        kvRegistered: data.kvRegistered ?? false,
+        ownerAddress: ownerAddress,
       });
       setStep('done');
       setShowModal(true);
@@ -509,7 +550,12 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
                 </div>
               </div>
 
-              <div className="flex items-center justify-end border-t border-[var(--border)] px-6 py-4">
+              <div className="flex items-center justify-between border-t border-[var(--border)] px-6 py-4 gap-3">
+                <div className="flex-1">
+                  {result.kvRegistered === false && (
+                    <BackfillButton label={result.name} owner={result.ownerAddress || ''} />
+                  )}
+                </div>
                 <button
                   onClick={() => setShowModal(false)}
                   className="rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)]"
