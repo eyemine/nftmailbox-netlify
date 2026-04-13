@@ -507,57 +507,21 @@ export default function NftmailPage() {
               href="https://ghostagent.ninja"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-[var(--border)] bg-black/20 px-4 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
+              style={{ backgroundColor: '#0a0a0a', fontFamily: "'Ayuthaya', serif" }}
+              className="rounded-full border border-[rgba(220,40,40,0.35)] px-4 py-2 text-xs font-semibold tracking-wider text-[#d8d4cf] transition hover:brightness-125"
             >
-              GhostAgent.ninja
+              GHOSTAGENT.NINJA
             </a>
           </div>
         </header>
 
         <section className="text-center">
-          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-4xl font-bold tracking-tight">nftmail.box</h1>
+          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-4xl font-bold tracking-tight">your nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
-            Mint a self-contained email identity on Gnosis. You are born a Larva. Don't let your identity decay into the void.
+            Mint a self-contained email identity on Gnosis. Level-up, molt from Larva to Pupa to Imago.
           </p>
         </section>
 
-        <div className="flex items-center justify-center gap-3">
-          {[
-            { key: 'free', label: 'Mint', icon: '1' },
-            { key: 'pro', label: 'Evolve', icon: '2' },
-          ].map((s, i) => {
-            const tierOrder: Tier[] = ['none', 'free', 'pro'];
-            const currentIdx = tierOrder.indexOf(tier);
-            const stepIdx = tierOrder.indexOf(s.key as Tier);
-            const isDone = currentIdx >= stepIdx;
-            const isCurrent = currentIdx === stepIdx - 1;
-            return (
-              <div key={s.key} className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
-                      isDone
-                        ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30'
-                        : isCurrent
-                        ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)] ring-1 ring-[rgba(0,163,255,0.4)] animate-pulse'
-                        : 'bg-white/5 text-[var(--muted)] ring-1 ring-[var(--border)]'
-                    }`}
-                  >
-                    {isDone ? '✓' : s.icon}
-                  </div>
-                  <span
-                    className={`text-xs font-medium ${
-                      isDone ? 'text-emerald-400' : isCurrent ? 'text-[rgb(160,220,255)]' : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </div>
-                {i < 1 && <div className={`h-px w-8 ${isDone ? 'bg-emerald-500/40' : 'bg-[var(--border)]'}`} />}
-              </div>
-            );
-          })}
-        </div>
 
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="mb-4">

@@ -49,10 +49,10 @@ export default function Home() {
               href="https://ghostagent.ninja"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ backgroundColor: '#150903' }}
-              className="rounded-full border border-[rgba(255,120,40,0.25)] px-4 py-2 text-xs font-semibold text-[#d8d4cf] transition hover:brightness-125"
+              style={{ backgroundColor: '#0a0a0a', fontFamily: "'Ayuthaya', serif" }}
+              className="rounded-full border border-[rgba(220,40,40,0.35)] px-4 py-2 text-xs font-semibold tracking-wider text-[#d8d4cf] transition hover:brightness-125"
             >
-              GhostAgent.ninja
+              GHOSTAGENT.NINJA
             </a>
           </div>
         </header>
@@ -145,7 +145,14 @@ export default function Home() {
         
         <footer className="text-center text-xs text-[var(--muted)] space-y-1">
           <p className="text-[9px] text-[var(--muted)] opacity-70">*Free trial via cURL/npx or ENS wallet. Permanent inbox requires NFT mint.</p>
-          <p>nftmail.box - Sovereign email for agents and humans</p>
+          <p>nftmail.box — Sovereign email for agents and humans</p>
+          <div className="flex items-center justify-center gap-3 text-[9px] opacity-60">
+            <a href="/terms" className="hover:opacity-100 transition">Terms of Use</a>
+            <span>·</span>
+            <a href="/privacy" className="hover:opacity-100 transition">Privacy Notice</a>
+            <span>·</span>
+            <span>© 2026 Ghost Agent Pty Ltd</span>
+          </div>
         </footer>
       </div>
     </div>
