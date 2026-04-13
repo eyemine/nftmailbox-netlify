@@ -789,7 +789,7 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
       ) : (
         <>
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] text-amber-300/80">
-            Mint {'{name}'}.nftmail.gno → get {'{name}'}_@nftmail.box. 2 xDAI — born a Pupa. 30-day history, receive only. Molt to Imago for aliases, persistent history and unlimited send.
+            Mint {'{name}'}.nftmail.gno → get {'{name}'}_@nftmail.box. 2 xDAI — born a Pupa. 30-day history, send 10 emails via API. Molt to Imago for aliases, persistent history and unlimited send.
           </div>
           <MintNFTMail initialName={initialName} agentMode={true} />
           {!showManual ? (
