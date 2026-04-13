@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
@@ -571,6 +571,16 @@ export default function NftmailPage() {
           </div>
           <div className="ml-8">
             <NFTLogin />
+            {authenticated && (
+              <div className="mt-3 flex justify-end">
+                <a
+                  href="/dashboard"
+                  className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-1.5 text-[10px] font-semibold text-[var(--muted)] transition hover:text-white"
+                >
+                  Your dashboard →
+                </a>
+              </div>
+            )}
           </div>
         </section>
 
@@ -690,9 +700,25 @@ export default function NftmailPage() {
 function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeChange }: { onMinted: (name: string, tba: string) => void; initialName?: string; nameType: 'human' | 'ens' | 'agent'; onNameTypeChange: (t: 'human' | 'ens' | 'agent') => void }) {
   const [manualName, setManualName] = useState('');
   const [showManual, setShowManual] = useState(false);
-  const [ensInput, setEnsInput] = useState('');
-  const ensLabel = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
+  const [selectedEns, setSelectedEns] = useState<string | null>(null);
+  const [ensNames, setEnsNames] = useState<{ label: string; name: string }[]>([]);
+  const [ensLoading, setEnsLoading] = useState(false);
+  const { user } = usePrivy();
+  const walletAddress = user?.wallet?.address ?? '';
+  const ensLabel = selectedEns ?? '';
   const ensName = ensLabel ? `${ensLabel}.eth` : '';
+
+  useEffect(() => {
+    if (nameType !== 'ens' || !walletAddress) return;
+    setEnsLoading(true);
+    setEnsNames([]);
+    setSelectedEns(null);
+    fetch(`/api/ens-names?address=${walletAddress}`)
+      .then((r) => r.json())
+      .then((d: any) => setEnsNames(d.names ?? []))
+      .catch(() => {})
+      .finally(() => setEnsLoading(false));
+  }, [nameType, walletAddress]);
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
@@ -736,19 +762,30 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
       ) : nameType === 'ens' ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] text-emerald-300/80">
-            Own a .eth name? Mint the matching @nftmail.box for free — bypasses ENS reservation.
+            Select your .eth name to mint the matching @nftmail.box for free — bypasses ENS reservation.
           </div>
-          <input
-            type="text"
-            value={ensInput}
-            onChange={(e) => setEnsInput(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
-            placeholder="yourname.eth"
-            className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50"
-          />
-          {ensLabel && (
-            <p className="text-[10px] text-[var(--muted)]">Will mint: <span className="text-emerald-300">{ensLabel}@nftmail.box</span> — wallet must own <span className="text-emerald-300">{ensName}</span></p>
+          {ensLoading ? (
+            <p className="text-[10px] text-[var(--muted)] animate-pulse">Loading your ENS names...</p>
+          ) : ensNames.length === 0 ? (
+            <p className="text-[10px] text-amber-400">No .eth names found in this wallet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {ensNames.map((e) => (
+                <button
+                  key={e.label}
+                  onClick={() => setSelectedEns(selectedEns === e.label ? null : e.label)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    selectedEns === e.label
+                      ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                      : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:text-white'
+                  }`}
+                >
+                  {e.name}
+                </button>
+              ))}
+            </div>
           )}
-          {ensLabel && <MintNFTMail initialName={ensLabel} ensName={ensName} />}
+          {ensLabel && <MintNFTMail key={ensLabel} initialName={ensLabel} ensName={ensName} hideName={true} />}
         </div>
       ) : (
         <>

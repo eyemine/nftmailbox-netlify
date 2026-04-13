@@ -32,7 +32,7 @@ interface MintResult {
   gasless?: boolean;
 }
 
-export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?: string; ensName?: string; agentMode?: boolean }) {
+export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { initialName?: string; ensName?: string; agentMode?: boolean; hideName?: boolean }) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
 
@@ -320,7 +320,7 @@ export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?:
             <span className="text-sm font-bold text-amber-200">2 xDAI</span>
           </div>
         )}
-        <div>
+        {!hideName && <div>
           <label className="text-[10px] font-semibold tracking-[0.18em] text-[var(--muted)]">
             {initialName ? 'CLAIM YOUR NFT MAIL ADDRESS' : 'CHOOSE YOUR NAME'}
           </label>
@@ -383,7 +383,7 @@ export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?:
           )}
 
           {label && name1.length >= 1 && (isSingleName || name2.length >= 1) && (
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1"> 
               <div className="flex items-center gap-2">
                 <p className="text-xs text-[rgb(160,220,255)]">{fullGno} → {fullEmail}</p>
                 {nameStatus === 'checking' && (
@@ -402,7 +402,16 @@ export function MintNFTMail({ initialName, ensName, agentMode }: { initialName?:
               <p className="text-[10px] text-[var(--muted)]">Free — 8-day history window, inbox address permanent. Upgrade to Lite to send &amp; molt.</p>
             </div>
           )}
-        </div>
+        </div>}
+
+        {hideName && label && (
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300">
+            {fullGno} → {fullEmail}
+            {nameStatus === 'available' && <span className="ml-2 font-semibold">✓ available</span>}
+            {nameStatus === 'checking' && <span className="ml-2 text-[var(--muted)] animate-pulse">checking...</span>}
+            {nameStatus === 'taken' && <span className="ml-2 text-red-400 font-semibold">✗ taken</span>}
+          </div>
+        )}
 
         {/* Mint mode toggle */}
         <div className="flex items-center justify-center gap-3">
