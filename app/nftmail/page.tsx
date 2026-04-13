@@ -605,7 +605,6 @@ export default function NftmailPage() {
                   <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">ENS</span>
                 )}
               </div>
-              <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Cycle to Pupa for a 30-day window.</p>
             </div>
             <div className="ml-8">
               {tier !== 'none' ? (
@@ -784,7 +783,12 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
       </div>
 
       {nameType === 'human' ? (
-        <MintNFTMail initialName={initialName} />
+        <div className="space-y-3">
+          <div className="rounded-lg border border-[rgba(0,163,255,0.2)] bg-[rgba(0,163,255,0.05)] px-3 py-2 text-[10px] text-[rgb(160,220,255)]/80">
+            Mint {'{name1}'}-{'{name2}'}.nftmail.gno → get {'{name1}'}.{'{name2}'}@nftmail.box. Free — born a Larva. 8-day history, send 10 emails. Molt to Pupa for a 30-day window and unlimited send.
+          </div>
+          <MintNFTMail initialName={initialName} />
+        </div>
       ) : nameType === 'ens' ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] text-emerald-300/80">
