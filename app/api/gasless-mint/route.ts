@@ -222,14 +222,15 @@ export async function POST(req: NextRequest) {
     // Create treasury signer
     const account = privateKeyToAccount(treasuryKey as `0x${string}`);
 
+    const gnosisRpc = process.env.GNOSIS_RPC_URL || process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://gnosis.drpc.org';
     const publicClient = createPublicClient({
       chain: gnosis,
-      transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
+      transport: http(gnosisRpc),
     });
 
     const walletClient = createWalletClient({
       chain: gnosis,
-      transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
+      transport: http(gnosisRpc),
       account,
     });
 
@@ -247,13 +248,18 @@ export async function POST(req: NextRequest) {
     // GNS registry owner() reverts for unminted subnodes — treat revert as available
     const labelhash = keccak256(encodePacked(['string'], [label]));
     const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-    try {
-      const existingOwner = await publicClient.readContract({
+    const checkGnsOwner = async (rpc: string): Promise<string> => {
+      const c = createPublicClient({ chain: gnosis, transport: http(rpc) });
+      return await c.readContract({
         address: GNS_REGISTRY,
         abi: GNSRegistryABI,
         functionName: 'owner',
         args: [subnode],
       });
+    };
+    try {
+      const existingOwner = await checkGnsOwner(gnosisRpc)
+        .catch(() => checkGnsOwner('https://rpc.gnosischain.com'));
       if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
         return NextResponse.json(
           { error: `${label}.nftmail.gno is already minted. Choose a different name.` },
@@ -261,11 +267,8 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch {
-      // Cannot verify — block the mint rather than risk a duplicate
-      return NextResponse.json(
-        { error: 'Could not verify name availability on Gnosis. Please try again.' },
-        { status: 503 }
-      );
+      // Both RPCs failed — proceed; in-flight mutex + worker KV duplicate check prevent doubles
+      console.warn('GNS availability check failed on both RPCs — proceeding with mint');
     }
 
     // In-flight mutex: reject if another request is already minting this label
@@ -350,36 +353,26 @@ export async function POST(req: NextRequest) {
           welcomeForm.set('text', [
             `Hi ${emailLocal},`,
             ``,
-            `Your NFTMail inbox is live: ${emailLocal}@nftmail.box`,
+            `Your NFTmail.gno address is live:`,
+            `  ${label}.nftmail.gno → ${emailLocal}@nftmail.box`,
             ``,
-            `Read inbox:   https://nftmail.box/inbox/${emailLocal}`,
-            `Dashboard:    https://nftmail.box/dashboard`,
-            `API / SDK:    https://nftmail.box/sdk`,
-            ``,
-            `Free tier includes:`,
+            `You are born a Larva. Larva tier includes:`,
             `  · Receive unlimited emails`,
             `  · Send up to 10 emails`,
             `  · 8-day message history`,
-            `  · Up to 10 addresses per wallet`,
+            ``,
+            `Read inbox:   https://nftmail.box/inbox/${emailLocal}`,
+            `Dashboard:    https://nftmail.box/dashboard`,
             ``,
             `To test delivery, reply to this email.`,
             ``,
             `— — —`,
             ``,
-            `Upgrade to a permanent NFT-backed address:`,
-            ``,
-            `Connect a wallet at https://nftmail.box/nftmail to mint`,
-            `your address as a .nftmail.gno NFT on Gnosis. Your inbox`,
-            `address stays the same — the NFT makes it ownable and`,
-            `transferable on-chain.`,
-            ``,
-            `Paid tiers unlock:`,
+            `Molt to Pupa for:`,
             `  · Unlimited sending`,
             `  · 30-day message history`,
-            `  · ghostmail.box vanity alias (IMAGO tier)`,
-            `  · GhostAgent.ninja protocol integration`,
             ``,
-            `Learn more: https://ghostagent.ninja`,
+            `Molt at: https://nftmail.box/nftmail?label=${label}&upgrade=lite`,
             ``,
             `— nftmail.box`,
           ].join('\n'));

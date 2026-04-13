@@ -440,7 +440,7 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
                   <span className="text-[10px] text-amber-400 font-semibold">⚠ ENS reserved — {label}.eth is registered. Only the ENS holder can mint this name.</span>
                 )}
               </div>
-              <p className="text-[10px] text-[var(--muted)]">Free — 8-day history window, inbox address permanent. Upgrade to Lite to send &amp; molt.</p>
+              <p className="text-[10px] text-[var(--muted)]">Free — born a Larva. 8-day history, send 10 emails. Molt to Pupa for a 30-day window and unlimited send.</p>
             </div>
           )}
         </div>}

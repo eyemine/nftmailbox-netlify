@@ -492,17 +492,17 @@ export default function NftmailPage() {
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.14),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
       <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-10 md:px-6">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <a href="/" className="flex items-center gap-2">
             <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95" />
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
-          </div>
+          </a>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowMintFlow(false)}
+            <a
+              href="/"
               className="text-[10px] text-[var(--muted)] hover:text-white transition"
             >
               ← Back
-            </button>
+            </a>
             <a
               href="https://ghostagent.ninja"
               target="_blank"
@@ -788,7 +788,7 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
       ) : nameType === 'ens' ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] text-emerald-300/80">
-            Select your .eth name to mint the matching @nftmail.box for free — bypasses ENS reservation.
+            Mint {'{ENSname}'}.nftmail.gno → get {'{ENSname}'}@nftmail.box. Free — born a Larva. 8-day history, send 10 emails. Molt to Pupa for a 30-day window and unlimited send.
           </div>
           {ensLoading ? (
             <p className="text-[10px] text-[var(--muted)] animate-pulse">Loading your ENS names...</p>
@@ -820,6 +820,9 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
         </div>
       ) : (
         <>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] text-amber-300/80">
+            Mint {'{name}'}.nftmail.gno → get {'{name}'}_@nftmail.box. 2 xDAI — born a Pupa. 30-day history, receive only. Molt to Imago for aliases, persistent history and unlimited send.
+          </div>
           <MintNFTMail initialName={initialName} agentMode={true} />
           {!showManual ? (
             <button
