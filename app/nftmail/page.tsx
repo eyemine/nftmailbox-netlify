@@ -703,6 +703,7 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
   const [selectedEns, setSelectedEns] = useState<string | null>(null);
   const [ensNames, setEnsNames] = useState<{ label: string; name: string }[]>([]);
   const [ensLoading, setEnsLoading] = useState(false);
+  const [chipStatuses, setChipStatuses] = useState<Record<string, 'checking' | 'available' | 'taken'>>({});
   const { user } = usePrivy();
   const walletAddress = user?.wallet?.address ?? '';
   const ensLabel = selectedEns ?? '';
@@ -713,12 +714,37 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
     setEnsLoading(true);
     setEnsNames([]);
     setSelectedEns(null);
+    setChipStatuses({});
     fetch(`/api/ens-names?address=${walletAddress}`)
       .then((r) => r.json())
-      .then((d: any) => setEnsNames(d.names ?? []))
-      .catch(() => {})
+      .then((d: any) => { setEnsNames(d.names ?? []); return d.names ?? []; })
+      .catch(() => [])
       .finally(() => setEnsLoading(false));
   }, [nameType, walletAddress]);
+
+  useEffect(() => {
+    if (ensNames.length === 0) return;
+    const init: Record<string, 'checking'> = {};
+    ensNames.forEach((e) => { init[e.label] = 'checking'; });
+    setChipStatuses(init);
+    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    Promise.all(
+      ensNames.map(async (e) => {
+        try {
+          const emailLocal = e.label.replace(/-/g, '.');
+          const res = await fetch(workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resolveAddress', name: emailLocal }),
+          });
+          const data = await res.json() as { exists?: boolean };
+          return [e.label, data.exists ? 'taken' : 'available'] as [string, 'taken' | 'available'];
+        } catch {
+          return [e.label, 'available'] as [string, 'available'];
+        }
+      })
+    ).then((results) => setChipStatuses(Object.fromEntries(results)));
+  }, [ensNames]);
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
@@ -774,13 +800,18 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
                 <button
                   key={e.label}
                   onClick={() => setSelectedEns(selectedEns === e.label ? null : e.label)}
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition ${
                     selectedEns === e.label
                       ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300'
+                      : chipStatuses[e.label] === 'taken'
+                      ? 'border-red-500/20 bg-black/20 text-[var(--muted)]'
                       : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:text-white'
                   }`}
                 >
                   {e.name}
+                  {chipStatuses[e.label] === 'checking' && <span className="text-[9px] animate-pulse opacity-60">…</span>}
+                  {chipStatuses[e.label] === 'available' && <span className="text-[9px] text-emerald-400">✓</span>}
+                  {chipStatuses[e.label] === 'taken' && <span className="text-[9px] text-red-400">✗</span>}
                 </button>
               ))}
             </div>

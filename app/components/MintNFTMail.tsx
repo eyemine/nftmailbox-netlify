@@ -109,7 +109,7 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
   const fullGno = label ? `${label}.nftmail.gno` : '';
   const fullEmail = emailLocal ? `${emailLocal}@nftmail.box` : '';
   const ensProofLabel = ensName?.toLowerCase().replace(/\.eth$/, '');
-  const isEnsProofForCurrentLabel = !!ensProofLabel && isSingleName && ensProofLabel === label;
+  const isEnsProofForCurrentLabel = !!ensProofLabel && ensProofLabel === label;
 
   const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
   const anyWallet = wallets[0];
@@ -451,6 +451,7 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
             {nameStatus === 'available' && <span className="ml-2 font-semibold">✓ available</span>}
             {nameStatus === 'checking' && <span className="ml-2 text-[var(--muted)] animate-pulse">checking...</span>}
             {nameStatus === 'taken' && <span className="ml-2 text-red-400 font-semibold">✗ taken</span>}
+            {nameStatus === 'ens-reserved' && <span className="ml-2 text-amber-400 font-semibold">⚠ ENS reserved</span>}
           </div>
         )}
 
