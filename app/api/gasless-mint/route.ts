@@ -261,7 +261,11 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch {
-      // Revert means subnode doesn't exist in registry — name is available, proceed
+      // Cannot verify — block the mint rather than risk a duplicate
+      return NextResponse.json(
+        { error: 'Could not verify name availability on Gnosis. Please try again.' },
+        { status: 503 }
+      );
     }
 
     // In-flight mutex: reject if another request is already minting this label
@@ -310,29 +314,27 @@ export async function POST(req: NextRequest) {
 
       // ─── Register sovereign inbox in nftmail-email-worker KV ───
       const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
-      const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET;
+      const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET || '';
       let kvRegistered = false;
-      if (webhookSecret) {
-        try {
-          const kvRes = await fetch(workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'registerSovereign',
-              secret: webhookSecret,
-              label,
-              controller: owner,
-              originNft: `${label}.nftmail.gno`,
-              legacyIdentity: emailLocal,
-              mintedTokenId: null,
-              privacyTier: 'exposed',
-            }),
-          });
-          const kvJson = await kvRes.json() as any;
-          kvRegistered = kvJson?.status === 'registered';
-        } catch {
-          // Non-fatal — KV can be backfilled manually
-        }
+      try {
+        const kvRes = await fetch(workerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'registerSovereign',
+            secret: webhookSecret,
+            label,
+            controller: owner,
+            originNft: `${label}.nftmail.gno`,
+            legacyIdentity: emailLocal,
+            mintedTokenId: null,
+            privacyTier: 'exposed',
+          }),
+        });
+        const kvJson = await kvRes.json() as any;
+        kvRegistered = kvJson?.status === 'registered';
+      } catch {
+        // Non-fatal — KV can be backfilled manually
       }
 
       // ── Welcome email ────────────────────────────────────────────────────
