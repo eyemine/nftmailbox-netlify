@@ -515,7 +515,7 @@ export default function NftmailPage() {
         </header>
 
         <section className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">nftmail.box</h1>
+          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-4xl font-bold tracking-tight">nftmail.box</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-[var(--muted)]">
             Mint a self-contained email identity on Gnosis. You are born a Larva. Don't let your identity decay into the void.
           </p>
@@ -575,9 +575,9 @@ export default function NftmailPage() {
               <div className="mt-3 flex justify-end">
                 <a
                   href="/dashboard"
-                  className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-1.5 text-[10px] font-semibold text-[var(--muted)] transition hover:text-white"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[rgba(0,163,255,0.12)] border border-[rgba(0,163,255,0.3)] rounded-lg hover:bg-[rgba(0,163,255,0.2)] transition"
                 >
-                  Your dashboard →
+                  Your Dashboard →
                 </a>
               </div>
             )}

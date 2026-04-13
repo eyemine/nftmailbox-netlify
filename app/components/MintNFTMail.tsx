@@ -550,12 +550,7 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-t border-[var(--border)] px-6 py-4 gap-3">
-                <div className="flex-1">
-                  {result.kvRegistered === false && (
-                    <BackfillButton label={result.name} owner={result.ownerAddress || ''} />
-                  )}
-                </div>
+              <div className="flex items-center justify-end border-t border-[var(--border)] px-6 py-4">
                 <button
                   onClick={() => setShowModal(false)}
                   className="rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)]"
