@@ -129,7 +129,7 @@ export default function Home() {
               </a>
               <a
                 href="/sdk"
-                className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3 text-xs font-semibold hover:bg-black/30 transition"
+                className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-3 text-xs font-semibold hover:bg-black/30 hover:text-white transition"
                 style={{ color: '#8ee4ba' }}
               >
                 API / SDK*
