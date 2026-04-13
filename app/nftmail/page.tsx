@@ -422,7 +422,7 @@ export default function NftmailPage() {
   const [mintedName, setMintedName] = useState('');
   const [mintedTba, setMintedTba] = useState('');
   const [tier, setTier] = useState<Tier>('none');
-  const [nameType, setNameType] = useState<'human' | 'agent'>('human');
+  const [nameType, setNameType] = useState<'human' | 'ens' | 'agent'>('human');
 
   const email = mintedName ? `${mintedName}@nftmail.box` : '';
 
@@ -591,6 +591,9 @@ export default function NftmailPage() {
                     ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20'
                     : 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20'
                 }`}>{nameType === 'agent' ? '2 xDAI' : 'FREE'}</span>
+                {nameType === 'ens' && (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">ENS</span>
+                )}
               </div>
               <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Mint [name1]-[name2].nftmail.gno → get [name1]-[name2]@nftmail.box. Free — you are born a Larva. 8-day history, receive only. Cycle to Pupa for a 30-day window.</p>
             </div>
@@ -684,9 +687,12 @@ export default function NftmailPage() {
   );
 }
 
-function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeChange }: { onMinted: (name: string, tba: string) => void; initialName?: string; nameType: 'human' | 'agent'; onNameTypeChange: (t: 'human' | 'agent') => void }) {
+function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeChange }: { onMinted: (name: string, tba: string) => void; initialName?: string; nameType: 'human' | 'ens' | 'agent'; onNameTypeChange: (t: 'human' | 'ens' | 'agent') => void }) {
   const [manualName, setManualName] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [ensInput, setEnsInput] = useState('');
+  const ensLabel = ensInput.toLowerCase().replace(/\.eth$/, '').replace(/[^a-z0-9-]/g, '');
+  const ensName = ensLabel ? `${ensLabel}.eth` : '';
 
   const handleNameChange = (val: string) => {
     const lower = val.toLowerCase();
@@ -703,13 +709,19 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
 
   return (
     <div className="space-y-4">
-      {/* Human / Agent tab selector */}
+      {/* Human / ENS / Agent tab selector */}
       <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-[10px] font-semibold">
         <button
           onClick={() => { onNameTypeChange('human'); setManualName(''); }}
           className={`flex-1 px-3 py-2 transition ${nameType === 'human' ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
         >
           Human
+        </button>
+        <button
+          onClick={() => { onNameTypeChange('ens'); setManualName(''); }}
+          className={`flex-1 px-3 py-2 transition ${nameType === 'ens' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-black/20 text-[var(--muted)] hover:text-white'}`}
+        >
+          ENS Holder
         </button>
         <button
           onClick={() => { onNameTypeChange('agent'); setManualName(''); }}
@@ -721,6 +733,23 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
 
       {nameType === 'human' ? (
         <MintNFTMail initialName={initialName} />
+      ) : nameType === 'ens' ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[10px] text-emerald-300/80">
+            Own a .eth name? Mint the matching @nftmail.box for free — bypasses ENS reservation.
+          </div>
+          <input
+            type="text"
+            value={ensInput}
+            onChange={(e) => setEnsInput(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+            placeholder="yourname.eth"
+            className="w-full rounded-lg border border-[var(--border)] bg-black/40 px-4 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-emerald-500/50"
+          />
+          {ensLabel && (
+            <p className="text-[10px] text-[var(--muted)]">Will mint: <span className="text-emerald-300">{ensLabel}@nftmail.box</span> — wallet must own <span className="text-emerald-300">{ensName}</span></p>
+          )}
+          {ensLabel && <MintNFTMail initialName={ensLabel} ensName={ensName} />}
+        </div>
       ) : (
         <>
           <MintNFTMail initialName={initialName} agentMode={true} />
