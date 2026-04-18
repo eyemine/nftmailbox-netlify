@@ -41,7 +41,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95 md:w-12 md:h-12" />
             <span className="flex items-center gap-1.5">
-              <span style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-sm md:text-base">nftmail.box</span>
+              <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-sm md:text-base">nftmail.box</span>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/beta-badge.svg" alt="beta" style={{ height: '0.6rem', width: 'auto', opacity: 0.85 }} />
             </span>
@@ -61,8 +61,8 @@ export default function Home() {
 
         {/* Hero */}
         <section className="text-center">
-          <h1 style={{ 
-              fontFamily: "'Ayuthaya", serif", 
+          <h1 style={{
+              fontFamily: "'Ayuthaya', serif",
               color: '#d8d4cf',
               display: 'flex',
               flexDirection: 'column',
