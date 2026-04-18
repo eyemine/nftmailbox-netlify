@@ -31,7 +31,9 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.14),transparent_40%),linear-gradient(180deg,#0a0a0a,#03040a)]">
+    <div className="min-h-screen" style={{
+        background: 'radial-gradient(1200px_circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px_circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)'
+      }}>
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-10 px-4 py-10 md:px-6">
 
         {/* Header */}
