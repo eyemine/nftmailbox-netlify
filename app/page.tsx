@@ -103,7 +103,7 @@ export default function Home() {
                 type="submit"
                 className="rounded-lg bg-blue-500/12 border border-blue-500/30 px-5 py-2.5 text-xs font-semibold text-blue-300 transition hover:bg-blue-500/20 sm:w-auto w-full"
               >
-                Check &rarr;
+                Check →
               </button>
             </form>
             {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
@@ -113,7 +113,7 @@ export default function Home() {
                 href="/dashboard" 
                 className="px-4 py-2 text-xs font-semibold text-white bg-blue-500/12 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition text-center sm:w-auto w-full"
               >
-                Your Dashboard &rarr;
+                Your Dashboard →
               </Link>
             </div>
           </div>
