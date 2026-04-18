@@ -61,7 +61,15 @@ export default function Home() {
 
         {/* Hero */}
         <section className="text-center">
-          <h1 style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-3xl md:text-5xl font-bold flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3">
+          <h1 style={{ 
+              fontFamily: "'Ayuthaya", serif", 
+              color: '#d8d4cf',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }} className="text-3xl md:text-5xl font-bold md:flex-row md:gap-3">
             nftmail.box
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/beta-badge.svg" alt="beta" style={{ height: '1rem', width: 'auto', opacity: 0.85, marginTop: '0.2rem' }} className="md:mt-0.4" />
