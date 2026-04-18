@@ -41,7 +41,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95 md:w-12 md:h-12" />
             <span className="flex items-center gap-1.5">
-              <span style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-sm tracking-wide md:text-base">nftmail.box</span>
+              <span style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-sm md:text-base">nftmail.box</span>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/beta-badge.svg" alt="beta" style={{ height: '0.6rem', width: 'auto', opacity: 0.85 }} />
             </span>
@@ -52,7 +52,7 @@ export default function Home() {
               target="_blank"
               rel="noopener noreferrer"
               style={{ backgroundColor: '#0a0a0a', fontFamily: "'Ayuthaya', serif" }}
-              className="rounded-full border border-red-500/35 px-4 py-2 text-xs font-semibold tracking-wider text-[#d8d4cf] transition hover:brightness-125"
+              className="rounded-full border border-red-500/35 px-4 py-2 text-xs font-semibold text-[#d8d4cf] transition hover:brightness-125"
             >
               GHOSTAGENT.NINJA
             </a>
@@ -61,7 +61,7 @@ export default function Home() {
 
         {/* Hero */}
         <section className="text-center">
-          <h1 style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-3xl md:text-5xl font-bold tracking-tight flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3">
+          <h1 style={{ fontFamily: "'Ayuthaya", serif", color: '#d8d4cf' }} className="text-3xl md:text-5xl font-bold flex flex-col md:flex-row items-center justify-center gap-2 md:gap-3">
             nftmail.box
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/beta-badge.svg" alt="beta" style={{ height: '1rem', width: 'auto', opacity: 0.85, marginTop: '0.2rem' }} className="md:mt-0.4" />
