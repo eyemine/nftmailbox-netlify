@@ -50,7 +50,7 @@ export default function Home() {
               target="_blank"
               rel="noopener noreferrer"
               style={{ backgroundColor: '#0a0a0a', fontFamily: "'Ayuthaya', serif" }}
-              className="rounded-full border border-[rgba(220,40,40,0.35)] px-4 py-2 text-xs font-semibold tracking-wider text-[#d8d4cf] transition hover:brightness-125"
+              className="rounded-full border border-red-500/35 px-4 py-2 text-xs font-semibold tracking-wider text-[#d8d4cf] transition hover:brightness-125"
             >
               GHOSTAGENT.NINJA
             </a>
@@ -91,7 +91,7 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                className="rounded-lg bg-[rgba(0,163,255,0.12)] border border-[rgba(0,163,255,0.3)] px-5 py-2.5 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] sm:w-auto w-full"
+                className="rounded-lg bg-blue-500/12 border border-blue-500/30 px-5 py-2.5 text-xs font-semibold text-blue-300 transition hover:bg-blue-500/20 sm:w-auto w-full"
               >
                 Check &rarr;
               </button>
@@ -101,7 +101,7 @@ export default function Home() {
               <p className="text-[10px] text-gray-400">Manage all your inboxes</p>
               <Link 
                 href="/dashboard" 
-                className="px-4 py-2 text-xs font-semibold text-white bg-[rgba(0,163,255,0.12)] border border-[rgba(0,163,255,0.3)] rounded-lg hover:bg-[rgba(0,163,255,0.2)] transition text-center sm:w-auto w-full"
+                className="px-4 py-2 text-xs font-semibold text-white bg-blue-500/12 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition text-center sm:w-auto w-full"
               >
                 Your Dashboard &rarr;
               </Link>
@@ -118,12 +118,12 @@ export default function Home() {
             </div>
             <h2 className="text-base font-semibold text-white mb-1">Get your inbox</h2>
             <p className="text-xs text-gray-400 mb-4">
-              Choose a name. Your address will be <span className="text-[rgb(160,220,255)]">you@nftmail.box</span>
+              Choose a name. Your address will be <span className="text-blue-300">you@nftmail.box</span>
             </p>
             <div className="flex gap-2 mb-3">
               <a
                 href="/nftmail"
-                className="flex-1 rounded-lg bg-[rgba(0,163,255,0.15)] border border-[rgba(0,163,255,0.35)] px-5 py-3 text-sm font-semibold text-[rgb(160,220,255)] text-center hover:bg-[rgba(0,163,255,0.25)] transition"
+                className="flex-1 rounded-lg bg-blue-500/15 border border-blue-500/35 px-5 py-3 text-sm font-semibold text-blue-300 text-center hover:bg-blue-500/25 transition"
               >
                 Claim inbox →
               </a>
