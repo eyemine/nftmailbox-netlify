@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 import { ComposeEmail } from '../../components/ComposeEmail';
+import ForwardingSetup from '../../components/ForwardingSetup';
 
 function isAgentAddress(addr: string): boolean {
   if (!addr) return false;
@@ -14,14 +15,35 @@ function isAgentAddress(addr: string): boolean {
   return local.endsWith('_');
 }
 
-function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) {
+function BlurFrom({ from }: { from: string }) {
   if (!from || from === 'unknown') return <span className="text-white/70">unknown</span>;
-  if (reveal || isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
+  if (isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
   return (
     <span className="relative inline-block select-none" title="Sender identity protected">
       <span className="blur-sm text-white/70 pointer-events-none">{from}</span>
     </span>
   );
+}
+
+function stripHtml(html: unknown): string {
+  if (html === null || html === undefined) return '';
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#x0*27;/gi, "'")
+    .replace(/\u202f/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function MsgBodyView({ body, bodyHtml }: { body: string; bodyHtml: string }) {
@@ -57,42 +79,6 @@ function MsgBodyView({ body, bodyHtml }: { body: string; bodyHtml: string }) {
   );
 }
 
-function stripHtml(html: unknown): string {
-  if (html === null || html === undefined) return '';
-  const s = String(html)
-    // Remove style/script blocks entirely (content included)
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    // Block-level tags → newlines (works across newlines via [\/] match)
-    .replace(/<br[\s\S]*?\/>/gi, '\n')
-    .replace(/<br>/gi, '\n')
-    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
-    // Strip ALL tags including multiline ones using [\/s\S]*? dotall
-    .replace(/<[\s\S]*?>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/&#x0*27;/gi, "'")
-    .replace(/\u202f/g, ' ')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  // Drop lines that are CSS/style artifacts
-  const lines = s.split('\n').filter(line => {
-    const t = line.trim();
-    if (!t) return false;
-    if (/[{}]/.test(t)) return false;
-    if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
-    // Lines that are purely CSS property lists (margin-left : auto; ...)
-    if (/^([a-z-]+\s*:\s*[^;@<]+;\s*)+$/i.test(t)) return false;
-    return true;
-  });
-  return lines.join('\n').trim();
-}
-
 interface InboxMessage {
   id: string;
   subject: string;
@@ -100,6 +86,8 @@ interface InboxMessage {
   fromAddress: string;
   receivedTime: string;
   summary: string;
+  body: string;
+  bodyHtml: string;
   encrypted: boolean;
   contentHash: string;
   type: string;
@@ -107,8 +95,6 @@ interface InboxMessage {
   expiresAt: string | null;
   frozen?: boolean;
   decayDays?: number | null;
-  body?: string;
-  bodyHtml?: string;
 }
 
 interface AuditEntry {
@@ -126,7 +112,6 @@ interface AuditEntry {
 
 interface FeedItem {
   key: string;
-  id?: string;
   subject: string;
   from: string;
   timestamp: number;
@@ -188,28 +173,26 @@ export default function InboxPage() {
   const params = useParams();
   const router = useRouter();
   const name = params.name as string;
-  const isAgent = name?.endsWith('.agent');
-  const isAgentAlias = !isAgent && !!name?.endsWith('_');
+  const isAgent = name?.endsWith('_');
 
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
   // Hyphens are not valid sovereign email separators — dots are canonical
   useEffect(() => {
-    if (!name || isAgent || isAgentAlias) return;
+    if (!name || isAgent) return;
     if (name.includes('-')) {
       router.replace(`/inbox/${name.replace(/-/g, '.')}`);
     }
-  }, [name, isAgent, isAgentAlias, router]);
+  }, [name, isAgent, router]);
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
-
 
   // Address resolution state
   const [resolved, setResolved] = useState<ResolveResult | null>(null);
   const [resolving, setResolving] = useState(true);
 
   // Inbox state (only used when account exists)
-  const [privacyTier, setPrivacyTier] = useState<'exposed' | 'private' | 'hard-privacy'>('private');
+  const [privacyTier, setPrivacyTier] = useState<'exposed' | 'private' | 'hard-privacy'>('exposed');
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -228,55 +211,80 @@ export default function InboxPage() {
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
 
-  // Owner check: match authenticated user's linked accounts against onChainOwner.
-  // NOTE: useWallets() is intentionally NOT used — browser wallet extensions (ZilPay etc.)
-  // inject null entries that crash Privy's wallet enumeration. user.linkedAccounts is safe.
+  // Forwarding configuration state
+  const [forwardingConfig, setForwardingConfig] = useState<{
+    enabled: boolean;
+    targetEmail: string;
+    level: 'imago' | 'ghost';
+  } | null>(null);
+  const [loadingForwarding, setLoadingForwarding] = useState(false);
+
+  // Load forwarding configuration
+  useEffect(() => {
+    if (!name || !isImago || !isOwner) return;
+
+    const loadForwarding = async () => {
+      try {
+        setLoadingForwarding(true);
+        const response = await fetch(`/api/forwarding/${name}`);
+        if (response.ok) {
+          const data = await response.json();
+          setForwardingConfig(data);
+        }
+      } catch (error) {
+        console.error('Failed to load forwarding config:', error);
+      } finally {
+        setLoadingForwarding(false);
+      }
+    };
+
+    loadForwarding();
+  }, [name, isImago, isOwner]);
+
+  // Save forwarding configuration
+  const handleSaveForwarding = async (config: any) => {
+    if (!user?.wallet?.address) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      const response = await fetch(`/api/forwarding/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          ownerAddress: user.wallet.address
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save forwarding settings');
+      }
+
+      const data = await response.json();
+      setForwardingConfig(data);
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to save forwarding settings');
+    }
+  };
+
+  // Owner check: if onChainOwner is recorded, require wallet match.
+  // If not recorded (legacy mints pre-ownership tracking), fall back to authenticated.
   const isOwner = useMemo(() => {
     if (!authenticated) return false;
-    if (resolving) return false;
-    const ownerAddr = resolved?.onChainOwner;
-    const safeAddr = resolved?.safe;
-    
-        
-    // For agent aliases without ownership, check base agent's ownership
-    if (isAgentAlias && !ownerAddr && !safeAddr && name?.endsWith('_')) {
-      const baseName = name.slice(0, -1);
-      // Check if user wallet matches known pattern for this account
-      if (user?.wallet?.address) {
-        const userAddr = user.wallet.address.toLowerCase();
-        // Special case for rgbanksy legacy account
-        if (baseName === 'rgbanksy' && userAddr === '0x4b35237538fe70863d7e7bbbc83f3f621c6c4fb9') {
-          return true;
-        }
-        // Generic check: if base name matches wallet hex pattern, grant ownership
-        const walletHex = userAddr.slice(2); // Remove 0x
-        if (baseName.toLowerCase() === walletHex) {
-          return true;
-        }
+    if (!resolved?.onChainOwner) return authenticated; // legacy: trust session
+    const owner = resolved.onChainOwner.toLowerCase();
+    const wallets: string[] = [];
+    if (user?.wallet?.address) wallets.push(user.wallet.address.toLowerCase());
+    if (user?.linkedAccounts) {
+      for (const acct of user.linkedAccounts) {
+        if ((acct as any).address) wallets.push((acct as any).address.toLowerCase());
       }
     }
-    
-    // No ownership info at all - only trust session for sovereign (human) accounts
-    // Agent accounts without owner/safe: nobody gets owner access until claimed
-    if (!ownerAddr && !safeAddr) {
-      return (!isAgent && !isAgentAlias) ? authenticated : false;
-    }
-    try {
-      const addrs: string[] = [];
-      if (user?.wallet?.address) addrs.push(user.wallet.address.toLowerCase());
-      if (user?.linkedAccounts) {
-        for (const acct of user.linkedAccounts) {
-          const addr = (acct as { address?: string }).address;
-          if (addr) addrs.push(addr.toLowerCase());
-        }
-      }
-      if (ownerAddr && addrs.includes(ownerAddr.toLowerCase())) return true;
-      if (safeAddr && addrs.includes(safeAddr.toLowerCase())) return true;
-    } catch (_) { /* ignore enumeration errors */ }
-    return false;
-  }, [authenticated, resolving, resolved?.onChainOwner, resolved?.safe, user, isAgent, isAgentAlias, name]);
+    return wallets.includes(owner);
+  }, [authenticated, resolved?.onChainOwner, user]);
 
-  const agentName = name?.endsWith('.agent') ? name.slice(0, -6) : name;
+  const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
   // ECIES decrypt: only active for agent inboxes where owner is authenticated
   const eciesAgent = isAgent && isOwner ? agentName : null;
@@ -307,39 +315,38 @@ export default function InboxPage() {
     if (!name) return;
     (async () => {
       try {
-        const domain = typeof window !== 'undefined' ? window.location.hostname.replace(/^www\./, '') : 'nftmail.box';
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resolveAddress', name, domain }),
+          body: JSON.stringify({ action: 'resolveAddress', name }),
         });
         const data: ResolveResult = await res.json();
         setResolved(data);
-        // Use the stored privacy tier from the worker (respects toggles + TLD defaults)
-        setPrivacyTier(data.privacyTier || 'private');
+        setPrivacyTier(data.privacyTier || 'exposed');
 
-        if ((isAgent || isAgentAlias) && agentName) {
-          const tld = (data as any).tld || 'nftmail.gno';
-          const isPublic = (data as any).isPublic === true;
-          setAgentTld(tld);
-          setIsGlassbox(isPublic);
+        // For agents, tld + isPublic are now embedded in resolveAddress response
+        if (isAgent && agentName) {
+          setAgentTld((data as any).tld || 'nftmail.gno');
+          setIsGlassbox((data as any).isPublic === true);
+          setClassificationDone(true);
+        } else {
+          setClassificationDone(true);
         }
-        setClassificationDone(true);
       } catch {
         setResolved({ name, exists: false, stream: 'unknown', privacyTier: 'exposed', hasMessages: false, hasEciesKey: false, hasZohoSeat: false, availability: { status: 'invalid', type: 'error', message: 'Failed to resolve address' } });
       }
       setResolving(false);
     })();
-  }, [name, isAgent, isAgentAlias, agentName]);
+  }, [name, isAgent, agentName]);
 
   // Step 2: Load inbox if account exists
   const loadInbox = useCallback(async () => {
     if (!name || !resolved?.exists) return;
     setLoading(true);
     try {
-      if (isAgent || isAgentAlias) {
-        // Glassbox agents: fetch audit log from Moltworker proxy (only for .agent stream, not aliases)
-        if (isGlassbox && isAgent) {
+      if (isAgent) {
+        // Glassbox agents: fetch audit log from Moltworker proxy
+        if (isGlassbox) {
           try {
             const auditRes = await fetch(`https://${agentName}-proxy.richard-159.workers.dev/audit`);
             if (auditRes.ok) {
@@ -358,46 +365,34 @@ export default function InboxPage() {
           } catch {}
         }
 
-        // Fetch inbox messages from KV worker via getBlindInbox
-        const inboxLocalPart = isAgentAlias ? name : agentName;
-        const siteDomain = typeof window !== 'undefined' ? window.location.hostname : '';
-        const inboxMailDomain = siteDomain.includes('ghostmail') ? 'ghostmail' : 'nftmail';
+        // Fetch inbox messages from KV worker
         try {
           const kvRes = await fetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getBlindInbox', localPart: inboxLocalPart, ...(inboxMailDomain === 'ghostmail' ? { domain: 'ghostmail' } : {}) }),
+            body: JSON.stringify({ action: 'getInbox', localPart: name }),
           });
           if (kvRes.ok) {
-            const kvData = await kvRes.json() as { messages?: any[]; decayDays?: number };
-            const acctDecayDays: number | null = kvData.decayDays ?? null;
-            const now = Date.now();
+            const kvData = await kvRes.json() as { messages?: any[] };
             const kvMessages = (kvData.messages || []).map((m: any) => {
-              const isEnc = m.encrypted === true;
-              // Guard: receivedAt may be seconds if < 1e12 (pre-2001 in ms = likely seconds)
               const rawRa = m.receivedAt || 0;
-              const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : rawRa || now;
-              const frozen = m.frozen === true;
-              const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
-              const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
-              const ageMs = now - receivedMs;
+              const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : rawRa;
               return {
                 id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
-                subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
-                sender: isEnc ? '' : (m.payload?.from || 'unknown'),
-                fromAddress: isEnc ? '' : (m.payload?.from || ''),
-                receivedTime: new Date(receivedMs).toISOString(),
-                summary: isEnc ? '' : (stripHtml(m.payload?.body || '').slice(0, 200)),
-                body: isEnc ? '' : (m.payload?.body || ''),
-                bodyHtml: isEnc ? '' : (m.payload?.bodyHtml || (m.payload?.body?.includes('<') ? m.payload.body : '')),
-                encrypted: isEnc,
-                contentHash: m.envelope?.contentHash || m.plaintextHash || '',
-                type: m.type || 'a2a',
-                frozen,
-                decayPct: frozen ? 0 : Math.min(100, Math.round((ageMs / decayMs) * 100)),
-                expiresAt: frozen ? null : new Date(receivedMs + decayMs).toISOString(),
+                subject: m.subject || '(no subject)',
+                sender: m.from || m.senderAgent || 'unknown',
+                fromAddress: m.from || '',
+                receivedTime: receivedMs ? new Date(receivedMs).toISOString() : '',
+                summary: m.content || (m.payload?.body ? stripHtml(m.payload.body).slice(0, 200) : ''),
+                body: m.payload?.body || m.content || '',
+                bodyHtml: m.payload?.bodyHtml || (m.payload?.body?.includes('<') ? m.payload.body : ''),
+                encrypted: !!m.encrypted,
+                contentHash: m.plaintextHash || '',
+                type: m.channel || m.type || 'a2a',
+                decayPct: 0,
+                expiresAt: '',
               };
-            }).filter((m: any) => m.frozen || m.decayPct < 100);
+            });
             setMessages(kvMessages);
           }
         } catch {}
@@ -421,6 +416,8 @@ export default function InboxPage() {
           fromAddress: m.fromAddress || '',
           receivedTime: m.receivedTime || '',
           summary: stripHtml(m.summary || ''),
+          body: m.body || m.summary || '',
+          bodyHtml: m.bodyHtml || '',
           encrypted: m.encrypted ?? false,
           contentHash: m.contentHash || '',
           type: m.type || '',
@@ -432,7 +429,7 @@ export default function InboxPage() {
       setError(e?.message || 'Failed to load inbox');
     }
     setLoading(false);
-  }, [name, resolved, isAgent, isAgentAlias, isGlassbox, agentName]);
+  }, [name, resolved, isAgent, isGlassbox, agentName]);
 
   useEffect(() => {
     if (resolved?.exists && classificationDone) loadInbox();
@@ -453,7 +450,6 @@ export default function InboxPage() {
       inboxSubjects.add(msg.subject.toLowerCase().trim());
       feed.push({
         key: `msg-${msg.id}`,
-        id: msg.id,
         subject: msg.subject,
         from: msg.sender,
         timestamp: ts,
@@ -584,22 +580,29 @@ export default function InboxPage() {
           <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-3">
               <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
+              <span className="rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-zinc-500/10 text-zinc-400 ring-zinc-500/20">MESSAGES CLEARED</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-3 rounded-full bg-zinc-400" />
+              <span className="text-sm font-medium text-amber-300">8-day history window — inbox address is permanent</span>
             </div>
             <p className="text-center text-sm text-[var(--muted)] max-w-md">
-                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Molt to <strong className="text-amber-300">Pupa ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
+              Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days.
+              Upgrade to <strong className="text-amber-300">Lite ($10)</strong> for 30-day retention,
+              sending, and a <strong className="text-white">Gnosis Safe body</strong>.
             </p>
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <Link
                 href={`/nftmail?upgrade=lite&label=${name}`}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 text-center"
               >
-                Molt to Pupa — $10
+                Upgrade to Lite — $10
               </Link>
               <Link
                 href={`/nftmail?upgrade=premium&label=${name}`}
                 className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-6 py-2.5 text-sm font-semibold text-violet-300 transition hover:bg-violet-500/20 text-center"
               >
-                Go Imago — $24
+                Go Premium — $60/yr
               </Link>
             </div>
           </div>
@@ -623,17 +626,14 @@ export default function InboxPage() {
               <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
             </Link>
             {authenticated ? (
-              <div className="flex items-center gap-2">
-                <Link href="/dashboard" className="rounded-full border border-violet-500/30 bg-violet-500/8 px-4 py-1.5 text-[10px] font-semibold text-violet-300 transition hover:bg-violet-500/16">
-                  Dashboard
-                </Link>
-                <button onClick={logout} className="rounded-full border border-emerald-500/30 bg-emerald-500/8 px-4 py-1.5 text-[10px] font-semibold text-emerald-300 transition hover:border-red-500/30 hover:text-red-400">
-                  {user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : 'Disconnect'}
-                </button>
-              </div>
-            ) : (
-              <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">Connect</button>
-            )}
+            <button onClick={logout} className="rounded-full border border-emerald-500/30 bg-emerald-500/8 px-4 py-1.5 text-[10px] font-semibold text-emerald-300 transition hover:border-red-500/30 hover:text-red-400">
+              {user?.wallet?.address ? `${user.wallet.address.slice(0, 6)}...${user.wallet.address.slice(-4)}` : 'Disconnect'}
+            </button>
+          ) : (
+            <button onClick={login} className="rounded-full border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">
+              Connect Wallet
+            </button>
+          )}
           </header>
 
           <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
@@ -690,7 +690,7 @@ export default function InboxPage() {
                   <div className="h-3 w-3 rounded-full bg-red-400" />
                   <span className="text-sm font-medium text-red-300">Collection not approved</span>
                 </div>
-                <p className="text-center text-sm text-[var(--muted)]">
+                <p className="text-center text-sm text-[var(--muted)] max-w-md">
                   Collection not approved — <strong className="text-white">apply to whitelist</strong> your NFT collection
                 </p>
                 <div className="flex gap-3">
@@ -799,38 +799,6 @@ export default function InboxPage() {
             </span>
           </div>
 
-          {/* ── Owner controls: Dashboard + Privacy toggle ── */}
-          {isOwner && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/dashboard?email=${encodeURIComponent(`${agentName}@nftmail.box`)}`}
-                className="rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]"
-              >
-                Dashboard
-              </Link>
-              {(isAgent || isAgentAlias) && privacyTier !== 'hard-privacy' && (
-                <button
-                  onClick={handlePrivacyToggle}
-                  disabled={togglingPrivacy}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
-                    privacyTier === 'private'
-                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                      : 'border-red-500/30 bg-red-500/10 text-red-300'
-                  } disabled:opacity-50`}
-                >
-                  {togglingPrivacy ? (
-                    <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
-                  ) : privacyTier === 'private' ? (
-                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                  ) : (
-                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                  )}
-                  {privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Glassbox: public audit log explanation */}
           {isGlassbox && (
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
@@ -896,24 +864,6 @@ export default function InboxPage() {
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${isOut ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-blue-500/10 text-blue-300 ring-blue-500/20'}`}>{isOut ? '↑ out' : '↓ in'}</span>
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${channelColor}`}>{item.channel}</span>
                         <span className="text-[10px] text-[var(--muted)] whitespace-nowrap">{item.timestamp ? formatTimeAgo(new Date(item.timestamp).toISOString()) : ''}</span>
-                        {isOwner && item.id && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('Delete this message permanently?')) return;
-                              await fetch(WORKER_URL, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id }),
-                              });
-                              setMessages(prev => prev.filter(m => m.id !== item.id));
-                            }}
-                            className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-0.5 text-[9px] font-medium text-red-300 transition hover:bg-red-500/15"
-                            title="Delete"
-                          >
-                            <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                            Delete
-                          </button>
-                        )}
                       </div>
                     </div>
                     {item.body && !item.encrypted && (
@@ -1012,24 +962,14 @@ export default function InboxPage() {
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
 
-  // Privacy model: use the stored tier from the worker for all account types.
-  // Worker handles TLD defaults (molt/openclaw/picoclaw = exposed, nftmail/vault/agent = private).
-  // Human streams without agent status are always private from public (blurred unless owner).
-  const isMoltAgent = isAgent && agentTld === 'molt.gno';
-  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = (!isAgent && !isAgentAlias)
-    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // pure human stream always private
-    : privacyTier;  // agents + agent aliases: use stored tier from worker
-  const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
-
-  const tierLabel = (isGlassbox && effectivePrivacyTier === 'exposed') ? 'GLASSBOX' : effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
-  const tierColor = (isGlassbox && effectivePrivacyTier === 'exposed')
-    ? 'text-violet-300 bg-violet-500/10 ring-violet-500/20'
-    : effectivePrivacyTier === 'hard-privacy'
+  const tierLabel = privacyTier === 'hard-privacy' ? 'HARD PRIVACY' : privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
+  const tierColor = privacyTier === 'hard-privacy'
     ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
-    : effectivePrivacyTier === 'private'
+    : privacyTier === 'private'
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
-    : 'text-red-300 bg-red-500/10 ring-red-500/20';
-  const dotColor = (isGlassbox && effectivePrivacyTier === 'exposed') ? 'bg-violet-400' : effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
+    : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
+  const dotColor = privacyTier === 'hard-privacy' ? 'bg-cyan-400' : privacyTier === 'private' ? 'bg-emerald-400' : 'bg-amber-400';
+  const isBlurred = privacyTier === 'private';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -1068,38 +1008,43 @@ export default function InboxPage() {
               </span>
             </div>
 
-            {/* Privacy toggle: agents only — owner can toggle exposed/private */}
-            {isOwner && (isAgent || isAgentAlias) && privacyTier !== 'hard-privacy' && (
+            {/* Privacy toggle: exposed ↔ private — only for authenticated owner */}
+            {isOwner ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrivacyToggle}
-                disabled={togglingPrivacy}
+                disabled={togglingPrivacy || privacyTier === 'hard-privacy'}
                 className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition ${
                   privacyTier === 'private'
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : 'border-red-500/30 bg-red-500/10 text-red-300'
+                    : privacyTier === 'hard-privacy'
+                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 cursor-default'
+                    : 'border-[var(--border)] bg-black/20 text-[var(--muted)] hover:text-white'
                 } disabled:opacity-50`}
               >
                 {togglingPrivacy ? (
                   <div className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
-                ) : privacyTier === 'private' ? (
+                ) : privacyTier !== 'exposed' ? (
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                 ) : (
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 )}
-                {privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
+                {privacyTier === 'hard-privacy' ? 'LOCKED' : privacyTier === 'private' ? 'PRIVATE' : 'EXPOSED'}
               </button>
+                {privacyTier === 'exposed' && (
+                <span className="text-[9px] text-[var(--muted)]">toggle to blur</span>
+              )}
             </div>
+          ) : (
+            <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
+              privacyTier === 'private' ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
+              : privacyTier === 'hard-privacy' ? 'text-cyan-300 bg-cyan-500/10 ring-cyan-500/20'
+              : ''
+            }`}>
+              {privacyTier === 'private' ? 'PRIVATE' : privacyTier === 'hard-privacy' ? 'HARD PRIVACY' : ''}
+            </span>
           )}
           </div>
-
-          {/* Exposed warning for glassbox agents */}
-          {(isAgent || isAgentAlias) && effectivePrivacyTier === 'exposed' && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2">
-              <svg className="h-3.5 w-3.5 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-              <span className="text-[10px] text-red-300">This inbox is publicly exposed. All messages are visible to anyone — Glass Box transparency is active.</span>
-            </div>
-          )}
 
           {/* Safe body address + decay bar + Larva warning */}
           {(safeAddress || decayPct !== null || showLarvaWarning || isImago) && (
@@ -1120,7 +1065,7 @@ export default function InboxPage() {
               )}
               {isImago && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] text-cyan-300/80">✦ Sovereign — Persistent History</span>
+                  <span className="text-[9px] text-cyan-300/80">✦ Sovereign Identity — no decay</span>
                 </div>
               )}
               {decayPct !== null && !isImago && daysLeft !== null && (
@@ -1142,7 +1087,7 @@ export default function InboxPage() {
               )}
               {showLarvaWarning && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5">
-                  <span className="text-[10px] text-amber-300">⚠ Your history window ends in {daysLeft}d. Cycle to Pupa to extend to 30 days and deploy your Mirror Body.</span>
+                  <span className="text-[10px] text-amber-300">⚠ Your memory is nearly full ({daysLeft}d left). Molt to Pupa to extend to 30 days and deploy your Mirror Body.</span>
                   <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Molt →</Link>
                 </div>
               )}
@@ -1150,23 +1095,55 @@ export default function InboxPage() {
           )}
         </div>
 
-        {/* ── Owner action bar: Dashboard + Compose (if canSend) ── */}
+        {/* ── Email Forwarding Panel (Imago only) ── */}
+        {isOwner && isImago && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <ForwardingSetup
+              agentName={name}
+              ownerAddress={user?.wallet?.address || ''}
+              currentConfig={forwardingConfig || undefined}
+              onSave={handleSaveForwarding}
+            />
+          </div>
+        )}
+
+        {/* ── Folder tabs + Compose button ── */}
         {isOwner && (
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/dashboard?email=${encodeURIComponent(name + (isAgent ? '' : '@nftmail.box'))}`}
-              className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-              Dashboard
-            </Link>
-            {canSend && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-0.5">
               <button
-                onClick={() => setActiveFolder(activeFolder === 'compose' ? 'inbox' : 'compose')}
-                className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
+                onClick={() => setActiveFolder('inbox')}
+                className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
+                  activeFolder === 'inbox'
+                    ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]'
+                    : 'text-[var(--muted)] hover:text-white'
+                }`}
               >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-                {activeFolder === 'compose' ? 'Back to Inbox' : 'Compose'}
+                Inbox {messages.length > 0 ? `(${messages.length})` : ''}
+              </button>
+              {canSend && (
+                <button
+                  onClick={() => setActiveFolder('compose')}
+                  className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
+                    activeFolder === 'compose'
+                      ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)]'
+                      : 'text-[var(--muted)] hover:text-white'
+                  }`}
+                >
+                  Compose
+                </button>
+              )}
+            </div>
+            {canSend && activeFolder === 'inbox' && (
+              <button
+                onClick={() => setActiveFolder('compose')}
+                className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.3)] bg-[rgba(0,163,255,0.08)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.16)] transition"
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                New Message
               </button>
             )}
           </div>
@@ -1184,27 +1161,51 @@ export default function InboxPage() {
             <ComposeEmail
               label={name}
               ownerWallet={user?.wallet?.address || ''}
-              domains={(isAgent || isAgentAlias) && isImago ? ['nftmail.box', 'ghostmail.box'] : ['nftmail.box']}
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />
           </div>
         )}
 
-        {/* ---- Evolve panel: shown to owner on basic/lite tier with safe ---- */}
-        {isOwner && accountTier === 'basic' && safeAddress && (
+        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
+        {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+              <p className="text-sm font-semibold text-white">
+                {accountTier === 'basic' ? 'You are a Larva.' : 'You are a Pupa.'}
+              </p>
+              <span className="ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 bg-amber-500/10 text-amber-300 ring-amber-500/20">
+                {accountTier === 'basic' ? 'LARVA' : 'PUPA'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[var(--muted)]">
+              {accountTier === 'basic'
+                ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
+                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
+            </p>
             <div className="grid grid-cols-2 gap-2">
+              {accountTier === 'basic' && (
+                <Link
+                  href={`/nftmail?upgrade=lite&label=${name}`}
+                  className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                >
+                  <span className="block text-sm font-bold">10 xDAI</span>
+                  Molt to Pupa
+                </Link>
+              )}
               <Link
-                href={`/nftmail?upgrade=lite&label=${name}`}
-                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                href={`/nftmail?upgrade=premium&label=${name}`}
+                className={`rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-violet-300 transition hover:bg-violet-500/20 ${
+                  accountTier === 'basic' ? '' : 'col-span-2'
+                }`}
               >
-                <span className="block text-sm font-bold">10 xDAI</span>
-                Molt to Pupa
+                <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
+                Evolve to Imago
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
-              <p className="text-[10px] text-amber-300">&#9888; {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining &#8212; renew before decay</p>
+              <p className="text-[10px] text-amber-300">⚠ {daysLeft} day{daysLeft === 1 ? '' : 's'} remaining — renew before decay</p>
             )}
           </div>
         )}
@@ -1223,8 +1224,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Private inbox: blurred placeholder (account exists + blurred for non-owner) ── */}
-        {!loading && !error && isBlurred && messages.length === 0 && (
+        {/* ── Private inbox: blurred placeholder (account exists + private/hard-privacy) ── */}
+        {!loading && !error && privacyTier !== 'exposed' && messages.length === 0 && (
           <div className="space-y-2 select-none" aria-hidden="true">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2 blur-sm opacity-60">
@@ -1249,8 +1250,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Empty state: account exists, not blurred, but no emails ── */}
-        {!loading && !error && !isBlurred && messages.length === 0 && (
+        {/* ── Empty state: account exists, exposed, but no emails ── */}
+        {!loading && !error && privacyTier === 'exposed' && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <svg className="h-14 w-14 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
             <p className="text-sm text-[var(--muted)]">Inbox empty</p>
@@ -1260,16 +1261,22 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Message count ── */}
+        {/* ── Message count + Dashboard link ── */}
         {!loading && messages.length > 0 && (
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
                 INBOX ({messages.length})
               </span>
+              <Link
+                href={isOwner ? `/dashboard?email=${encodeURIComponent(name + '@nftmail.box')}` : '/nftmail'}
+                className="rounded-md border border-[var(--border)] bg-black/20 px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition"
+              >
+                Dashboard
+              </Link>
             </div>
             <span className="text-[9px] text-[var(--muted)]">
-              {isImago ? '✦ Sovereign — Persistent History' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
+              {isImago ? '✦ Sovereign — no decay' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
             </span>
           </div>
         )}
@@ -1290,7 +1297,7 @@ export default function InboxPage() {
                       ? 'border-cyan-500/20 bg-cyan-500/5'
                       : 'border-[var(--border)] bg-[var(--card)]'
                   } ${isExpanded ? 'ring-1 ring-[rgba(0,163,255,0.2)]' : ''}`}
-                  style={isBlurred && !msg.encrypted ? { filter: 'blur(8px)', WebkitFilter: 'blur(8px)', pointerEvents: 'none', userSelect: 'none' } : undefined}
+                  style={isBlurred && !msg.encrypted ? { filter: 'blur(6px)', WebkitFilter: 'blur(6px)' } : undefined}
                 >
                   {/* ── Collapsed row ── */}
                   <button
@@ -1315,7 +1322,7 @@ export default function InboxPage() {
                           </span>
                         </div>
                         {!msg.encrypted && (
-                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={msg.sender} reveal={isOwner} /></p>
+                          <p className="mt-0.5 text-xs text-[var(--muted)] truncate"><BlurFrom from={msg.sender} /></p>
                         )}
                         {!msg.encrypted && !isExpanded && msg.summary && (
                           <p className="mt-0.5 text-xs text-[var(--muted)] opacity-50 truncate">{stripHtml(msg.summary).slice(0, 120)}</p>
@@ -1358,7 +1365,7 @@ export default function InboxPage() {
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">From:</span>
-                                    <BlurFrom from={decrypted.from} reveal={isOwner} />
+                                    <BlurFrom from={decrypted.from} />
                                   </div>
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className="text-[var(--muted)]">Subject:</span>
@@ -1412,7 +1419,7 @@ export default function InboxPage() {
                           <div className="space-y-1">
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">From:</span>
-                              <BlurFrom from={msg.sender} reveal={isOwner} />
+                              <BlurFrom from={msg.sender} />
                             </div>
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-[var(--muted)]">Date:</span>
@@ -1617,50 +1624,21 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Claim panel: shown at footer for trial accounts without safe ── */}
-        {isOwner && accountTier === 'basic' && !safeAddress && (
-          <div className="mt-auto rounded-xl border border-[rgba(255,120,40,0.25)] bg-[var(--card)] p-4 space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
-              <span className="text-xs font-semibold text-orange-300">CLAIM YOUR PERMANENT INBOX</span>
+        {/* ── Evolve CTA ── */}
+        <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
+              <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
             </div>
-            <h3 className="text-sm font-semibold text-white">Have a claim code?</h3>
-            <p className="text-xs text-[var(--muted)]">
-              Upgrade your trial inbox to permanent NFT ownership with a connected wallet.
-            </p>
-            <div className="flex gap-2">
-              <Link
-                href="/claim"
-                className="flex-1 rounded-lg bg-[rgba(255,120,40,0.15)] border border-[rgba(255,120,40,0.35)] px-4 py-2.5 text-sm font-semibold text-orange-300 text-center hover:bg-[rgba(255,120,40,0.25)] transition"
-              >
-                Claim inbox &rarr;
-              </Link>
-            </div>
-            <div className="flex items-center gap-3 pt-2 border-t border-[rgba(255,120,40,0.25)]">
-              {['Permanent NFT', 'Full features', 'No limits'].map((feature) => (
-                <span key={feature} className="text-[10px] text-[var(--muted)]"><span className="text-orange-400">+</span> {feature}</span>
-              ))}
-            </div>
+            <Link
+              href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
+              className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
+            >
+              Evolve
+            </Link>
           </div>
-        )}
-
-        {/* ── Evolve CTA — shown for basic tier with safe (already claimed) ── */}
-        {accountTier === 'basic' && safeAddress && (
-          <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium text-white">Cycle from Larva to Pupa to Imago</p>
-                <p className="mt-0.5 text-[10px] text-[var(--muted)]">Paid-tier Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
-              </div>
-              <Link
-                href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
-                className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
-              >
-                Molt
-              </Link>
-            </div>
-          </div>
-        )}
+        </div>
 
         <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
           nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
