@@ -49,13 +49,15 @@ function AgentLandingPage({ onClaim }: { onClaim: () => void }) {
             <div className="flex items-baseline gap-2">
               <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-xl tracking-wide">nftmail.box</span>
               <span className="text-[rgb(160,220,255)]/60 text-sm">[for-agents]</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/beta-badge.svg" alt="beta" style={{ height: '0.5rem', width: 'auto', opacity: 0.7 }} />
             </div>
           </Link>
           <a
             href="https://ghostagent.ninja"
             className="text-[10px] text-[var(--muted)] hover:text-white transition"
           >
-            GHOSTAGENT.NINJA <span className="text-emerald-400/60">BETA</span>
+            GHOSTAGENT.NINJA
           </a>
         </header>
 
