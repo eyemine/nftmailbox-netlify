@@ -45,8 +45,11 @@ export async function GET(request: NextRequest) {
         chain_id: onChainStats.chainId,
         contracts: {
           molt_gno: '0x4b54213c1e5826497ff39ba8c87a7b75d2bc3c50',
+          nftmail_gno: '0x46c37365572C9994812AAA41fD04eB56D05469D0',
           openclaw_gno: '0xbD8285A8455CCEC4bE671D9eE3924Ab1264fcbbe',
           picoclaw_gno: '0xe5fd65562698f46ea9762bd38141535b1fd875b5',
+          vault_gno: '0xc6b184a38da64d1d535674dafb9ce2440058ec4e',
+          agent_gno: '0x608071875bcc0ef0b934f8a2367672d8c472cacf',
         },
         last_updated: onChainStats.lastUpdated
       },
@@ -71,14 +74,20 @@ export async function GET(request: NextRequest) {
         total_accounts: '0',
         breakdown: {
           molt_gno: '0',
+          nftmail_gno: '0',
           openclaw_gno: '0',
           picoclaw_gno: '0',
+          vault_gno: '0',
+          agent_gno: '0',
         },
         chain_id: 100,
         contracts: {
           molt_gno: '0x4b54213c1e5826497ff39ba8c87a7b75d2bc3c50',
+          nftmail_gno: '0x46c37365572C9994812AAA41fD04eB56D05469D0',
           openclaw_gno: '0xbD8285A8455CCEC4bE671D9eE3924Ab1264fcbbe',
           picoclaw_gno: '0xe5fd65562698f46ea9762bd38141535b1fd875b5',
+          vault_gno: '0xc6b184a38da64d1d535674dafb9ce2440058ec4e',
+          agent_gno: '0x608071875bcc0ef0b934f8a2367672d8c472cacf',
         },
         last_updated: new Date()
       },

@@ -9,14 +9,20 @@ interface AdminStats {
     total_accounts: string;
     breakdown: {
       molt_gno: string;
+      nftmail_gno: string;
       openclaw_gno: string;
       picoclaw_gno: string;
+      vault_gno: string;
+      agent_gno: string;
     };
     chain_id: number;
     contracts: {
       molt_gno: string;
+      nftmail_gno: string;
       openclaw_gno: string;
       picoclaw_gno: string;
+      vault_gno: string;
+      agent_gno: string;
     };
     last_updated: string;
   };
@@ -132,16 +138,28 @@ export default function NftmailAdminStats() {
 
   const chartData = [
     {
-      name: 'Molt.gno',
+      name: 'molt.gno',
       accounts: parseInt(stats?.on_chain.breakdown.molt_gno || '0'),
     },
     {
-      name: 'Openclaw.gno',
+      name: 'nftmail.gno',
+      accounts: parseInt(stats?.on_chain.breakdown.nftmail_gno || '0'),
+    },
+    {
+      name: 'openclaw.gno',
       accounts: parseInt(stats?.on_chain.breakdown.openclaw_gno || '0'),
     },
     {
-      name: 'Picoclaw.gno',
+      name: 'picoclaw.gno',
       accounts: parseInt(stats?.on_chain.breakdown.picoclaw_gno || '0'),
+    },
+    {
+      name: 'vault.gno',
+      accounts: parseInt(stats?.on_chain.breakdown.vault_gno || '0'),
+    },
+    {
+      name: 'agent.gno',
+      accounts: parseInt(stats?.on_chain.breakdown.agent_gno || '0'),
     },
   ];
 
@@ -252,7 +270,7 @@ export default function NftmailAdminStats() {
                     <div className="text-sm font-medium text-white">On-chain Registrars</div>
                     <div className="text-xs text-gray-500">Gnosis Chain ID: {stats.on_chain.chain_id}</div>
                   </div>
-                  <div className="text-xs text-cyan-300">molt.gno • openclaw.gno • picoclaw.gno</div>
+                  <div className="text-xs text-cyan-300">molt • nftmail • openclaw • picoclaw • vault • agent</div>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-black/20 rounded-lg">
                   <div>
