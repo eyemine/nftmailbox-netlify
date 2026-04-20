@@ -288,8 +288,10 @@ export default function InboxPage() {
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
-  // ECIES decrypt: only active for agent inboxes where owner is authenticated
-  const eciesAgent = isAgent && isOwner ? agentName : null;
+  // ECIES decrypt: only active for agent inboxes where owner is authenticated.
+  // Pass the full route name (with trailing _) so the hook reads the agent inbox
+  // KV key distinct from the human inbox. The hook internally strips _ for pubkey/privkey.
+  const eciesAgent = isAgent && isOwner ? name : null;
   const {
     keyState,
     hasKey,
@@ -954,6 +956,22 @@ export default function InboxPage() {
     : null;
   const isImago = accountTier === 'premium' || accountTier === 'ghost';
   const showLarvaWarning = accountTier === 'basic' && daysLeft !== null && daysLeft <= 7;
+
+  // TEMP DEBUG: confirm why ForwardingSetup panel (gated on isOwner && isImago) may not render.
+  // Remove once verified in production.
+  if (typeof window !== 'undefined') {
+    // eslint-disable-next-line no-console
+    console.log('[forwarding-gate]', {
+      name,
+      accountTier,
+      isImago,
+      isOwner,
+      authenticated,
+      onChainOwner: resolved?.onChainOwner,
+      connectedWallet: user?.wallet?.address,
+      linkedAddresses: user?.linkedAccounts?.map((a: any) => a.address).filter(Boolean),
+    });
+  }
 
   const acctTierLabel = accountTier === 'ghost' ? 'AGENT' : accountTier === 'premium' ? 'IMAGO' : accountTier === 'lite' ? 'PUPA' : 'LARVA';
   const acctTierColor = accountTier === 'ghost'
