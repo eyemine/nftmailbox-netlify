@@ -46,6 +46,7 @@ interface InboxMessage {
   subject: string;
   sender: string;
   fromAddress: string;
+  toAddress?: string;
   receivedTime: string;
   summary: string;
   body: string;
@@ -673,7 +674,7 @@ export default function DashboardPage() {
                         <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
                           <p className="text-sm font-semibold text-white">{selectedMessage.subject || '(no subject)'}</p>
                           <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedMessage.sender}</p>
-                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedName?.email}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedMessage.toAddress || selectedName?.email}</p>
                           <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Date</span> {formatTimeAgo(selectedMessage.receivedTime)}</p>
                         </div>
 
@@ -689,7 +690,17 @@ export default function DashboardPage() {
                             <button
                               disabled={!canSend}
                               title={!canSend ? 'PUPA+ required to reply' : 'Reply'}
-                              onClick={() => { if (!canSend) return; setComposeTo(selectedMessage.fromAddress || selectedMessage.sender); setComposeSubject(`Re: ${selectedMessage.subject}`); setTab('compose'); }}
+                              onClick={() => {
+                                if (!canSend) return;
+                                setComposeTo(selectedMessage.fromAddress || selectedMessage.sender);
+                                setComposeSubject(`Re: ${selectedMessage.subject}`);
+                                // Auto-select the send domain matching the original To address
+                                // (so a reply to an email received at @ghostmail.box sends from @ghostmail.box).
+                                const toAddr = (selectedMessage.toAddress || '').toLowerCase();
+                                if (toAddr.includes('@ghostmail.box')) setComposeDomain('ghostmail.box');
+                                else if (toAddr.includes('@nftmail.box')) setComposeDomain('nftmail.box');
+                                setTab('compose');
+                              }}
                               className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
                             >
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" /></svg>
@@ -754,7 +765,7 @@ export default function DashboardPage() {
                             )
                           ) : viewMode === 'headers' ? (
                             <div className="space-y-1.5 font-mono text-[11px]">
-                              {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
+                              {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedMessage.toAddress || selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
                                 <div key={k} className="flex gap-2"><span className="text-zinc-500 w-24 flex-shrink-0">{k}</span><span className="text-zinc-300 break-all">{v}</span></div>
                               ))}
                             </div>

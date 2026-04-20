@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
             subject: isEnc ? '(encrypted)' : (m.payload?.subject || '(no subject)'),
             sender: isEnc ? '' : (m.payload?.from || 'unknown'),
             fromAddress: isEnc ? '' : (m.payload?.from || ''),
+            toAddress: isEnc ? '' : (m.payload?.to || ''),
             receivedTime: new Date(receivedMs).toISOString(),
             summary: isEnc ? '' : (m.payload?.body?.slice(0, 200) || ''),
             body: isEnc ? '' : (m.payload?.body || ''),
