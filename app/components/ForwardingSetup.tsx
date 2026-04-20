@@ -156,8 +156,8 @@ export default function ForwardingSetup({ agentName, ownerAddress, currentConfig
                       : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
                   }`}
                 >
-                  <div className="text-sm font-semibold mb-1">Imago</div>
-                  <div className="text-xs opacity-70">Full content + metadata</div>
+                  <div className="text-sm font-semibold mb-1">Full</div>
+                  <div className="text-xs opacity-70">Headers + parsed intent metadata</div>
                 </button>
                 <button
                   type="button"
@@ -168,18 +168,18 @@ export default function ForwardingSetup({ agentName, ownerAddress, currentConfig
                       : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
                   }`}
                 >
-                  <div className="text-sm font-semibold mb-1">Ghost</div>
-                  <div className="text-xs opacity-70">Content only (minimal)</div>
+                  <div className="text-sm font-semibold mb-1">Stealth</div>
+                  <div className="text-xs opacity-70">Plaintext body only, no headers or metadata</div>
                 </button>
               </div>
             </div>
 
             <div className="p-3 bg-blue-900/20 border border-blue-500/20 rounded-lg">
               <p className="text-xs text-blue-200">
-                <span className="font-semibold">Imago level:</span> Forwards full email content including parsed metadata for agent intelligence.
+                <span className="font-semibold">Full:</span> Forwards email with headers and parsed intent metadata — useful for downstream agent intelligence and filtering.
               </p>
               <p className="text-xs text-blue-200 mt-1">
-                <span className="font-semibold">Ghost level:</span> Forwards plain text content only - minimal metadata footprint.
+                <span className="font-semibold">Stealth:</span> Forwards plaintext body only. No headers, no routing chain, no agent classifications leaked to the target inbox.
               </p>
             </div>
           </div>

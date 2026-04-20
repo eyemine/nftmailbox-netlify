@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
+import ForwardingSetup from '../components/ForwardingSetup';
 
 function stripHtml(html: string): string {
   const s = html
@@ -56,7 +57,7 @@ interface InboxMessage {
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'sent' | 'compose' | 'killswitch';
+type Tab = 'inbox' | 'sent' | 'compose' | 'killswitch' | 'settings';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -339,6 +340,40 @@ export default function DashboardPage() {
   const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias;
   const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
 
+  // Forwarding config (loaded on demand when Settings tab opens for an Imago inbox).
+  const [forwardingConfig, setForwardingConfig] = useState<{
+    enabled: boolean;
+    targetEmail: string;
+    level: 'imago' | 'ghost';
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedName || !isImago) { setForwardingConfig(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/forwarding/${selectedName.label}`);
+        if (res.ok && !cancelled) {
+          setForwardingConfig(await res.json());
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedName, isImago]);
+
+  const handleSaveForwarding = async (config: any) => {
+    if (!selectedName || !preferredWallet?.address) {
+      throw new Error('Wallet not connected');
+    }
+    const res = await fetch(`/api/forwarding/${selectedName.label}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...config, ownerAddress: preferredWallet.address }),
+    });
+    if (!res.ok) throw new Error('Failed to save forwarding settings');
+    setForwardingConfig(await res.json());
+  };
+
   if (!ready) return null;
 
   return (
@@ -481,6 +516,13 @@ export default function DashboardPage() {
                   className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
                 >
                   Burn
+                </button>
+                <button
+                  onClick={() => setTab('settings')}
+                  title="Forwarding + account settings"
+                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'settings' ? 'bg-cyan-500/12 text-cyan-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+                >
+                  Settings
                 </button>
               </div>
             </div>
@@ -831,6 +873,33 @@ export default function DashboardPage() {
                   </div>
                   {sendResult && <p className={`text-xs ${sendResult.startsWith('Sent') ? 'text-emerald-400' : 'text-red-400'}`}>{sendResult}</p>}
                 </div>
+              </div>
+            )}
+
+            {/* ── SETTINGS TAB ── */}
+            {tab === 'settings' && selectedName && (
+              <div className="space-y-4">
+                {isImago ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-5">
+                    <ForwardingSetup
+                      agentName={selectedName.label}
+                      ownerAddress={preferredWallet?.address || ''}
+                      currentConfig={forwardingConfig || undefined}
+                      onSave={handleSaveForwarding}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-5 text-center">
+                    <h3 className="text-sm font-semibold text-white mb-2">Email Forwarding</h3>
+                    <p className="text-xs text-[var(--muted)] mb-4">Forwarding to an external inbox requires IMAGO tier.</p>
+                    <Link
+                      href={`/nftmail?upgrade=imago&label=${selectedName.label}`}
+                      className="inline-block rounded-lg border border-violet-500/35 bg-violet-500/8 px-4 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/16 transition"
+                    >
+                      Molt to Imago →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
