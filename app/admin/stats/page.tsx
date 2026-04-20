@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface AdminStats {
   on_chain: {
@@ -146,6 +145,8 @@ export default function NftmailAdminStats() {
     },
   ];
 
+  const maxAccounts = Math.max(...chartData.map(d => d.accounts), 1);
+
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,#0a0a0f,#03040a)]">
       <div className="mx-auto max-w-6xl px-4 py-8">
@@ -224,30 +225,21 @@ export default function NftmailAdminStats() {
             {/* Chart */}
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
               <h3 className="text-lg font-semibold text-white mb-4">Account Distribution by Registrar</h3>
-              <div className="w-full" style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey="name" 
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      stroke="#9ca3af"
-                    />
-                    <YAxis 
-                      tick={{ fill: '#9ca3af', fontSize: 12 }}
-                      stroke="#9ca3af"
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(0,0,0,0.9)', 
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '8px',
-                        color: '#fff'
-                      }}
-                    />
-                    <Bar dataKey="accounts" fill="rgba(0,163,255,0.8)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="space-y-4">
+                {chartData.map((item) => (
+                  <div key={item.name} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-300">{item.name}</span>
+                      <span className="text-cyan-300 font-semibold">{item.accounts}</span>
+                    </div>
+                    <div className="h-8 bg-black/30 rounded-lg overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-cyan-500/80 to-blue-500/80 rounded-lg transition-all duration-500"
+                        style={{ width: `${(item.accounts / maxAccounts) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
