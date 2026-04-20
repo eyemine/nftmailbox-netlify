@@ -87,9 +87,9 @@ export default function ForwardingSetup({ agentName, ownerAddress, currentConfig
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           <div>
-            <p className="text-sm font-semibold text-blue-200">Security Feature</p>
+            <p className="text-sm font-semibold text-blue-200">Wallet-Signed Authorization</p>
             <p className="text-xs text-blue-200/80 mt-1">
-              Forwarding is automatically disabled if NFT ownership is transferred. Your wallet address is verified on each email to prevent unauthorized access.
+              Saving forwarding requests a signature from your connected wallet. The signature proves you own this NFT and authorizes the exact target address — no gas cost, no on-chain tx. Forwarding is invalidated automatically on NFT transfer.
             </p>
           </div>
         </div>
@@ -202,7 +202,7 @@ export default function ForwardingSetup({ agentName, ownerAddress, currentConfig
           disabled={saving}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-semibold py-2.5 px-4 rounded-lg transition disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Save Forwarding Settings'}
+          {saving ? 'Awaiting signature...' : 'Sign & Save Forwarding Settings'}
         </button>
       </form>
     </div>

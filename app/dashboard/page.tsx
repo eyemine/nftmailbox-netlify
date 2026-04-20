@@ -365,12 +365,49 @@ export default function DashboardPage() {
     if (!selectedName || !preferredWallet?.address) {
       throw new Error('Wallet not connected');
     }
+
+    // Require a wallet signature as proof of NFT owner authorization.
+    // This is the v2 forwarding authorization credential (see docs/forwarding-v2-spec.md).
+    // Phase 1: plain personal_sign with a human-readable statement. Upgrade to EIP-712 in Phase 2.
+    const signedAt = Math.floor(Date.now() / 1000);
+    const statement = [
+      'nftmail.box — Authorize Email Forwarding',
+      '',
+      `Agent:   ${selectedName.label}`,
+      `Target:  ${config.enabled ? config.targetEmail : '(disabled)'}`,
+      `Level:   ${config.level}`,
+      `Enabled: ${config.enabled ? 'yes' : 'no'}`,
+      `Owner:   ${preferredWallet.address}`,
+      `Signed:  ${new Date(signedAt * 1000).toISOString()}`,
+    ].join('\n');
+
+    let signature: string;
+    try {
+      const provider = await preferredWallet.getEthereumProvider();
+      signature = await provider.request({
+        method: 'personal_sign',
+        params: [statement, preferredWallet.address],
+      });
+    } catch (err: any) {
+      throw new Error(err?.message || 'Signature rejected');
+    }
+
     const res = await fetch(`/api/forwarding/${selectedName.label}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...config, ownerAddress: preferredWallet.address }),
+      body: JSON.stringify({
+        ...config,
+        ownerAddress: preferredWallet.address,
+        signature,
+        signedAt,
+        statement,
+      }),
     });
-    if (!res.ok) throw new Error('Failed to save forwarding settings');
+    if (!res.ok) {
+      let detail = '';
+      try { const j = await res.json(); detail = j?.error || JSON.stringify(j); } catch {}
+      throw new Error(`Failed to save forwarding settings (${res.status})${detail ? `: ${detail}` : ''}`);
+    }
     setForwardingConfig(await res.json());
   };
 

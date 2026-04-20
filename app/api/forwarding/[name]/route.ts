@@ -50,12 +50,20 @@ export async function POST(
 ) {
   try {
     const agentName = params.name.toLowerCase();
-    const body = await request.json() as ForwardingConfig & { ownerAddress?: string };
-    
+    const body = await request.json() as ForwardingConfig & {
+      ownerAddress?: string;
+      signature?: string;
+      signedAt?: number;
+      statement?: string;
+    };
+
     if (!body.ownerAddress) {
       return NextResponse.json({ error: 'Owner address required for security verification' }, { status: 400 });
     }
-    
+    if (!body.signature || !body.statement || !body.signedAt) {
+      return NextResponse.json({ error: 'Signed authorization required (signature, statement, signedAt)' }, { status: 400 });
+    }
+
     const workerResponse = await fetch(`${WORKER_URL}`, {
       method: 'POST',
       headers: {
@@ -65,19 +73,36 @@ export async function POST(
       body: JSON.stringify({
         action: 'setForwarding',
         agentName,
-        config: body,
+        config: {
+          enabled: body.enabled,
+          targetEmail: body.targetEmail,
+          level: body.level,
+          // Authorization bundle — owner's signed statement is the credential.
+          signature: body.signature,
+          signedAt: body.signedAt,
+          statement: body.statement,
+          signatureVersion: 1,
+        },
         ownerAddress: body.ownerAddress
       })
     });
 
     if (!workerResponse.ok) {
-      return NextResponse.json({ error: 'Failed to save forwarding settings' }, { status: 500 });
+      const workerBody = await workerResponse.text().catch(() => '');
+      console.error('Worker setForwarding failed:', workerResponse.status, workerBody);
+      return NextResponse.json(
+        { error: `Worker error ${workerResponse.status}: ${workerBody.slice(0, 200)}` },
+        { status: 502 }
+      );
     }
 
     const data = await workerResponse.json();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to save forwarding settings:', error);
-    return NextResponse.json({ error: 'Failed to save forwarding settings' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Failed to save forwarding settings' },
+      { status: 500 }
+    );
   }
 }
