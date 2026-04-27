@@ -294,7 +294,8 @@ export default function DashboardPage() {
     return 'bg-red-500';
   };
 
-  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
+  const isAgentAlias = selectedName?.label?.endsWith('_') || false;
+  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias;
   const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
 
   if (!ready) return null;
@@ -386,13 +387,25 @@ export default function DashboardPage() {
                   {isImago ? 'IMAGO' : canSend ? 'PUPA' : 'LARVA'}
                 </span>
               )}
+              {selectedName && (
+                <a
+                  href={`/inbox/${selectedName.label}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
+                >
+                  <span>View Public Inbox</span>
+                  <span className="text-[10px] opacity-60">opens in new tab</span>
+                </a>
+              )}
             </div>
 
-            {/* Privacy toggle — all accounts */}
-            {selectedName && preferredWallet && (
+            {/* Privacy toggle — agent accounts and _ aliases only (human emails are always private) */}
+            {selectedName && preferredWallet && (selectedName.label.endsWith('.agent') || selectedName.label.endsWith('_') || selectedName.email.includes('.agent@')) && (
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
+                isImago={isImago}
                 onPrivacyChange={(enabled: boolean) => { setPrivacyEnabled(enabled); setPrivacyTier(enabled ? 'private' : 'exposed'); }}
               />
             )}
@@ -607,7 +620,6 @@ export default function DashboardPage() {
                           <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
                         </svg>
                         <p className="text-sm text-[var(--muted)]">Select a message to read</p>
-                        <Link href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`} className="mt-1 text-[10px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition">Open public inbox →</Link>
                       </div>
                     )}
                   </div>
