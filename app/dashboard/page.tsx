@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
@@ -8,7 +8,6 @@ import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
-import ForwardingSetup from '../components/ForwardingSetup';
 
 function stripHtml(html: string): string {
   const s = html
@@ -46,7 +45,6 @@ interface InboxMessage {
   subject: string;
   sender: string;
   fromAddress: string;
-  toAddress?: string;
   receivedTime: string;
   summary: string;
   body: string;
@@ -58,8 +56,8 @@ interface InboxMessage {
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'sent' | 'compose' | 'killswitch' | 'settings';
-type ViewMode = 'text' | 'html' | 'headers' | 'source';
+type Tab = 'inbox' | 'compose' | 'killswitch';
+type ViewMode = 'text' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -67,7 +65,6 @@ export default function DashboardPage() {
   const { authenticated, login, logout, ready, user } = usePrivy();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
-  const isAgentAlias = selectedName?.label?.endsWith('_') || false;
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [inboxTier, setInboxTier] = useState<string>('');
   const [inboxNote, setInboxNote] = useState<string>('');
@@ -88,23 +85,14 @@ export default function DashboardPage() {
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string | null>(null);
 
-  // Sent folder state
-  interface SentMessage { id: string; to: string; from: string; subject: string; body: string; sentAt: number; messageId: string; }
-  const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
-  const [loadingSent, setLoadingSent] = useState(false);
-  const [selectedSent, setSelectedSent] = useState<SentMessage | null>(null);
-
   // Kill-switch state
   const [burning, setBurning] = useState(false);
   const [burnResult, setBurnResult] = useState<string | null>(null);
+  const [burnScope, setBurnScope] = useState<'messages' | 'full'>('messages');
 
   // Privacy toggle state
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [privacyTier, setPrivacyTier] = useState<string>('exposed');
-  const [isPublicInbox, setIsPublicInbox] = useState(false);
-
-  // Compose domain state (nftmail.box or ghostmail.box)
-  const [composeDomain, setComposeDomain] = useState<'nftmail.box' | 'ghostmail.box'>('nftmail.box');
 
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
@@ -153,35 +141,6 @@ export default function DashboardPage() {
     } catch {}
   }, [selectedName, selectedMessage]);
 
-  const handleDeleteSent = useCallback(async (sentId: string) => {
-    if (!selectedName) return;
-    try {
-      await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deleteSentMessage', localPart: selectedName.label, sentId }),
-      });
-      setSentMessages(prev => prev.filter(m => m.id !== sentId));
-      if (selectedSent?.id === sentId) setSelectedSent(null);
-    } catch {}
-  }, [selectedName, selectedSent]);
-
-  const fetchSentMessages = useCallback(async () => {
-    if (!selectedName) return;
-    const label = selectedName.label;
-    setLoadingSent(true);
-    try {
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getSentMessages', localPart: label }),
-      });
-      const data = await res.json() as { messages?: SentMessage[] };
-      setSentMessages(data.messages || []);
-    } catch {}
-    finally { setLoadingSent(false); }
-  }, [selectedName]);
-
   // Resolve NFTMail names for connected wallet
   const resolveNames = useCallback(async () => {
     if (!preferredWallet?.address) return;
@@ -222,13 +181,9 @@ export default function DashboardPage() {
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
       setInboxNote(data.note || '');
-      // Get account tier + privacy + glassbox from resolveAddress
-      const resolveData = await resolveRes.json() as { accountTier?: string; privacyTier?: string; isPublic?: boolean };
+      // Get account tier from resolveAddress — inbox API always returns 'free'
+      const resolveData = await resolveRes.json() as { accountTier?: string };
       setInboxTier(resolveData.accountTier || data.tier || '');
-      setPrivacyTier(resolveData.privacyTier || 'exposed');
-      setIsPublicInbox(resolveData.isPublic === true);
-      // Sync privacyEnabled with actual privacy tier for TogglePrivacy component
-      setPrivacyEnabled(resolveData.privacyTier === 'private');
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch inbox');
     } finally {
@@ -246,8 +201,6 @@ export default function DashboardPage() {
     if (selectedName) {
       fetchInbox();
       setSelectedMessage(null);
-      setSentMessages([]);
-      setSelectedSent(null);
     }
   }, [selectedName, fetchInbox]);
 
@@ -261,11 +214,10 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromEmail: `${selectedName.label}@${composeDomain}`,
+          fromEmail: selectedName.email,
           toAddress: composeTo,
           subject: composeSubject,
           content: composeBody,
-          ownerWallet: walletAddress,
         }),
       });
       const data = await res.json() as { error?: string };
@@ -281,32 +233,36 @@ export default function DashboardPage() {
     }
   };
 
-  // Sovereign Kill-Switch: burn all encrypted history
-  const handleBurn = async () => {
+  // Sovereign Kill-Switch: burn inbox messages or full agent identity
+  const handleBurn = async (scope: 'messages' | 'full' = burnScope) => {
     if (!selectedName || !preferredWallet) return;
     setBurning(true);
     setBurnResult(null);
     try {
-      // Request signature from wallet to authorise the burn
       const provider = await preferredWallet.getEthereumProvider();
-      const message = `SOVEREIGN BURN: Permanently delete all inbox data for ${selectedName.email} at ${new Date().toISOString()}`;
+      const scopeLabel = scope === 'full' ? 'ALL IDENTITY DATA AND' : '';
+      const message = `SOVEREIGN BURN: Permanently delete ${scopeLabel} all inbox data for ${selectedName.email} at ${new Date().toISOString()}`;
       const signature = await provider.request({
         method: 'personal_sign',
         params: [message, preferredWallet.address],
       });
 
-      const res = await fetch(WORKER_URL, {
+      const res = await fetch('/api/burn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'purgeInbox',
           localPart: selectedName.label,
           signature,
+          scope,
         }),
       });
-      const data = await res.json() as { error?: string; messagesDeleted?: number };
+      const data = await res.json() as { error?: string; messagesDeleted?: number; identityKeysDeleted?: string[]; scope?: string };
       if (!res.ok) throw new Error(data.error || 'Burn failed');
-      setBurnResult(`Purged ${data.messagesDeleted} messages. Sovereign burn complete.`);
+      const idCount = data.identityKeysDeleted?.length ?? 0;
+      const summary = scope === 'full'
+        ? `Purged ${data.messagesDeleted} messages + ${idCount} identity keys. Full sovereign burn complete.`
+        : `Purged ${data.messagesDeleted} messages. Sovereign burn complete.`;
+      setBurnResult(summary);
       setMessages([]);
       setSelectedMessage(null);
     } catch (err: any) {
@@ -338,79 +294,8 @@ export default function DashboardPage() {
     return 'bg-red-500';
   };
 
-  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias;
+  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
   const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
-
-  // Forwarding config (loaded on demand when Settings tab opens for an Imago inbox).
-  const [forwardingConfig, setForwardingConfig] = useState<{
-    enabled: boolean;
-    targetEmail: string;
-    level: 'imago' | 'ghost';
-  } | null>(null);
-
-  useEffect(() => {
-    if (!selectedName || !isImago) { setForwardingConfig(null); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/forwarding/${selectedName.label}`);
-        if (res.ok && !cancelled) {
-          setForwardingConfig(await res.json());
-        }
-      } catch { /* non-fatal */ }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedName, isImago]);
-
-  const handleSaveForwarding = async (config: any) => {
-    if (!selectedName || !preferredWallet?.address) {
-      throw new Error('Wallet not connected');
-    }
-
-    // Require a wallet signature as proof of NFT owner authorization.
-    // This is the v2 forwarding authorization credential (see docs/forwarding-v2-spec.md).
-    // Phase 1: plain personal_sign with a human-readable statement. Upgrade to EIP-712 in Phase 2.
-    const signedAt = Math.floor(Date.now() / 1000);
-    const statement = [
-      'nftmail.box — Authorize Email Forwarding',
-      '',
-      `Agent:   ${selectedName.label}`,
-      `Target:  ${config.enabled ? config.targetEmail : '(disabled)'}`,
-      `Level:   ${config.level}`,
-      `Enabled: ${config.enabled ? 'yes' : 'no'}`,
-      `Owner:   ${preferredWallet.address}`,
-      `Signed:  ${new Date(signedAt * 1000).toISOString()}`,
-    ].join('\n');
-
-    let signature: string;
-    try {
-      const provider = await preferredWallet.getEthereumProvider();
-      signature = await provider.request({
-        method: 'personal_sign',
-        params: [statement, preferredWallet.address],
-      });
-    } catch (err: any) {
-      throw new Error(err?.message || 'Signature rejected');
-    }
-
-    const res = await fetch(`/api/forwarding/${selectedName.label}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...config,
-        ownerAddress: preferredWallet.address,
-        signature,
-        signedAt,
-        statement,
-      }),
-    });
-    if (!res.ok) {
-      let detail = '';
-      try { const j = await res.json(); detail = j?.error || JSON.stringify(j); } catch {}
-      throw new Error(`Failed to save forwarding settings (${res.status})${detail ? `: ${detail}` : ''}`);
-    }
-    setForwardingConfig(await res.json());
-  };
 
   if (!ready) return null;
 
@@ -470,7 +355,7 @@ export default function DashboardPage() {
         {/* ── Dashboard ── */}
         {authenticated && !loading && names.length > 0 && (
           <>
-            {/* Account selector + tier badge + View Inbox */}
+            {/* Account selector + tier badge */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5">
                 <div className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -501,25 +386,13 @@ export default function DashboardPage() {
                   {isImago ? 'IMAGO' : canSend ? 'PUPA' : 'LARVA'}
                 </span>
               )}
-              {selectedName && (
-                <a
-                  href={`/inbox/${selectedName.label}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-white hover:border-white/20 transition flex items-center gap-1.5"
-                >
-                  <span>View Public Inbox</span>
-                  <span className="text-[10px] opacity-60">opens in new tab</span>
-                </a>
-              )}
             </div>
 
-            {/* Privacy toggle — agent accounts and _ aliases */}
-            {selectedName && preferredWallet && (selectedName.label.endsWith('.agent') || selectedName.label.endsWith('_') || selectedName.email.includes('.agent@')) && (
+            {/* Privacy toggle — all accounts */}
+            {selectedName && preferredWallet && (
               <TogglePrivacy
                 name={selectedName.label}
                 walletAddress={preferredWallet.address}
-                isImago={isImago}
                 onPrivacyChange={(enabled: boolean) => { setPrivacyEnabled(enabled); setPrivacyTier(enabled ? 'private' : 'exposed'); }}
               />
             )}
@@ -528,41 +401,26 @@ export default function DashboardPage() {
             )}
 
             {/* Tabs */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex-1 flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
-                <button
-                  onClick={() => setTab('inbox')}
-                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
-                >
-                  Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
-                </button>
-                <button
-                  onClick={() => { setTab('sent'); fetchSentMessages(); }}
-                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sent' ? 'bg-emerald-500/12 text-emerald-300' : 'text-[var(--muted)] hover:text-white/60'}`}
-                >
-                  Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
-                </button>
-                <button
-                  onClick={() => !isAgentAlias && canSend && setTab('compose')}
-                  title={isAgentAlias ? 'Agent composes via A2A - not available in HITL dashboard' : !canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
-                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : isAgentAlias ? 'cursor-not-allowed opacity-40 text-[var(--muted)]' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
-                >
-                  Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
-                </button>
-                <button
-                  onClick={() => setTab('killswitch')}
-                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
-                >
-                  Burn
-                </button>
-                <button
-                  onClick={() => setTab('settings')}
-                  title="Forwarding + account settings"
-                  className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'settings' ? 'bg-cyan-500/12 text-cyan-300' : 'text-[var(--muted)] hover:text-white/60'}`}
-                >
-                  Settings
-                </button>
-              </div>
+            <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
+              <button
+                onClick={() => setTab('inbox')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
+              </button>
+              <button
+                onClick={() => canSend && setTab('compose')}
+                title={!canSend ? 'Upgrade to PUPA or IMAGO to send' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+              >
+                Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
+              </button>
+              <button
+                onClick={() => setTab('killswitch')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Burn
+              </button>
             </div>
 
             {/* ── INBOX TAB ── */}
@@ -627,7 +485,7 @@ export default function DashboardPage() {
                             <button
                               key={msg.messageId}
                               onClick={() => { setSelectedMessage(msg); markRead(msg.messageId); setViewMode('text'); }}
-                              className={`group w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
+                              className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
                             >
                               <div className="flex items-start gap-2">
                                 <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${!isRead ? 'bg-[rgb(0,163,255)]' : 'bg-transparent'}`} />
@@ -637,20 +495,11 @@ export default function DashboardPage() {
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
                                     <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                                    <div className="flex items-center gap-2">
-                                      {!isImago && (
-                                        <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
-                                          <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
-                                        </div>
-                                      )}
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleDelete(msg.messageId); }}
-                                        title="Delete"
-                                        className="opacity-0 group-hover:opacity-100 rounded p-0.5 text-red-400/40 hover:text-red-400 transition"
-                                      >
-                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                                      </button>
-                                    </div>
+                                    {!isImago && (
+                                      <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
+                                        <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -674,15 +523,15 @@ export default function DashboardPage() {
                         <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
                           <p className="text-sm font-semibold text-white">{selectedMessage.subject || '(no subject)'}</p>
                           <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedMessage.sender}</p>
-                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedMessage.toAddress || selectedName?.email}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedName?.email}</p>
                           <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Date</span> {formatTimeAgo(selectedMessage.receivedTime)}</p>
                         </div>
 
                         {/* View mode bar + action buttons */}
                         <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
                           <div className="flex items-center gap-0.5">
-                            {(['text','html','headers','source'] as ViewMode[]).map(m => (
-                              <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m === 'html' ? 'HTML' : m}</button>
+                            {(['text','headers','source'] as ViewMode[]).map(m => (
+                              <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m}</button>
                             ))}
                           </div>
                           <div className="flex items-center gap-0.5">
@@ -690,17 +539,7 @@ export default function DashboardPage() {
                             <button
                               disabled={!canSend}
                               title={!canSend ? 'PUPA+ required to reply' : 'Reply'}
-                              onClick={() => {
-                                if (!canSend) return;
-                                setComposeTo(selectedMessage.fromAddress || selectedMessage.sender);
-                                setComposeSubject(`Re: ${selectedMessage.subject}`);
-                                // Auto-select the send domain matching the original To address
-                                // (so a reply to an email received at @ghostmail.box sends from @ghostmail.box).
-                                const toAddr = (selectedMessage.toAddress || '').toLowerCase();
-                                if (toAddr.includes('@ghostmail.box')) setComposeDomain('ghostmail.box');
-                                else if (toAddr.includes('@nftmail.box')) setComposeDomain('nftmail.box');
-                                setTab('compose');
-                              }}
+                              onClick={() => { if (!canSend) return; setComposeTo(selectedMessage.fromAddress || selectedMessage.sender); setComposeSubject(`Re: ${selectedMessage.subject}`); setTab('compose'); }}
                               className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
                             >
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" /></svg>
@@ -750,22 +589,10 @@ export default function DashboardPage() {
                               <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
                             </div>
                           ) : viewMode === 'text' ? (
-                            <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{stripHtml(selectedMessage.body || selectedMessage.summary || '(empty)')}</pre>
-                          ) : viewMode === 'html' ? (
-                            selectedMessage.bodyHtml ? (
-                              <iframe
-                                srcDoc={selectedMessage.bodyHtml}
-                                sandbox="allow-same-origin"
-                                className="w-full min-h-[300px] bg-white rounded"
-                                style={{ border: 'none' }}
-                                title="Email HTML"
-                              />
-                            ) : (
-                              <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(no HTML content)'}</pre>
-                            )
+                            <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
                           ) : viewMode === 'headers' ? (
                             <div className="space-y-1.5 font-mono text-[11px]">
-                              {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedMessage.toAddress || selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
+                              {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
                                 <div key={k} className="flex gap-2"><span className="text-zinc-500 w-24 flex-shrink-0">{k}</span><span className="text-zinc-300 break-all">{v}</span></div>
                               ))}
                             </div>
@@ -780,89 +607,7 @@ export default function DashboardPage() {
                           <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
                         </svg>
                         <p className="text-sm text-[var(--muted)]">Select a message to read</p>
-                        <Link href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`} className="mt-1 text-[10px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition">Open full inbox →</Link>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── SENT TAB ── */}
-            {tab === 'sent' && (
-              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
-                <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
-                  <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SENT{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}</span>
-                  <button onClick={fetchSentMessages} disabled={loadingSent} className="flex items-center gap-1.5 text-[10px] text-[rgb(160,220,255)] hover:text-white transition disabled:opacity-40">
-                    <svg className={`h-3 w-3 ${loadingSent ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                    </svg>
-                    {loadingSent ? 'Loading...' : 'Refresh'}
-                  </button>
-                </div>
-                <div className="flex" style={{ minHeight: '460px' }}>
-                  {/* Left: sent message list */}
-                  <div className={`flex flex-col border-r border-[var(--border)] ${selectedSent ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
-                    {loadingSent && sentMessages.length === 0 ? (
-                      <div className="flex flex-1 items-center justify-center py-12">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
-                      </div>
-                    ) : sentMessages.length === 0 ? (
-                      <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
-                        <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                        </svg>
-                        <p className="text-sm text-[var(--muted)]">No sent messages</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
-                        {sentMessages.map(msg => {
-                          const isSelected = selectedSent?.id === msg.id;
-                          return (
-                            <button
-                              key={msg.id}
-                              onClick={() => setSelectedSent(msg)}
-                              className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="truncate text-xs font-semibold text-white">{msg.subject || '(no subject)'}</p>
-                                <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">To: {msg.to}</p>
-                                <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(String(msg.sentAt))}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  {/* Right: sent message reading pane */}
-                  <div className={`flex flex-col flex-1 ${selectedSent ? 'flex' : 'hidden md:flex'}`}>
-                    {selectedSent ? (
-                      <>
-                        <button onClick={() => setSelectedSent(null)} className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2 text-[10px] text-[var(--muted)] hover:text-white transition md:hidden">
-                          ← Back to sent
-                        </button>
-                        <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
-                          <p className="text-sm font-semibold text-white">{selectedSent.subject || '(no subject)'}</p>
-                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedSent.to}</p>
-                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedSent.from}</p>
-                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Sent</span> {formatTimeAgo(String(selectedSent.sentAt))}</p>
-                        </div>
-                        <div className="flex justify-end border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
-                          <button title="Delete sent message" onClick={() => handleDeleteSent(selectedSent.id)} className="rounded p-1.5 text-red-400/50 transition hover:text-red-400">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-5 py-4" style={{ maxHeight: '380px' }}>
-                          <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedSent.body || '(empty)'}</pre>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col flex-1 items-center justify-center gap-2 text-center py-12 px-6">
-                        <svg className="h-8 w-8 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-                        </svg>
-                        <p className="text-sm text-[var(--muted)]">Select a sent message to view</p>
+                        <Link href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`} className="mt-1 text-[10px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition">Open public inbox →</Link>
                       </div>
                     )}
                   </div>
@@ -873,35 +618,19 @@ export default function DashboardPage() {
             {/* ── COMPOSE TAB ── */}
             {tab === 'compose' && (
               <div className="space-y-4">
-                {isAgentAlias && (
-                  <div className="rounded-xl border border-zinc-500/20 bg-zinc-500/5 px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 ring-1 ring-zinc-500/20">AGENT EMAIL</span>
-                      <span className="text-sm text-zinc-300">Compose is not available for agent aliases</span>
-                    </div>
-                    <p className="mt-2 text-xs text-[var(--muted)]">Agent-to-agent and script-initiated email is handled by the agent brain via A2A. Human compose is only available on non-alias addresses.</p>
-                  </div>
-                )}
-                {!isAgentAlias && !canSend && (
+                {!canSend && (
                   <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">MOLT REQUIRED</span>
+                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">UPCYCLED</span>
                       <span className="text-sm text-violet-300">Compose &amp; Send requires a PUPA or IMAGO mailbox</span>
                     </div>
-                    <p className="mt-2 text-xs text-[var(--muted)]">Molt your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
+                    <p className="mt-2 text-xs text-[var(--muted)]">Cycle your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
                   </div>
                 )}
-                <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${isAgentAlias || !canSend ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${!canSend ? 'opacity-50 pointer-events-none' : ''}`}>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">FROM</label>
-                    <select
-                      value={composeDomain}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setComposeDomain(e.target.value as 'nftmail.box' | 'ghostmail.box')}
-                      className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300 outline-none"
-                    >
-                      <option value="nftmail.box" className="bg-black text-white">{selectedName?.label}@nftmail.box</option>
-                      <option value="ghostmail.box" className="bg-black text-white">{selectedName?.label}@ghostmail.box</option>
-                    </select>
+                    <div className="mt-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300">{selectedName?.email}</div>
                   </div>
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>
@@ -917,37 +646,10 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] text-[var(--muted)]">Attachments coming soon</p>
-                    <button onClick={handleSend} disabled={sending || !composeTo || !composeBody.trim()} className="rounded-lg border border-violet-500/35 bg-violet-500/8 px-5 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-40">{sending ? 'Sending...' : 'Send'}</button>
+                    <button onClick={handleSend} disabled={sending || !composeTo} className="rounded-lg border border-violet-500/35 bg-violet-500/8 px-5 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-40">{sending ? 'Sending...' : 'Send'}</button>
                   </div>
                   {sendResult && <p className={`text-xs ${sendResult.startsWith('Sent') ? 'text-emerald-400' : 'text-red-400'}`}>{sendResult}</p>}
                 </div>
-              </div>
-            )}
-
-            {/* ── SETTINGS TAB ── */}
-            {tab === 'settings' && selectedName && (
-              <div className="space-y-4">
-                {isImago ? (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-5">
-                    <ForwardingSetup
-                      agentName={selectedName.label}
-                      ownerAddress={preferredWallet?.address || ''}
-                      currentConfig={forwardingConfig || undefined}
-                      onSave={handleSaveForwarding}
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-5 text-center">
-                    <h3 className="text-sm font-semibold text-white mb-2">Email Forwarding</h3>
-                    <p className="text-xs text-[var(--muted)] mb-4">Forwarding to an external inbox requires IMAGO tier.</p>
-                    <Link
-                      href={`/nftmail?upgrade=imago&label=${selectedName.label}`}
-                      className="inline-block rounded-lg border border-violet-500/35 bg-violet-500/8 px-4 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-500/16 transition"
-                    >
-                      Molt to Imago →
-                    </Link>
-                  </div>
-                )}
               </div>
             )}
 
@@ -961,9 +663,36 @@ export default function DashboardPage() {
                     </svg>
                     <h3 className="text-sm font-semibold text-red-300">Sovereign Kill-Switch</h3>
                   </div>
-                  <p className="text-xs text-[var(--muted)] mb-4">Permanently burn all encrypted inbox history. This action is <strong className="text-red-400">irreversible</strong>. All messages for <span className="text-emerald-300">{selectedName?.email}</span> will be deleted.</p>
-                  <button onClick={handleBurn} disabled={burning} className="w-full rounded-lg border border-red-500/35 bg-red-500/8 px-5 py-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/16 hover:shadow-[0_0_24px_rgba(239,68,68,0.12)] disabled:cursor-not-allowed disabled:opacity-40">
-                    {burning ? 'Signing & Burning...' : 'Sign & Burn All Messages'}
+
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={() => setBurnScope('messages')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                      burnScope === 'messages' ? 'border-red-500/50 bg-red-500/15 text-red-300' : 'border-red-500/15 bg-transparent text-red-400/50 hover:bg-red-500/5'
+                    }`}>Burn Messages</button>
+                    <button onClick={() => setBurnScope('full')} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                      burnScope === 'full' ? 'border-red-500/50 bg-red-500/15 text-red-300' : 'border-red-500/15 bg-transparent text-red-400/50 hover:bg-red-500/5'
+                    }`}>Full Identity Burn</button>
+                  </div>
+
+                  {burnScope === 'messages' && (
+                    <p className="text-xs text-[var(--muted)] mb-4">Permanently burn all encrypted inbox history. All messages for <span className="text-emerald-300">{selectedName?.email}</span> will be deleted. Identity and routing remain active.</p>
+                  )}
+                  {burnScope === 'full' && (
+                    <div className="mb-4 space-y-2">
+                      <p className="text-xs text-red-400 font-semibold">This will permanently destroy the entire agent identity:</p>
+                      <ul className="text-xs text-[var(--muted)] list-disc ml-4 space-y-0.5">
+                        <li>All inbox messages (encrypted + cleartext)</li>
+                        <li>Agent profile, beacon CID, and audit log</li>
+                        <li>ERC-8004 registration records</li>
+                        <li>Principal and TLD mappings</li>
+                        <li>HITL approval state</li>
+                        <li>Inbox routing (no new mail will be delivered)</li>
+                      </ul>
+                      <p className="text-xs text-red-400">A burn attestation will be recorded for 90 days (detectable by oracles).</p>
+                    </div>
+                  )}
+
+                  <button onClick={() => handleBurn(burnScope)} disabled={burning} className="w-full rounded-lg border border-red-500/35 bg-red-500/8 px-5 py-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/16 hover:shadow-[0_0_24px_rgba(239,68,68,0.12)] disabled:cursor-not-allowed disabled:opacity-40">
+                    {burning ? 'Signing & Burning...' : burnScope === 'full' ? 'Sign & Burn Entire Identity' : 'Sign & Burn All Messages'}
                   </button>
                   {burnResult && <p className={`mt-3 text-xs ${burnResult.includes('complete') ? 'text-emerald-400' : 'text-red-400'}`}>{burnResult}</p>}
                 </div>
@@ -981,7 +710,7 @@ export default function DashboardPage() {
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
           <span>nftmail.box dashboard — privacy-first email</span>
           <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
-            Molt to Imago →
+            Upcycle to Imago →
           </Link>
         </footer>
       </div>
