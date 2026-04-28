@@ -57,7 +57,7 @@ interface InboxMessage {
 }
 
 type Tab = 'inbox' | 'compose' | 'killswitch';
-type ViewMode = 'text' | 'headers' | 'source';
+type ViewMode = 'text' | 'html' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -218,6 +218,7 @@ export default function DashboardPage() {
           toAddress: composeTo,
           subject: composeSubject,
           content: composeBody,
+          ownerWallet: walletAddress,
         }),
       });
       const data = await res.json() as { error?: string };
@@ -543,7 +544,7 @@ export default function DashboardPage() {
                         {/* View mode bar + action buttons */}
                         <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
                           <div className="flex items-center gap-0.5">
-                            {(['text','headers','source'] as ViewMode[]).map(m => (
+                            {((['text', ...(selectedMessage?.bodyHtml ? ['html'] : []), 'headers','source']) as ViewMode[]).map(m => (
                               <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m}</button>
                             ))}
                           </div>
@@ -601,6 +602,8 @@ export default function DashboardPage() {
                               <p className="text-sm text-violet-300">End-to-end encrypted</p>
                               <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
                             </div>
+                          ) : viewMode === 'html' && selectedMessage.bodyHtml ? (
+                            <iframe srcDoc={selectedMessage.bodyHtml} sandbox="allow-same-origin" className="w-full min-h-[300px] bg-white rounded" style={{ border: 'none' }} title="Email HTML" />
                           ) : viewMode === 'text' ? (
                             <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
                           ) : viewMode === 'headers' ? (
