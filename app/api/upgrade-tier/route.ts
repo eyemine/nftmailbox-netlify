@@ -2,9 +2,9 @@
 /// POST /api/upgrade-tier
 ///
 /// Tier ladder:
-///   basic   → receive-only, 8-day decay, $2 mint fee (handled by gasless-mint)
-///   lite    → send enabled, 30-day account cycle, Gnosis Safe body, $10 one-time
-///   premium/pro → Shared relay MTA, infinite KV retention (no decay), $24/yr
+///   basic (LARVA)   → receive-only, 8-day retention, $2 mint fee (handled by gasless-mint)
+///   lite (PUPA)    → send enabled, 30-day retention window, Gnosis Safe body, $10 one-time
+///   premium (IMAGO) → Shared relay MTA, infinite KV retention (no decay), $24/yr
 ///   ghost   → full GhostAgent identity (agent marketplace eligible)
 ///
 /// Body: { label, ownerWallet, newTier: 'lite'|'pro'|'premium', paymentTxHash? }
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
         ? 'Agent activated — sovereign identity, Brain module eligible, Mirror Body deployed'
         : normalisedTier === 'premium'
         ? 'Imago activated — infinite KV retention, sovereign relay MTA, Mirror Body deployed'
-        : 'Pupa activated — Mirror Body Safe deployed, sending enabled, 30-day cycle reset',
+        : 'Pupa activated — Mirror Body Safe deployed, sending enabled, 30-day retention window',
     });
   } catch (err: any) {
     console.error('upgrade-tier error:', err);

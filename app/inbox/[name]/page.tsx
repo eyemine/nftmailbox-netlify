@@ -1022,7 +1022,7 @@ export default function InboxPage() {
                       style={{ width: `${100 - decayPct}%` }}
                     />
                   </div>
-                  <span className="text-[9px] text-[var(--muted)]">{daysLeft}d left · {tierDecayDays}-day cycle</span>
+                  <span className="text-[9px] text-[var(--muted)]">{daysLeft}d left · {tierDecayDays}-day retention</span>
                   <Link
                     href={`/nftmail?upgrade=lite&label=${name}`}
                     className="text-[9px] text-amber-300 hover:underline"
@@ -1108,7 +1108,7 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve panel: shown to owner on basic/lite tier ── */}
+        {/* ── Molt panel: shown to owner on basic/lite tier ── */}
         {isOwner && (accountTier === 'basic' || accountTier === 'lite') && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -1123,7 +1123,7 @@ export default function InboxPage() {
             <p className="text-[11px] text-[var(--muted)]">
               {accountTier === 'basic'
                 ? `${name}@nftmail.box · Your shell is temporary (8-day decay). Choose your next stage of metamorphosis.`
-                : `${name}@nftmail.box · 30-day cycle. Evolve to Imago for infinite retention and sovereign relay.`}
+                : `${name}@nftmail.box · 30-day retention. Molt to Imago for infinite retention and sovereign relay.`}
             </p>
             <div className="grid grid-cols-2 gap-2">
               {accountTier === 'basic' && (
@@ -1142,7 +1142,7 @@ export default function InboxPage() {
                 }`}
               >
                 <span className="block text-sm font-bold">24 xDAI<span className="text-[10px] font-normal text-[var(--muted)]">/yr</span></span>
-                Evolve to Imago
+                Molt to Imago
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
@@ -1565,18 +1565,18 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Evolve CTA ── */}
+        {/* ── Molt CTA ── */}
         <div className="mt-auto rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-medium text-white">Evolve to Imago to molt</p>
+              <p className="text-xs font-medium text-white">Molt to Imago</p>
               <p className="mt-0.5 text-[10px] text-[var(--muted)]">Dedicated Pupa or Imago mailbox, send emails, attachments, +retention, deploy mirror body</p>
             </div>
             <Link
               href={`/nftmail?upgrade=pro&label=${encodeURIComponent(agentName)}`}
               className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20 flex-shrink-0"
             >
-              Evolve
+              Molt
             </Link>
           </div>
         </div>

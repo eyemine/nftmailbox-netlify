@@ -245,7 +245,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         >
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm font-semibold text-white">Cycle to Pupa</p>
+              <p className="text-sm font-semibold text-white">Molt to Pupa</p>
               <p className="text-[10px] text-[var(--muted)]">Lite tier</p>
             </div>
             <span className="text-lg font-bold text-amber-300">10 xDAI</span>
@@ -253,7 +253,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
           <ul className="space-y-1 text-[11px] text-[var(--muted)]">
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Deploy Mirror Body Safe</li>
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Enable sending email</li>
-            <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> 30-day cycle (renewable)</li>
+            <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> 30-day retention window (renewable)</li>
             <li className="flex items-center gap-1.5"><span className="text-emerald-400">✓</span> Stake $SURGE for reputation</li>
           </ul>
         </button>
@@ -263,7 +263,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
         >
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm font-semibold text-white">Emerge as Imago</p>
+              <p className="text-sm font-semibold text-white">Molt to Imago</p>
               <p className="text-[10px] text-[var(--muted)]">PRO tier · <span className="text-violet-300">SOVEREIGN</span></p>
             </div>
             <span className="text-lg font-bold text-violet-300">24 xDAI<span className="text-[11px] font-normal text-[var(--muted)]">/yr</span></span>
@@ -606,7 +606,7 @@ export default function NftmailPage() {
                 >
                   {tier === 'pro' ? '✓' : '2'}
                 </div>
-                <h2 className="text-lg font-semibold text-white">Evolve to Imago</h2>
+                <h2 className="text-lg font-semibold text-white">Molt to Imago</h2>
                 <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">OPTIONAL</span>
               </div>
               <p className="mt-1 ml-8 text-xs text-[var(--muted)]">Pupa deploys a Mirror Body (Gnosis Safe) + enables sending. Imago anchors your inbox permanently — no 8-day decay.</p>
@@ -636,7 +636,7 @@ export default function NftmailPage() {
                 <h2 className="text-lg font-semibold text-white">Molt from Pupa to an Agent</h2>
               </div>
               <p className="mt-1 ml-7 text-xs text-[var(--muted)]">
-                Your identity can evolve into a full GhostAgent — same Mirror Body, same email, plus a Brain module for autonomous on-chain execution.
+                Your identity can molt into a full GhostAgent — same Mirror Body, same email, plus a Brain module for autonomous on-chain execution.
               </p>
             </div>
             <div className="ml-7">
@@ -819,7 +819,7 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
                 disabled={!isValid}
                 className="w-full rounded-lg bg-[rgba(0,163,255,0.12)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.2)] disabled:opacity-40"
               >
-                Confirm → Evolve to Imago
+                Confirm → Molt to Imago
               </button>
             </div>
           )}
