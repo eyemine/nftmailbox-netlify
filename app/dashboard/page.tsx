@@ -67,6 +67,8 @@ export default function DashboardPage() {
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [inboxTier, setInboxTier] = useState<string>('');
+  const [workerCanSend, setWorkerCanSend] = useState<boolean | null>(null);
+  const [sendsRemaining, setSendsRemaining] = useState<number | null>(null);
   const [inboxNote, setInboxNote] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
@@ -182,8 +184,23 @@ export default function DashboardPage() {
       setMessages(data.messages || []);
       setInboxNote(data.note || '');
       // Get account tier from resolveAddress — inbox API always returns 'free'
-      const resolveData = await resolveRes.json() as { accountTier?: string };
-      setInboxTier(resolveData.accountTier || data.tier || '');
+      const resolveData = await resolveRes.json() as { accountTier?: string; canSend?: boolean };
+      const tier = resolveData.accountTier || data.tier || '';
+      setInboxTier(tier);
+      if (typeof resolveData.canSend === 'boolean') setWorkerCanSend(resolveData.canSend);
+      // For larva/basic accounts fetch remaining send quota (dry-run, no increment)
+      if (tier === 'basic' || tier === 'larva' || tier === 'freemium') {
+        try {
+          const scRes = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'checkAndIncrementSendCount', localPart: selectedName.label, tier, dryRun: true }),
+          });
+          const sc = await scRes.json() as { allowed?: boolean; sendsRemaining?: number; sendsUsed?: number };
+          setSendsRemaining(typeof sc.sendsRemaining === 'number' ? sc.sendsRemaining : null);
+          if (typeof sc.allowed === 'boolean') setWorkerCanSend(sc.allowed);
+        } catch { /* non-fatal */ }
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch inbox');
     } finally {
@@ -199,6 +216,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (selectedName) {
+      setWorkerCanSend(null);
+      setSendsRemaining(null);
       fetchInbox();
       setSelectedMessage(null);
     }
@@ -296,8 +315,9 @@ export default function DashboardPage() {
   };
 
   const isAgentAlias = selectedName?.label?.endsWith('_') || false;
-  const canSend = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias;
-  const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
+  // Prefer canSend from worker (covers larva 10-send allowance); fall back to tier check
+  const canSend = workerCanSend ?? (inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite' || isAgentAlias);
+  const isImago = inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'imago';
 
   if (!ready) return null;
 
@@ -632,13 +652,22 @@ export default function DashboardPage() {
             {/* ── COMPOSE TAB ── */}
             {tab === 'compose' && (
               <div className="space-y-4">
+                {canSend && (inboxTier === 'basic' || inboxTier === 'larva' || inboxTier === 'freemium') && sendsRemaining !== null && (
+                  <div className="rounded-xl border border-zinc-700/50 bg-zinc-900/40 px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">LARVA</span>
+                      <span className="text-xs text-[var(--muted)]">{sendsRemaining} of 10 free sends remaining</span>
+                    </div>
+                    <Link href={`/nftmail?upgrade=${selectedName?.label ?? '1'}`} className="text-[10px] font-semibold text-amber-300 hover:underline">Molt to Pupa →</Link>
+                  </div>
+                )}
                 {!canSend && (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">LARVA</span>
-                      <span className="text-sm font-semibold text-white">Sending requires a Pupa or Imago mailbox</span>
+                      <span className="text-sm font-semibold text-white">Free send limit reached (10/10)</span>
                     </div>
-                    <p className="text-xs text-[var(--muted)]">Molt your inbox to unlock Compose &amp; Send, extended retention, and your on-chain Mirror Body.</p>
+                    <p className="text-xs text-[var(--muted)]">Molt your inbox to unlock unlimited Compose &amp; Send, extended retention, and your on-chain Mirror Body.</p>
                     <Link
                       href={`/nftmail?upgrade=${selectedName?.label ?? '1'}`}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition"
