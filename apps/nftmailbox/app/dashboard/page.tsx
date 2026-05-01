@@ -684,7 +684,7 @@ export default function DashboardPage() {
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
           <span>nftmail.box dashboard — privacy-first email</span>
           <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
-            {canSend ? 'Molt to Imago →' : 'Molt to Send →'}
+            Molt to Imago →
           </Link>
         </footer>
       </div>

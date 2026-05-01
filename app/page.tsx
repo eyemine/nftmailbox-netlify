@@ -71,8 +71,6 @@ export default function Home() {
               gap: '0.5rem'
             }} className="text-3xl md:text-5xl font-bold md:flex-row md:gap-3">
             nftmail.box
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/beta-badge.svg" alt="beta" style={{ height: '1rem', width: 'auto', opacity: 0.85, marginTop: '0.2rem' }} className="md:mt-0.4" />
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm text-gray-400">
             Claim a free email inbox. No credit card. No personal data.
