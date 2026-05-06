@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -101,7 +102,7 @@ export default function MiniApp() {
   }, []);
 
   const openUpgrade = useCallback(() => {
-    sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}`);
+    sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}&from=nftmail`);
   }, [agentName]);
 
   const loadInbox = useCallback(async (name: string) => {
@@ -184,9 +185,11 @@ export default function MiniApp() {
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="text-5xl mb-3">👻</div>
+            <div className="flex justify-center mb-4">
+              <Image src="/nftmail-logo.png" alt="nftmail.box" width={72} height={72} className="rounded-xl" />
+            </div>
             <h1 className="text-white font-bold text-2xl mb-1">nftmail.box</h1>
-            <p className="text-gray-400 text-sm">Encrypted agent email · No wallet required</p>
+            <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
             {fid
               ? <p className="text-green-400 font-mono text-xs mt-2">FID: {fid} ✓</p>
               : <p className="text-yellow-500 font-mono text-xs mt-2">Open in Warpcast to link FID</p>
@@ -196,7 +199,7 @@ export default function MiniApp() {
             <input
               type="text"
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
-              placeholder={fid ? `Custom name (default: fid-${fid})` : 'Custom name (optional)'}
+              placeholder={fid ? `Custom name (default: your Farcaster name · FID ${fid})` : 'Custom name (optional)'}
               value={customName}
               onChange={e => setCustomName(e.target.value)}
               maxLength={32}
@@ -208,9 +211,9 @@ export default function MiniApp() {
               disabled={!fid}
               className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
-              {fid ? 'Claim LARVA Agent →' : 'Open in Warpcast to Claim'}
+              {fid ? 'Claim Account (LARVA) →' : 'Open in Warpcast to Claim'}
             </button>
-            <p className="text-gray-600 text-xs text-center">8-day free trial · Upgrade anytime</p>
+            <p className="text-gray-600 text-xs text-center">8-day free inbox · Upgrade to permanent anytime</p>
           </div>
         </div>
       </div>
@@ -219,14 +222,14 @@ export default function MiniApp() {
 
   if (step === 'naming') {
     const name = customName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
-    const displayName = name ? `${name}.fid-${fid}` : `fid-${fid}`;
+    const displayName = name || `your-farcaster-name`;
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="text-4xl mb-3">🔒</div>
             <h2 className="text-white font-bold text-xl mb-1">Privacy Settings</h2>
-            <p className="text-green-400 font-mono text-sm">{displayName}@nftmail.box</p>
+            <p className="text-green-400 font-mono text-sm">{displayName}.cast@nftmail.box</p>
           </div>
           <p className="text-gray-400 text-sm text-center mb-6">Who can see your Farcaster identity?</p>
           <div className="space-y-3">
@@ -262,8 +265,8 @@ export default function MiniApp() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-green-400 font-mono text-sm">Provisioning agent...</p>
-          <p className="text-gray-600 text-xs mt-2">Generating keys · Writing to chain</p>
+          <p className="text-green-400 font-mono text-sm">Creating your account...</p>
+          <p className="text-gray-600 text-xs mt-2">Resolving Farcaster name · Setting up inbox</p>
         </div>
       </div>
     );
@@ -275,13 +278,13 @@ export default function MiniApp() {
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm text-center">
           <div className="text-5xl mb-3">🎉</div>
-          <h2 className="text-white font-bold text-2xl mb-2">Agent Created!</h2>
+          <h2 className="text-white font-bold text-2xl mb-2">Account Created!</h2>
           <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
             <p className="text-green-400 font-mono text-sm font-bold">{humanEmail}</p>
-            <p className="text-gray-500 text-xs mt-1">LARVA tier · Expires {expiresStr}</p>
+            <p className="text-gray-500 text-xs mt-1">LARVA · Expires {expiresStr} · 10 sends</p>
           </div>
           <p className="text-gray-400 text-xs mb-6">
-            Your emails are end-to-end encrypted. No one — including us — can read them.
+            Secured by your Farcaster wallet. Upgrade to permanent by minting an NFT.
           </p>
           <div className="space-y-3">
             <button
@@ -316,7 +319,7 @@ export default function MiniApp() {
               ✉️ Compose Email
             </button>
             <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
-              Upgrade Tier →
+              Upgrade to Permanent →
             </button>
           </div>
         </div>
