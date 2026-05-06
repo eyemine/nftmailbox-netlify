@@ -7,6 +7,33 @@ import { sdk } from '@farcaster/miniapp-sdk';
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
+// ── Client-side ECIES decrypt (P-256 / AES-256-GCM — mirrors worker ecies.ts) ──
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const b = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < b.length; i++) b[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return b;
+}
+function wrapP256PrivateKey(raw: Uint8Array): ArrayBuffer {
+  const prefix = new Uint8Array([0x30,0x41,0x02,0x01,0x00,0x30,0x13,0x06,0x07,0x2a,0x86,0x48,0xce,0x3d,0x02,0x01,0x06,0x08,0x2a,0x86,0x48,0xce,0x3d,0x03,0x01,0x07,0x04,0x27,0x30,0x25,0x02,0x01,0x01,0x04,0x20]);
+  const out = new Uint8Array(prefix.length + raw.length);
+  out.set(prefix); out.set(raw, prefix.length);
+  return out.buffer;
+}
+async function eciesDecryptClient(envelopeJson: string, privHex: string): Promise<string> {
+  const env = JSON.parse(envelopeJson) as { ephemeralPublicKey: string; iv: string; ciphertext: string };
+  const ephPub = await crypto.subtle.importKey('raw', hexToBytes(env.ephemeralPublicKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const recipPriv = await crypto.subtle.importKey('pkcs8', wrapP256PrivateKey(hexToBytes(privHex)), { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const sharedBits = await crypto.subtle.deriveBits({ name: 'ECDH', public: ephPub }, recipPriv, 256);
+  const keyMaterial = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveKey']);
+  const aesKey = await crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('nftmail-ecies-v1'), info: new TextEncoder().encode('aes-256-gcm') },
+    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+  );
+  const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: hexToBytes(env.iv), tagLength: 128 }, aesKey, hexToBytes(env.ciphertext));
+  return new TextDecoder().decode(dec);
+}
+
 type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'error';
 
 interface ProvisionResult {
@@ -44,6 +71,7 @@ export default function MiniApp() {
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [error, setError] = useState('');
+  const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -86,6 +114,11 @@ export default function MiniApp() {
         setAgentName(data.agentName);
         setHumanEmail(data.humanEmail || `${data.agentName}@nftmail.box`);
         setExpiresAt(data.expiresAt || null);
+        // Persist privkey in localStorage — only copy, never sent back to server
+        if ((data as any).eciesPrivateKey) {
+          try { localStorage.setItem(`ecies-priv:${data.agentName}`, (data as any).eciesPrivateKey); } catch {}
+          setEciesPrivKey((data as any).eciesPrivateKey);
+        }
         setStep('success');
         return;
       }
@@ -111,6 +144,11 @@ export default function MiniApp() {
 
   const loadInbox = useCallback(async (name: string) => {
     setStep('inbox');
+    // Retrieve privkey — from state (just provisioned) or localStorage (returning user)
+    let privKey = eciesPrivKey;
+    if (!privKey) {
+      try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {}
+    }
     try {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
@@ -118,12 +156,23 @@ export default function MiniApp() {
         body: JSON.stringify({ action: 'getInbox', localPart: name }),
       });
       const data: InboxResult = await res.json();
-      setMessages(data.messages || []);
+      // Decrypt any ECIES-encrypted messages client-side
+      const decrypted = await Promise.all((data.messages || []).map(async (msg) => {
+        if ((msg as any).encrypted && (msg as any).envelope && privKey) {
+          try {
+            const plain = await eciesDecryptClient(JSON.stringify((msg as any).envelope), privKey);
+            const inner = JSON.parse(plain) as { payload?: { from?: string; subject?: string; body?: string } };
+            return { ...msg, from: inner.payload?.from || msg.from, subject: inner.payload?.subject || msg.subject, body: inner.payload?.body || msg.body };
+          } catch { return msg; }
+        }
+        return msg;
+      }));
+      setMessages(decrypted);
       setSendsRemaining(data.sendsRemaining ?? 10);
     } catch {
       setMessages([]);
     }
-  }, []);
+  }, [eciesPrivKey]);
 
   const sendTest = useCallback(async () => {
     setStep('sending');
