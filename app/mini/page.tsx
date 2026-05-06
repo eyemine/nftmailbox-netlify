@@ -6,13 +6,27 @@ import { sdk } from '@farcaster/miniapp-sdk';
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
-type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'sending' | 'sent' | 'error';
 
 interface ProvisionResult {
   status: string;
   agentName?: string;
   humanEmail?: string;
   expiresAt?: number;
+  error?: string;
+}
+
+interface InboxMessage {
+  id: string;
+  from: string;
+  subject: string;
+  body?: string;
+  receivedAt: number;
+}
+
+interface InboxResult {
+  messages: InboxMessage[];
+  sendsRemaining: number | string;
   error?: string;
 }
 
@@ -23,6 +37,8 @@ export default function MiniApp() {
   const [agentName, setAgentName] = useState('');
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -84,6 +100,46 @@ export default function MiniApp() {
   const openUpgrade = useCallback(() => {
     sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}`);
   }, [agentName]);
+
+  const loadInbox = useCallback(async (name: string) => {
+    setStep('inbox');
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getInbox', agentName: name }),
+      });
+      const data: InboxResult = await res.json();
+      setMessages(data.messages || []);
+      setSendsRemaining(data.sendsRemaining ?? 10);
+    } catch {
+      setMessages([]);
+    }
+  }, []);
+
+  const sendTest = useCallback(async () => {
+    setStep('sending');
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sendEmail',
+          agentName,
+          to: humanEmail,
+          subject: 'Test — your nftmail.box inbox works',
+          body: `Hi ${agentName},\n\nThis is a test email confirming your inbox is operational.\n\nInbox: ${humanEmail}\nSent: ${new Date().toISOString()}\n\n— nftmail.box`,
+        }),
+      });
+      const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
+      if (data.error) throw new Error(data.error);
+      setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
+      setStep('sent');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed');
+      setStep('error');
+    }
+  }, [agentName, humanEmail, sendsRemaining]);
 
   if (step === 'loading') {
     return (
@@ -201,11 +257,16 @@ export default function MiniApp() {
             Your emails are end-to-end encrypted. No one — including us — can read them.
           </p>
           <div className="space-y-3">
-            <button onClick={openDashboard} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              Open Dashboard →
+            <button
+              onClick={() => loadInbox(agentName)}
+              className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              📨 Read Inbox →
             </button>
-            <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
-              Upgrade to PUPA →
+            <button onClick={sendTest} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
+              ✉️ Send Test Email
+            </button>
+            <button onClick={openDashboard} className="w-full text-gray-500 text-sm py-2">
+              Open Dashboard →
             </button>
           </div>
         </div>
@@ -221,11 +282,87 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-xl mb-2">Already Claimed</h2>
           <p className="text-green-400 font-mono text-sm mb-6">{agentName}@nftmail.box</p>
           <div className="space-y-3">
-            <button onClick={openDashboard} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              Open Dashboard →
+            <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              📨 Read Inbox →
+            </button>
+            <button onClick={sendTest} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm">
+              ✉️ Send Test Email
+            </button>
+            <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
+              Upgrade Tier →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'inbox') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
+        <div className="w-full max-w-sm mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-bold text-lg">📨 Inbox</h2>
+            <button onClick={() => loadInbox(agentName)} className="text-green-400 text-sm">↻ Refresh</button>
+          </div>
+          <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
+          {messages.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl mb-3">📭</div>
+              <p className="text-gray-500 text-sm">No messages yet</p>
+              <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
+            </div>
+          ) : (
+            <div className="space-y-2 mb-4">
+              {messages.slice(0, 5).map(msg => (
+                <div key={msg.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                  <p className="text-white text-sm font-medium truncate">{msg.subject}</p>
+                  <p className="text-gray-500 text-xs mt-0.5 truncate">{msg.from}</p>
+                  <p className="text-gray-600 text-xs mt-0.5">{new Date(msg.receivedAt).toLocaleTimeString()}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="space-y-2 mt-4">
+            <button onClick={sendTest} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              ✉️ Send Test Email
+            </button>
+            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
+            <button onClick={() => setStep('success')} className="w-full text-gray-500 text-sm py-2">← Back</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'sending') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-green-400 font-mono text-sm">Sending test email...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'sent') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-sm text-center">
+          <div className="text-5xl mb-3">✉️</div>
+          <h2 className="text-white font-bold text-xl mb-2">Test Sent!</h2>
+          <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
+            <p className="text-green-400 font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
+            <p className="text-gray-500 text-xs mt-1">{sendsRemaining} sends remaining</p>
+          </div>
+          <p className="text-gray-400 text-xs mb-6">Check your inbox — it should arrive in a few seconds.</p>
+          <div className="space-y-3">
+            <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              📨 Check Inbox →
             </button>
             <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg text-sm">
-              Upgrade Tier →
+              Upgrade to PUPA →
             </button>
           </div>
         </div>
