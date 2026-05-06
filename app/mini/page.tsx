@@ -102,6 +102,10 @@ export default function MiniApp() {
   }, []);
 
   const openUpgrade = useCallback(() => {
+    sdk.actions.openUrl(`${APP_URL}/mint?agent=${agentName}&from=mini`);
+  }, [agentName]);
+
+  const openByoMolt = useCallback(() => {
     sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}&from=nftmail`);
   }, [agentName]);
 
@@ -298,6 +302,12 @@ export default function MiniApp() {
             <button onClick={sendTest} className="w-full text-gray-500 text-sm py-2">
               Send Test to Self
             </button>
+            <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
+              Upgrade to Permanent →
+            </button>
+            <button onClick={openByoMolt} className="w-full text-gray-600 text-xs py-1">
+              Already have an NFT? Use BYO Molt
+            </button>
           </div>
         </div>
       </div>
@@ -320,6 +330,9 @@ export default function MiniApp() {
             </button>
             <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
               Upgrade to Permanent →
+            </button>
+            <button onClick={openByoMolt} className="w-full text-gray-600 text-xs py-1">
+              Already have an NFT? Use BYO Molt
             </button>
           </div>
         </div>
