@@ -107,7 +107,7 @@ export default function MiniApp() {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getInbox', agentName: name }),
+        body: JSON.stringify({ action: 'getInbox', localPart: name }),
       });
       const data: InboxResult = await res.json();
       setMessages(data.messages || []);
