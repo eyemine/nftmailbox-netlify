@@ -22,15 +22,15 @@ function wrapP256PrivateKey(raw: Uint8Array): ArrayBuffer {
 }
 async function eciesDecryptClient(envelopeJson: string, privHex: string): Promise<string> {
   const env = JSON.parse(envelopeJson) as { ephemeralPublicKey: string; iv: string; ciphertext: string };
-  const ephPub = await crypto.subtle.importKey('raw', hexToBytes(env.ephemeralPublicKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const recipPriv = await crypto.subtle.importKey('pkcs8', wrapP256PrivateKey(hexToBytes(privHex)), { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const ephPub = await crypto.subtle.importKey('raw', hexToBytes(env.ephemeralPublicKey) as unknown as ArrayBuffer, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const recipPriv = await crypto.subtle.importKey('pkcs8', wrapP256PrivateKey(hexToBytes(privHex)) as ArrayBuffer, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
   const sharedBits = await crypto.subtle.deriveBits({ name: 'ECDH', public: ephPub }, recipPriv, 256);
   const keyMaterial = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveKey']);
   const aesKey = await crypto.subtle.deriveKey(
     { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('nftmail-ecies-v1'), info: new TextEncoder().encode('aes-256-gcm') },
     keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
   );
-  const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: hexToBytes(env.iv), tagLength: 128 }, aesKey, hexToBytes(env.ciphertext));
+  const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: hexToBytes(env.iv) as unknown as ArrayBuffer, tagLength: 128 }, aesKey, hexToBytes(env.ciphertext) as unknown as ArrayBuffer);
   return new TextDecoder().decode(dec);
 }
 
