@@ -402,7 +402,7 @@ export default function MiniApp() {
   }
 
   if (step === 'success') {
-    const expiresStr = expiresAt ? new Date(expiresAt).toLocaleDateString() : '8 days';
+    const expiresStr = expiresAt ? new Date(expiresAt).toLocaleDateString() : '30 days';
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm text-center">
@@ -410,7 +410,7 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-2xl mb-2">Account Created!</h2>
           <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
             <p className="text-green-400 font-mono text-sm font-bold">{humanEmail}</p>
-            <p className="text-gray-500 text-xs mt-1">LARVA · Expires {expiresStr} · 10 sends</p>
+            <p className="text-gray-500 text-xs mt-1">LARVA · Active until {expiresStr} · 8-day inbox history</p>
           </div>
           <p className="text-gray-400 text-xs mb-6">
             Secured by your Farcaster wallet. Upgrade to permanent by minting an NFT.
