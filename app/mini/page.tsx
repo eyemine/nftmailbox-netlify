@@ -48,8 +48,10 @@ interface InboxMessage {
   id: string;
   from: string;
   subject: string;
-  body?: string;
+  body?: string;    // set after client-side ECIES decrypt
+  content?: string; // raw from worker getInbox (maps to payload.body)
   receivedAt: number;
+  encrypted?: boolean;
 }
 
 interface InboxResult {
@@ -72,6 +74,7 @@ export default function MiniApp() {
   const [composeBody, setComposeBody] = useState('');
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
+  const [openMsgId, setOpenMsgId] = useState<string | null>(null);
 
   const openDashboard = useCallback(() => {
     sdk.actions.openUrl(`${APP_URL}/dashboard`);
@@ -179,7 +182,7 @@ export default function MiniApp() {
           try {
             const plain = await eciesDecryptClient(JSON.stringify((msg as any).envelope), privKey);
             const inner = JSON.parse(plain) as { payload?: { from?: string; subject?: string; body?: string } };
-            return { ...msg, from: inner.payload?.from || msg.from, subject: inner.payload?.subject || msg.subject, body: inner.payload?.body || msg.body };
+            return { ...msg, from: inner.payload?.from || msg.from, subject: inner.payload?.subject || msg.subject, content: inner.payload?.body || msg.content, body: inner.payload?.body || msg.body };
           } catch { return msg; }
         }
         return msg;
@@ -405,13 +408,34 @@ export default function MiniApp() {
             </div>
           ) : (
             <div className="space-y-2 mb-4">
-              {messages.slice(0, 5).map(msg => (
-                <div key={msg.id} className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                  <p className="text-white text-sm font-medium truncate">{msg.subject}</p>
-                  <p className="text-gray-500 text-xs mt-0.5 truncate">{msg.from}</p>
-                  <p className="text-gray-600 text-xs mt-0.5">{new Date(msg.receivedAt).toLocaleTimeString()}</p>
-                </div>
-              ))}
+              {messages.slice(0, 10).map(msg => {
+                const isOpen = openMsgId === msg.id;
+                const body = msg.content || msg.body || '';
+                return (
+                  <div
+                    key={msg.id}
+                    className={`bg-gray-900 border rounded-lg p-3 cursor-pointer transition-colors ${isOpen ? 'border-green-500/50' : 'border-gray-800 hover:border-gray-700'}`}
+                    onClick={() => setOpenMsgId(isOpen ? null : msg.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{msg.subject || '(no subject)'}</p>
+                        <p className="text-gray-500 text-xs mt-0.5 truncate">{msg.from}</p>
+                      </div>
+                      <span className="text-gray-600 text-xs shrink-0 mt-0.5">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {isOpen && (
+                      <div className="mt-3 pt-3 border-t border-gray-800">
+                        {body ? (
+                          <p className="text-gray-300 text-xs whitespace-pre-wrap leading-relaxed">{body}</p>
+                        ) : (
+                          <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
           <div className="space-y-2 mt-4">
