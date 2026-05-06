@@ -124,11 +124,8 @@ export default function MiniApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'sendEmail',
+          action: 'sendTestEmail',
           agentName,
-          to: humanEmail,
-          subject: 'Test — your nftmail.box inbox works',
-          body: `Hi ${agentName},\n\nThis is a test email confirming your inbox is operational.\n\nInbox: ${humanEmail}\nSent: ${new Date().toISOString()}\n\n— nftmail.box`,
         }),
       });
       const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
