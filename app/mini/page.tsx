@@ -73,20 +73,45 @@ export default function MiniApp() {
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
 
+  const openDashboard = useCallback(() => {
+    sdk.actions.openUrl(`${APP_URL}/dashboard`);
+  }, []);
+
   useEffect(() => {
     const init = async () => {
+      let userFid: number | null = null;
       try {
         const context = await sdk.context;
-        const userFid = context?.user?.fid ?? null;
+        userFid = context?.user?.fid ?? null;
         setFid(userFid);
       } catch {
         // running outside Warpcast — continue without FID
-      } finally {
-        await sdk.actions.ready();
-        setStep('entry');
       }
+      await sdk.actions.ready();
+      // Auto-check: if this FID already has an account, skip straight to inbox
+      if (userFid) {
+        try {
+          const res = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
+          });
+          const data = await res.json() as ProvisionResult & { eciesPrivateKey?: string };
+          if (data.status === 'already_provisioned' && data.agentName) {
+            setAgentName(data.agentName);
+            setHumanEmail(`${data.agentName}@nftmail.box`);
+            let privKey: string | null = null;
+            try { privKey = localStorage.getItem(`ecies-priv:${data.agentName}`); } catch {}
+            if (privKey) setEciesPrivKey(privKey);
+            await loadInboxDirect(data.agentName, privKey);
+            return;
+          }
+        } catch { /* non-fatal — fall through to entry */ }
+      }
+      setStep('entry');
     };
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const provision = useCallback(async (name: string, visibility: 'hidden' | 'fid-only' | 'full') => {
@@ -107,7 +132,8 @@ export default function MiniApp() {
       const data: ProvisionResult = await res.json();
       if (data.status === 'already_provisioned' && data.agentName) {
         setAgentName(data.agentName);
-        setStep('already');
+        setHumanEmail(data.humanEmail || `${data.agentName}@nftmail.box`);
+        await loadInbox(data.agentName);
         return;
       }
       if (data.status === 'provisioned' && data.agentName) {
@@ -130,10 +156,6 @@ export default function MiniApp() {
     }
   }, [fid]);
 
-  const openDashboard = useCallback(() => {
-    sdk.actions.openUrl(`${APP_URL}/dashboard`);
-  }, []);
-
   const openUpgrade = useCallback(() => {
     sdk.actions.openUrl(`${APP_URL}/mint?agent=${agentName}&from=mini`);
   }, [agentName]);
@@ -142,13 +164,9 @@ export default function MiniApp() {
     sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}&from=nftmail`);
   }, [agentName]);
 
-  const loadInbox = useCallback(async (name: string) => {
+  // Core inbox fetch — usable before eciesPrivKey state is set (pass key explicitly)
+  const loadInboxDirect = async (name: string, privKey: string | null) => {
     setStep('inbox');
-    // Retrieve privkey — from state (just provisioned) or localStorage (returning user)
-    let privKey = eciesPrivKey;
-    if (!privKey) {
-      try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {}
-    }
     try {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
@@ -156,7 +174,6 @@ export default function MiniApp() {
         body: JSON.stringify({ action: 'getInbox', localPart: name }),
       });
       const data: InboxResult = await res.json();
-      // Decrypt any ECIES-encrypted messages client-side
       const decrypted = await Promise.all((data.messages || []).map(async (msg) => {
         if ((msg as any).encrypted && (msg as any).envelope && privKey) {
           try {
@@ -172,6 +189,13 @@ export default function MiniApp() {
     } catch {
       setMessages([]);
     }
+  };
+
+  const loadInbox = useCallback(async (name: string) => {
+    let privKey = eciesPrivKey;
+    if (!privKey) { try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {} }
+    await loadInboxDirect(name, privKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eciesPrivKey]);
 
   const sendTest = useCallback(async () => {
@@ -363,31 +387,6 @@ export default function MiniApp() {
     );
   }
 
-  if (step === 'already') {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
-        <div className="w-full max-w-sm text-center">
-          <div className="text-5xl mb-3">👻</div>
-          <h2 className="text-white font-bold text-xl mb-2">Already Claimed</h2>
-          <p className="text-green-400 font-mono text-sm mb-6">{agentName}@nftmail.box</p>
-          <div className="space-y-3">
-            <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              📨 Read Inbox →
-            </button>
-            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm">
-              ✉️ Compose Email
-            </button>
-            <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
-              Upgrade to Permanent →
-            </button>
-            <button onClick={openByoMolt} className="w-full text-gray-600 text-xs py-1">
-              Already have an NFT? Use BYO Molt
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (step === 'inbox') {
     return (
@@ -417,10 +416,16 @@ export default function MiniApp() {
           )}
           <div className="space-y-2 mt-4">
             <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              ✉️ Compose Email
+              ✉️ Compose
+            </button>
+            <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
+              🏠 Dashboard
+            </button>
+            <button onClick={loadInbox.bind(null, agentName)} className="w-full text-gray-500 text-sm py-2">
+              ↻ Refresh
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
-            <button onClick={() => setStep('success')} className="w-full text-gray-500 text-sm py-2">← Back</button>
+            <button onClick={openUpgrade} className="w-full text-gray-600 text-xs py-1">Upgrade to Permanent →</button>
           </div>
         </div>
       </div>
