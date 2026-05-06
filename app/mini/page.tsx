@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
 
@@ -32,6 +32,55 @@ async function eciesDecryptClient(envelopeJson: string, privHex: string): Promis
   );
   const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: hexToBytes(env.iv) as unknown as ArrayBuffer, tagLength: 128 }, aesKey, hexToBytes(env.ciphertext) as unknown as ArrayBuffer);
   return new TextDecoder().decode(dec);
+}
+
+// ── Safe markdown renderer — bold/italic/code/headings/blockquote only, no links ──
+function SafeMarkdown({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div className="space-y-1">
+      {lines.map((line, i) => {
+        // Horizontal rule
+        if (/^---+$/.test(line.trim())) return <hr key={i} className="border-gray-700 my-1" />;
+        // Heading
+        const hMatch = line.match(/^(#{1,3})\s+(.*)/);
+        if (hMatch) {
+          const sizes = ['text-base font-bold text-white', 'text-sm font-bold text-white', 'text-xs font-bold text-gray-200'];
+          return <p key={i} className={sizes[hMatch[1].length - 1]}>{renderInline(hMatch[2])}</p>;
+        }
+        // Blockquote
+        if (line.startsWith('> ')) return (
+          <p key={i} className="border-l-2 border-gray-600 pl-2 text-gray-400 text-xs italic">{renderInline(line.slice(2))}</p>
+        );
+        // Empty line → spacer
+        if (line.trim() === '') return <div key={i} className="h-1" />;
+        // Normal line
+        return <p key={i} className="text-gray-300 text-xs leading-relaxed">{renderInline(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+function renderInline(text: string): React.ReactNode[] {
+  // Strip any markdown link syntax [label](url) → just show label
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  // Strip bare URLs (no rendering as anchors)
+  text = text.replace(/https?:\/\/\S+/g, '[link]');
+  const parts: React.ReactNode[] = [];
+  // Tokenise bold+italic, bold, italic, inline code
+  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  let last = 0, m: RegExpExecArray | null;
+  let idx = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={idx++}>{text.slice(last, m.index)}</span>);
+    if (m[2]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[2]}</strong>);
+    else if (m[3]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[3]}</strong>);
+    else if (m[4]) parts.push(<em key={idx++} className="italic text-gray-200">{m[4]}</em>);
+    else if (m[5]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[5]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(<span key={idx++}>{text.slice(last)}</span>);
+  return parts;
 }
 
 type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'error';
@@ -427,7 +476,7 @@ export default function MiniApp() {
                     {isOpen && (
                       <div className="mt-3 pt-3 border-t border-gray-800">
                         {body ? (
-                          <p className="text-gray-300 text-xs whitespace-pre-wrap leading-relaxed">{body}</p>
+                          <SafeMarkdown text={body} />
                         ) : (
                           <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
                         )}
