@@ -6,7 +6,7 @@ import { sdk } from '@farcaster/miniapp-sdk';
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
-type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'sending' | 'sent' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'error';
 
 interface ProvisionResult {
   status: string;
@@ -39,6 +39,9 @@ export default function MiniApp() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
+  const [composeTo, setComposeTo] = useState('');
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -123,10 +126,7 @@ export default function MiniApp() {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sendTestEmail',
-          agentName,
-        }),
+        body: JSON.stringify({ action: 'sendTestEmail', agentName }),
       });
       const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
       if (data.error) throw new Error(data.error);
@@ -136,7 +136,37 @@ export default function MiniApp() {
       setError(e instanceof Error ? e.message : 'Send failed');
       setStep('error');
     }
-  }, [agentName, humanEmail, sendsRemaining]);
+  }, [agentName, sendsRemaining]);
+
+  const sendCompose = useCallback(async () => {
+    if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) {
+      setError('To, Subject and Body are required.');
+      setStep('error');
+      return;
+    }
+    setStep('sending');
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sendOutbound',
+          agentName,
+          to: composeTo.trim(),
+          subject: composeSubject.trim(),
+          body: composeBody.trim(),
+        }),
+      });
+      const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
+      if (data.error) throw new Error(data.error);
+      setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
+      setComposeTo(''); setComposeSubject(''); setComposeBody('');
+      setStep('sent');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed');
+      setStep('error');
+    }
+  }, [agentName, composeTo, composeSubject, composeBody, sendsRemaining]);
 
   if (step === 'loading') {
     return (
@@ -259,11 +289,11 @@ export default function MiniApp() {
               className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
               📨 Read Inbox →
             </button>
-            <button onClick={sendTest} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
-              ✉️ Send Test Email
+            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
+              ✉️ Compose Email
             </button>
-            <button onClick={openDashboard} className="w-full text-gray-500 text-sm py-2">
-              Open Dashboard →
+            <button onClick={sendTest} className="w-full text-gray-500 text-sm py-2">
+              Send Test to Self
             </button>
           </div>
         </div>
@@ -282,8 +312,8 @@ export default function MiniApp() {
             <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
               📨 Read Inbox →
             </button>
-            <button onClick={sendTest} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm">
-              ✉️ Send Test Email
+            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm">
+              ✉️ Compose Email
             </button>
             <button onClick={openUpgrade} className="w-full text-gray-500 text-sm py-2">
               Upgrade Tier →
@@ -321,11 +351,59 @@ export default function MiniApp() {
             </div>
           )}
           <div className="space-y-2 mt-4">
-            <button onClick={sendTest} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              ✉️ Send Test Email
+            <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              ✉️ Compose Email
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
             <button onClick={() => setStep('success')} className="w-full text-gray-500 text-sm py-2">← Back</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'compose') {
+    const fromAddr = humanEmail || `${agentName}@nftmail.box`;
+    return (
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
+        <div className="w-full max-w-sm mx-auto">
+          <div className="flex items-center gap-3 mb-5">
+            <button onClick={() => setStep('inbox')} className="text-gray-500 text-lg">←</button>
+            <h2 className="text-white font-bold text-lg">✉️ Compose</h2>
+          </div>
+          <p className="text-gray-600 font-mono text-xs mb-4">From: {fromAddr}</p>
+          <div className="space-y-3">
+            <input
+              type="email"
+              placeholder="To: recipient@example.com"
+              value={composeTo}
+              onChange={e => setComposeTo(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
+              autoCapitalize="none"
+              autoComplete="off"
+            />
+            <input
+              type="text"
+              placeholder="Subject"
+              value={composeSubject}
+              onChange={e => setComposeSubject(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
+            />
+            <textarea
+              placeholder="Message body..."
+              value={composeBody}
+              onChange={e => setComposeBody(e.target.value)}
+              rows={6}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400 resize-none"
+            />
+            <button
+              onClick={sendCompose}
+              disabled={!composeTo || !composeSubject || !composeBody}
+              className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
+            >
+              Send →
+            </button>
+            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
           </div>
         </div>
       </div>
