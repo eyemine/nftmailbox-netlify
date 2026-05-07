@@ -315,7 +315,7 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <Image src={LOGO_URL} alt="" width={80} height={80} className="mx-auto mb-4" />
+          <Image src={LOGO_URL} alt="" width={120} height={120} className="mx-auto mb-4" />
           <p className="text-green-400 font-mono text-sm">Initialising...</p>
         </div>
       </div>
