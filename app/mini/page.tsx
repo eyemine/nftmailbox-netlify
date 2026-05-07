@@ -97,11 +97,13 @@ interface ProvisionResult {
 interface InboxMessage {
   id: string;
   from: string;
+  to?: string;      // for sent messages
   subject: string;
   body?: string;    // set after client-side ECIES decrypt
   content?: string; // raw from worker getInbox (maps to payload.body)
   receivedAt: number;
   encrypted?: boolean;
+  type?: 'inbox' | 'sent';
 }
 
 interface InboxResult {
@@ -118,6 +120,7 @@ export default function MiniApp() {
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
   const [composeTo, setComposeTo] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
@@ -300,6 +303,17 @@ export default function MiniApp() {
       const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
       if (data.error) throw new Error(data.error);
       setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
+      // Add to sentbox
+      const now = Date.now();
+      setSentMessages(prev => [{
+        id: `sent-${now}`,
+        subject: composeSubject.trim(),
+        from: humanEmail || `${agentName}@nftmail.box`,
+        to: composeTo.trim(),
+        content: composeBody.trim(),
+        receivedAt: now,
+        type: 'sent',
+      }, ...prev].slice(0, 10));
       setComposeTo(''); setComposeSubject(''); setComposeBody('');
       setStep('sent');
     } catch (e) {
@@ -530,9 +544,21 @@ export default function MiniApp() {
               onClick={() => {}}
             >
               <span className="text-gray-400 text-sm">Sentbox</span>
-              <span className="text-gray-500 text-xs">0/10</span>
+              <span className="text-gray-500 text-xs">{sentMessages.length}/10</span>
             </button>
-            <p className="text-gray-600 text-xs">No sent emails yet</p>
+            {sentMessages.length === 0 ? (
+              <p className="text-gray-600 text-xs">No sent emails yet</p>
+            ) : (
+              <div className="space-y-2 mt-2">
+                {sentMessages.map(msg => (
+                  <div key={msg.id} className="bg-gray-900 border border-gray-800 rounded-lg p-2">
+                    <p className="text-white text-sm truncate">{msg.subject || '(no subject)'}</p>
+                    <p className="text-gray-500 text-xs truncate">To: {msg.to}</p>
+                    <p className="text-gray-600 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 mt-6">
@@ -620,12 +646,12 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
           <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
             <p className="text-green-400 font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
-            <p className="text-gray-500 text-xs mt-1">{sendsRemaining} sends remaining</p>
+            <p className="text-gray-500 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
           </div>
-          <p className="text-gray-400 text-xs mb-6">Check your inbox — it should arrive in a few seconds.</p>
+          <p className="text-gray-400 text-xs mb-6">Your email is on its way to the recipient.</p>
           <div className="space-y-3">
             <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              Check Inbox →
+              Back to Inbox →
             </button>
             <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg text-sm">
               Upgrade to PUPA →
