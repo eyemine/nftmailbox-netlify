@@ -314,7 +314,18 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-4" />
+          <Image 
+            src={LOGO_URL} 
+            alt="" 
+            width={80} 
+            height={80} 
+            className="mx-auto mb-4" 
+            onError={(e) => {
+              const img = e.target as HTMLImageElement;
+              img.style.display = 'none';
+              img.parentElement!.innerHTML = '<div class="text-6xl mb-4">👻</div><p class="text-green-400 font-mono text-sm">Initialising...</p>';
+            }}
+          />
           <p className="text-green-400 font-mono text-sm">Initialising...</p>
         </div>
       </div>
@@ -327,7 +338,18 @@ export default function MiniApp() {
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="rounded-xl" />
+              <Image 
+                src={LOGO_URL} 
+                alt="" 
+                width={80} 
+                height={80} 
+                className="rounded-xl"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  img.style.display = 'none';
+                  img.parentElement!.innerHTML = '<div class="text-6xl">👻</div>';
+                }}
+              />
             </div>
             <h1 className="text-white font-bold text-2xl mb-1">nftmail.box</h1>
             <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
@@ -456,17 +478,17 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex flex-col px-4 py-6">
         <div className="w-full max-w-sm mx-auto">
-          {/* Navigation */}
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-            <div className="flex items-center gap-2">
-              <Image src={LOGO_URL} alt="nftmail.box" width={32} height={32} className="rounded" />
-              <span className="text-white font-bold text-sm">nftmail.box</span>
-            </div>
-            <div className="flex gap-3 text-xs">
-              <button onClick={openMainSite} className="text-gray-400 hover:text-white">Main</button>
-              <button onClick={openDashboard} className="text-gray-400 hover:text-white">Site</button>
-              <span className="text-green-400">App</span>
-            </div>
+          {/* Header with Logo */}
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800">
+            <Image 
+              src={LOGO_URL} 
+              alt="" 
+              width={32} 
+              height={32} 
+              className="rounded shrink-0" 
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+            <span className="text-white font-bold text-sm whitespace-nowrap">nftmail.box</span>
           </div>
           
           <div className="flex items-center justify-between mb-4">
@@ -476,7 +498,19 @@ export default function MiniApp() {
           <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <Image src={MAILBOX_ICON_URL} alt="Empty mailbox" width={64} height={64} className="mx-auto mb-3 opacity-70" />
+              <Image 
+                src={MAILBOX_ICON_URL} 
+                alt="" 
+                width={64} 
+                height={64} 
+                className="mx-auto mb-3 opacity-70" 
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  img.style.display = 'none';
+                  img.parentElement!.querySelector('.fallback-mailbox')!.classList.remove('hidden');
+                }}
+              />
+              <div className="fallback-mailbox hidden text-4xl mb-3">📭</div>
               <p className="text-gray-500 text-sm">No messages yet</p>
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
@@ -542,8 +576,8 @@ export default function MiniApp() {
           </div>
 
           <div className="space-y-2 mt-6">
-            <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              Compose
+            <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
+              <span>✉️</span> Compose
             </button>
             <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
               Dashboard
