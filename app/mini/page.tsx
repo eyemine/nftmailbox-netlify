@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
+import { LOGO_BASE64, MAILBOX_BASE64 } from './images';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
@@ -307,8 +308,8 @@ export default function MiniApp() {
     }
   }, [agentName, composeTo, composeSubject, composeBody, sendsRemaining]);
 
-  const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
-  const MAILBOX_ICON_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreigsbizftt4tysymzdxea62juyhjcoy7xwiqjvalaxnrlkoddy2iae';
+  const LOGO_URL = LOGO_BASE64;
+  const MAILBOX_ICON_URL = MAILBOX_BASE64;
 
   if (step === 'loading') {
     return (
