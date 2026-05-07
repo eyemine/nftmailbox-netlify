@@ -305,7 +305,7 @@ export default function MiniApp() {
       setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
       // Add to sentbox
       const now = Date.now();
-      setSentMessages(prev => [{
+      const newSent: InboxMessage = {
         id: `sent-${now}`,
         subject: composeSubject.trim(),
         from: humanEmail || `${agentName}@nftmail.box`,
@@ -313,7 +313,8 @@ export default function MiniApp() {
         content: composeBody.trim(),
         receivedAt: now,
         type: 'sent',
-      }, ...prev].slice(0, 10));
+      };
+      setSentMessages(prev => [newSent, ...prev].slice(0, 10));
       setComposeTo(''); setComposeSubject(''); setComposeBody('');
       setStep('sent');
     } catch (e) {
