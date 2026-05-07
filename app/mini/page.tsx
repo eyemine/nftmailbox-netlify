@@ -126,8 +126,21 @@ export default function MiniApp() {
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
 
   const openDashboard = useCallback(() => {
-    sdk.actions.openUrl(`${APP_URL}/dashboard`);
+    sdk.actions.openUrl(`${APP_URL}`);
   }, []);
+
+  const openMainSite = useCallback(() => {
+    sdk.actions.openUrl(`${APP_URL}`);
+  }, []);
+
+  const openApp = useCallback(() => {
+    sdk.actions.openUrl(`${APP_URL}/mini`);
+  }, []);
+
+  const openUpgrade = useCallback(() => {
+    const encodedAgent = encodeURIComponent(`${agentName}.cast`);
+    sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini`);
+  }, [agentName]);
 
   useEffect(() => {
     const init = async () => {
@@ -207,10 +220,6 @@ export default function MiniApp() {
       setStep('error');
     }
   }, [fid]);
-
-  const openUpgrade = useCallback(() => {
-    sdk.actions.openUrl(`${APP_URL}/mint?agent=${agentName}&from=mini`);
-  }, [agentName]);
 
   const openByoMolt = useCallback(() => {
     sdk.actions.openUrl(`https://ghostagent.ninja/byo-molt?agent=${agentName}&from=nftmail`);
@@ -298,11 +307,14 @@ export default function MiniApp() {
     }
   }, [agentName, composeTo, composeSubject, composeBody, sendsRemaining]);
 
+  const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
+  const MAILBOX_ICON_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreigsbizftt4tysymzdxea62juyhjcoy7xwiqjvalaxnrlkoddy2iae';
+
   if (step === 'loading') {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-4" />
           <p className="text-green-400 font-mono text-sm">Initialising...</p>
         </div>
       </div>
@@ -315,7 +327,7 @@ export default function MiniApp() {
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              <Image src="/nftmail-logo.png" alt="nftmail.box" width={72} height={72} className="rounded-xl" />
+              <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="rounded-xl" />
             </div>
             <h1 className="text-white font-bold text-2xl mb-1">nftmail.box</h1>
             <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
@@ -419,10 +431,10 @@ export default function MiniApp() {
             <button
               onClick={() => loadInbox(agentName)}
               className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              📨 Read Inbox →
+              Read Inbox →
             </button>
             <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
-              ✉️ Compose Email
+              Compose
             </button>
             <button onClick={sendTest} className="w-full text-gray-500 text-sm py-2">
               Send Test to Self
@@ -444,14 +456,27 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex flex-col px-4 py-6">
         <div className="w-full max-w-sm mx-auto">
+          {/* Navigation */}
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
+            <div className="flex items-center gap-2">
+              <Image src={LOGO_URL} alt="nftmail.box" width={32} height={32} className="rounded" />
+              <span className="text-white font-bold text-sm">nftmail.box</span>
+            </div>
+            <div className="flex gap-3 text-xs">
+              <button onClick={openMainSite} className="text-gray-400 hover:text-white">Main</button>
+              <button onClick={openDashboard} className="text-gray-400 hover:text-white">Site</button>
+              <span className="text-green-400">App</span>
+            </div>
+          </div>
+          
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-white font-bold text-lg">📨 Inbox</h2>
-            <button onClick={() => loadInbox(agentName)} className="text-green-400 text-sm">↻ Refresh</button>
+            <h2 className="text-white font-bold text-lg">Inbox</h2>
+            <button onClick={() => loadInbox(agentName)} className="text-green-400 text-sm">Refresh</button>
           </div>
           <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-4xl mb-3">📭</div>
+              <Image src={MAILBOX_ICON_URL} alt="Empty mailbox" width={64} height={64} className="mx-auto mb-3 opacity-70" />
               <p className="text-gray-500 text-sm">No messages yet</p>
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
@@ -464,14 +489,31 @@ export default function MiniApp() {
                   <div
                     key={msg.id}
                     className={`bg-gray-900 border rounded-lg p-3 cursor-pointer transition-colors ${isOpen ? 'border-green-500/50' : 'border-gray-800 hover:border-gray-700'}`}
-                    onClick={() => setOpenMsgId(isOpen ? null : msg.id)}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                    <div 
+                      className="flex items-start justify-between gap-2"
+                      onClick={() => setOpenMsgId(isOpen ? null : msg.id)}
+                    >
+                      <div className="min-w-0 flex-1">
                         <p className="text-white text-sm font-medium truncate">{msg.subject || '(no subject)'}</p>
                         <p className="text-gray-500 text-xs mt-0.5 truncate">{msg.from}</p>
                       </div>
-                      <span className="text-gray-600 text-xs shrink-0 mt-0.5">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-gray-600 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Delete functionality will be added
+                            if (confirm('Delete this email?')) {
+                              setMessages(prev => prev.filter(m => m.id !== msg.id));
+                            }
+                          }}
+                          className="text-red-500 hover:text-red-400 text-xs px-1"
+                          title="Delete"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
                     {isOpen && (
                       <div className="mt-3 pt-3 border-t border-gray-800">
@@ -487,15 +529,27 @@ export default function MiniApp() {
               })}
             </div>
           )}
-          <div className="space-y-2 mt-4">
+          {/* Sentbox Section */}
+          <div className="mt-6 pt-4 border-t border-gray-800">
+            <button 
+              className="w-full flex items-center justify-between py-2 text-left"
+              onClick={() => {}}
+            >
+              <span className="text-gray-400 text-sm">Sentbox</span>
+              <span className="text-gray-500 text-xs">0/10</span>
+            </button>
+            <p className="text-gray-600 text-xs">No sent emails yet</p>
+          </div>
+
+          <div className="space-y-2 mt-6">
             <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              ✉️ Compose
+              Compose
             </button>
             <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-              🏠 Dashboard
+              Dashboard
             </button>
             <button onClick={loadInbox.bind(null, agentName)} className="w-full text-gray-500 text-sm py-2">
-              ↻ Refresh
+              Refresh
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
             <button onClick={openUpgrade} className="w-full text-gray-600 text-xs py-1">Upgrade to Permanent →</button>
@@ -512,7 +566,7 @@ export default function MiniApp() {
         <div className="w-full max-w-sm mx-auto">
           <div className="flex items-center gap-3 mb-5">
             <button onClick={() => setStep('inbox')} className="text-gray-500 text-lg">←</button>
-            <h2 className="text-white font-bold text-lg">✉️ Compose</h2>
+            <h2 className="text-white font-bold text-lg">Compose</h2>
           </div>
           <p className="text-gray-600 font-mono text-xs mb-4">From: {fromAddr}</p>
           <div className="space-y-3">
@@ -568,8 +622,8 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm text-center">
-          <div className="text-5xl mb-3">✉️</div>
-          <h2 className="text-white font-bold text-xl mb-2">Test Sent!</h2>
+          <Image src={MAILBOX_ICON_URL} alt="Sent" width={64} height={64} className="mx-auto mb-3 opacity-70" />
+          <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
           <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
             <p className="text-green-400 font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
             <p className="text-gray-500 text-xs mt-1">{sendsRemaining} sends remaining</p>
@@ -577,7 +631,7 @@ export default function MiniApp() {
           <p className="text-gray-400 text-xs mb-6">Check your inbox — it should arrive in a few seconds.</p>
           <div className="space-y-3">
             <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
-              📨 Check Inbox →
+              Check Inbox →
             </button>
             <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg text-sm">
               Upgrade to PUPA →
@@ -591,7 +645,6 @@ export default function MiniApp() {
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
-        <div className="text-4xl mb-3">⚠️</div>
         <h2 className="text-white font-bold text-xl mb-3">Something went wrong</h2>
         <p className="text-red-400 font-mono text-xs mb-6 break-words">{error}</p>
         <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg">

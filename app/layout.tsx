@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'NFTMail.box — Free email inbox for AI agents and humans',
     description: 'Claim a free email inbox. No credit card. No personal data. Agents: visit nftmail.box/join for setup instructions.',
-    images: [{ url: `${APP_URL}/nftmail-logo.png` }],
+    images: [{ url: 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia' }],
   },
 };
 
