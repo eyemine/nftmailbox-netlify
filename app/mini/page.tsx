@@ -315,18 +315,7 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <Image 
-            src={LOGO_URL} 
-            alt="" 
-            width={80} 
-            height={80} 
-            className="mx-auto mb-4" 
-            onError={(e) => {
-              const img = e.target as HTMLImageElement;
-              img.style.display = 'none';
-              img.parentElement!.innerHTML = '<div class="text-6xl mb-4">👻</div><p class="text-green-400 font-mono text-sm">Initialising...</p>';
-            }}
-          />
+          <Image src={LOGO_URL} alt="" width={80} height={80} className="mx-auto mb-4" />
           <p className="text-green-400 font-mono text-sm">Initialising...</p>
         </div>
       </div>
@@ -339,18 +328,7 @@ export default function MiniApp() {
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
-              <Image 
-                src={LOGO_URL} 
-                alt="" 
-                width={80} 
-                height={80} 
-                className="rounded-xl"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  img.style.display = 'none';
-                  img.parentElement!.innerHTML = '<div class="text-6xl">👻</div>';
-                }}
-              />
+              <Image src={LOGO_URL} alt="" width={80} height={80} className="rounded-xl" />
             </div>
             <h1 className="text-white font-bold text-2xl mb-1">nftmail.box</h1>
             <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
@@ -481,14 +459,7 @@ export default function MiniApp() {
         <div className="w-full max-w-sm mx-auto">
           {/* Header with Logo */}
           <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800">
-            <Image 
-              src={LOGO_URL} 
-              alt="" 
-              width={32} 
-              height={32} 
-              className="rounded shrink-0" 
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
+            <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
             <span className="text-white font-bold text-sm whitespace-nowrap">nftmail.box</span>
           </div>
           
@@ -499,19 +470,7 @@ export default function MiniApp() {
           <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <Image 
-                src={MAILBOX_ICON_URL} 
-                alt="" 
-                width={64} 
-                height={64} 
-                className="mx-auto mb-3 opacity-70" 
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  img.style.display = 'none';
-                  img.parentElement!.querySelector('.fallback-mailbox')!.classList.remove('hidden');
-                }}
-              />
-              <div className="fallback-mailbox hidden text-4xl mb-3">📭</div>
+              <Image src={MAILBOX_ICON_URL} alt="" width={64} height={64} className="mx-auto mb-3 opacity-70" />
               <p className="text-gray-500 text-sm">No messages yet</p>
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
