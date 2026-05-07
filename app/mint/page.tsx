@@ -5,8 +5,7 @@ import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { sdk } from '@farcaster/miniapp-sdk';
 
-const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
-const MINT_PRICE = '0.01'; // xDAI
+const LOGO_URL = '/nftmail-logo.png';
 
 interface TierInfo {
   name: string;
@@ -25,11 +24,13 @@ const TIERS: TierInfo[] = [
     features: [
       'Unlimited inbox storage',
       'Send 100 emails/day',
+      'Gnosis Safe multi-sig',
+      'Agent autonomies (HITL, Budget)',
       'On-chain identity verification',
       'Tradeable NFT',
-      'No expiration',
+      '30 day history window',
     ],
-    price: MINT_PRICE,
+    price: '10',
   },
   {
     name: 'IMAGO',
@@ -37,12 +38,14 @@ const TIERS: TierInfo[] = [
     description: 'Sovereign email with Safe treasury',
     features: [
       'Everything in PUPA',
-      'Gnosis Safe multi-sig',
-      'Agent autonomies (HITL, Budget)',
-      'ECIES encrypted messaging',
+      'Auto-forwarding',
+      'Disposable email',
+      'ghostmail.box',
+      'Send and receive attachments',
+      'Persistent history',
       'Transferable with governance',
     ],
-    price: MINT_PRICE,
+    price: '24',
     popular: true,
   },
 ];
@@ -199,12 +202,17 @@ function MintPageContent() {
 
   // Tier selection (default step)
   return (
-    <div className="min-h-screen bg-black flex flex-col px-4 py-6">
+    <div className="min-h-screen flex flex-col px-4 py-6" style={{
+      background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)'
+    }}>
       <div className="w-full max-w-sm mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <Image src={LOGO_URL} alt="nftmail.box" width={72} height={72} className="mx-auto mb-4 rounded-xl" />
-          <h1 className="text-white font-bold text-2xl mb-1">Upgrade Your Inbox</h1>
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Image src={LOGO_URL} alt="nftmail.box" width={48} height={48} className="opacity-95" />
+            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-xl">nftmail.box</span>
+          </div>
+          <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-2xl font-bold mb-1">Upgrade Your Inbox</h1>
           <p className="text-gray-400 text-sm">Mint a permanent NFT-backed address</p>
           {agentName && (
             <p className="text-green-400 font-mono text-xs mt-2">Current: {agentName}@nftmail.box</p>
@@ -213,47 +221,76 @@ function MintPageContent() {
 
         {/* Tier Cards */}
         <div className="space-y-4 mb-8">
-          {TIERS.map((tier) => (
-            <div
-              key={tier.name}
-              onClick={() => handleTierSelect(tier.name as 'PUPA' | 'IMAGO')}
-              className={`relative border rounded-xl p-5 cursor-pointer transition-all ${
-                selectedTier === tier.name
-                  ? 'border-green-400 bg-gray-900/80'
-                  : 'border-gray-800 bg-gray-900/40 hover:border-gray-700'
-              }`}
-            >
-              {tier.popular && (
-                <span className="absolute -top-2 right-4 bg-green-500 text-black text-xs font-bold px-2 py-0.5 rounded">
-                  RECOMMENDED
-                </span>
-              )}
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-white font-bold text-lg">{tier.name}</h3>
-                  <p className="text-green-400 font-mono text-sm">{tier.sld}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-white font-bold">{tier.price} xDAI</p>
-                  <p className="text-gray-500 text-xs">~${(parseFloat(tier.price) * 0.8).toFixed(2)} USD</p>
-                </div>
+          {/* PUPA Tier */}
+          <div
+            onClick={() => handleTierSelect('PUPA')}
+            className={`relative border rounded-xl p-5 cursor-pointer transition-all ${
+              selectedTier === 'PUPA'
+                ? 'border-green-400 bg-gray-900/80'
+                : 'border-gray-800 bg-gray-900/40 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-white font-bold text-xl">PUPA</h3>
+                <p className="text-gray-400 font-mono text-sm">{agentName || 'your-agent'}.nftmail.gno</p>
               </div>
-              <p className="text-gray-400 text-sm mb-3">{tier.description}</p>
-              <ul className="space-y-1">
-                {tier.features.map((feature, i) => (
-                  <li key={i} className="text-gray-500 text-xs flex items-center gap-2">
-                    <span className="text-green-400">✓</span> {feature}
-                  </li>
-                ))}
-              </ul>
+              <div className="text-right">
+                <p className="text-white font-bold text-xl">10 xDAI</p>
+                <p className="text-gray-500 text-xs">~$10 USD</p>
+              </div>
             </div>
-          ))}
+            <p className="text-gray-400 text-sm mb-3">Permanent NFT-backed email address</p>
+            <ul className="space-y-1.5">
+              {['Unlimited inbox storage', 'Send 100 emails/day', 'Gnosis Safe multi-sig', 'Agent autonomies (HITL, Budget)', 'On-chain identity verification', 'Tradeable NFT', '30 day history window'].map((feature, i) => (
+                <li key={i} className="text-gray-400 text-xs flex items-center gap-2">
+                  <span className="text-green-400">✓</span> {feature}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* IMAGO Tier - Purple */}
+          <div
+            onClick={() => handleTierSelect('IMAGO')}
+            className={`relative border rounded-xl p-5 cursor-pointer transition-all ${
+              selectedTier === 'IMAGO'
+                ? 'border-[#4722d1] bg-[#4722d1]/20'
+                : 'border-[#4722d1]/50 bg-[#4722d1]/10 hover:border-[#4722d1]'
+            }`}
+          >
+            <span className="absolute -top-2 right-4 bg-[#4722d1] text-white text-xs font-bold px-2 py-0.5 rounded">
+              RECOMMENDED
+            </span>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="text-white font-bold text-xl">IMAGO</h3>
+                <p className="text-[#a78bfa] font-mono text-sm">{agentName || 'your-agent'}.nftmail.gno</p>
+              </div>
+              <div className="text-right">
+                <p className="text-white font-bold text-xl">24 xDAI</p>
+                <p className="text-[#a78bfa] text-xs">~$24 USD annual</p>
+              </div>
+            </div>
+            <p className="text-gray-300 text-sm mb-3">Sovereign email with Safe treasury</p>
+            <ul className="space-y-1.5">
+              {['Everything in PUPA', 'Auto-forwarding', 'Disposable email', 'ghostmail.box', 'Send and receive attachments', 'Persistent history', 'Transferable with governance'].map((feature, i) => (
+                <li key={i} className="text-gray-300 text-xs flex items-center gap-2">
+                  <span className="text-[#a78bfa]">✓</span> {feature}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         {/* Mint Button */}
         <button
           onClick={() => handleTierSelect(selectedTier)}
-          className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-4 rounded-xl transition-colors mb-4"
+          className={`w-full font-bold py-4 rounded-xl transition-colors mb-4 ${
+            selectedTier === 'IMAGO'
+              ? 'bg-[#4722d1] hover:bg-[#5a35e0] text-white'
+              : 'bg-green-500 hover:bg-green-400 text-black'
+          }`}
         >
           Mint {selectedTier} →
         </button>

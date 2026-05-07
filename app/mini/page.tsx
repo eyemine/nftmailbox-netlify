@@ -663,14 +663,27 @@ export default function MiniApp() {
     );
   }
 
+  const isSendLimitError = error?.toLowerCase().includes('send limit');
+  
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
         <h2 className="text-white font-bold text-xl mb-3">Something went wrong</h2>
         <p className="text-red-400 font-mono text-xs mb-6 break-words">{error}</p>
-        <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg">
-          Try Again
-        </button>
+        {isSendLimitError ? (
+          <div className="space-y-3">
+            <button onClick={openUpgrade} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              Upgrade to PUPA →
+            </button>
+            <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg">
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-lg">
+            Try Again
+          </button>
+        )}
       </div>
     </div>
   );
