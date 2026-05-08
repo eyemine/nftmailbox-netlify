@@ -7,47 +7,27 @@ import { sdk } from '@farcaster/miniapp-sdk';
 
 const LOGO_URL = '/nftmail-logo.png';
 
-interface TierInfo {
-  name: string;
-  sld: string;
-  description: string;
-  features: string[];
-  price: string;
-  popular?: boolean;
-}
+const PUPA_FEATURES = [
+  'Unlimited inbox storage',
+  'Send 100 emails/day',
+  'Gnosis Safe multi-sig',
+  'Agent autonomies (HITL, Budget)',
+  'On-chain identity verification',
+  'Attach an agent "brain"',
+  'BYO NFT molt',
+  'Tradeable NFT',
+  '30-day history window',
+];
 
-const TIERS: TierInfo[] = [
-  {
-    name: 'PUPA',
-    sld: '.nftmail.gno',
-    description: 'Permanent NFT-backed email address',
-    features: [
-      'Unlimited inbox storage',
-      'Send 100 emails/day',
-      'Gnosis Safe multi-sig',
-      'Agent autonomies (HITL, Budget)',
-      'On-chain identity verification',
-      'Tradeable NFT',
-      '30 day history window',
-    ],
-    price: '10',
-  },
-  {
-    name: 'IMAGO',
-    sld: '.nftmail.gno',
-    description: 'Sovereign email with Safe treasury',
-    features: [
-      'Everything in PUPA',
-      'Auto-forwarding',
-      'Disposable email',
-      'ghostmail.box',
-      'Send and receive attachments',
-      'Persistent history',
-      'Transferable with governance',
-    ],
-    price: '24',
-    popular: true,
-  },
+const IMAGO_FEATURES = [
+  'Everything in PUPA',
+  'Auto-forwarding',
+  'Disposable email',
+  'ghostmail.box',
+  'Send and receive attachments',
+  'Persistent history',
+  'Attach an agent "brain"',
+  'Transferable with governance',
 ];
 
 function isMobileUserAgent(): boolean {
@@ -59,8 +39,11 @@ function MintPageContent() {
   const searchParams = useSearchParams();
   const agentParam = searchParams.get('agent') || '';
   const fromParam = searchParams.get('from') || '';
-  
-  const [agentName, setAgentName] = useState(agentParam.replace('.cast', ''));
+
+  // Convert agent name: strip .cast suffix, replace dots with hyphens for display as SLD label
+  const rawName = agentParam.replace(/\.cast$/i, '');
+  const sldLabel = rawName.replace(/\./g, '-');
+
   const [isMobile, setIsMobile] = useState(true);
   const [isInWarpcast, setIsInWarpcast] = useState(false);
   const [selectedTier, setSelectedTier] = useState<'PUPA' | 'IMAGO'>('PUPA');
@@ -68,16 +51,11 @@ function MintPageContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check if mobile and if in Warpcast
-    const mobile = isMobileUserAgent();
-    setIsMobile(mobile);
-    
+    setIsMobile(isMobileUserAgent());
     const checkWarpcast = async () => {
       try {
         const context = await sdk.context;
-        if (context?.user?.fid) {
-          setIsInWarpcast(true);
-        }
+        if (context?.user?.fid) setIsInWarpcast(true);
       } catch {
         setIsInWarpcast(false);
       }
@@ -85,34 +63,30 @@ function MintPageContent() {
     checkWarpcast();
   }, []);
 
-  const handleTierSelect = (tier: 'PUPA' | 'IMAGO') => {
+  // Card click: just select the tier, never navigate
+  const handleCardClick = (tier: 'PUPA' | 'IMAGO') => {
     setSelectedTier(tier);
-    
-    // If not mobile and coming from mini app, show mobile check
-    if (fromParam === 'mini' && !isMobile) {
+  };
+
+  // Mint button: navigate (mobile-check on desktop, startMint on mobile/warpcast)
+  const handleMintClick = () => {
+    if (!isMobile && !isInWarpcast) {
       setStep('mobile-check');
       return;
     }
-    
-    startMint(tier);
+    startMint(selectedTier);
   };
 
   const startMint = async (tier: 'PUPA' | 'IMAGO') => {
     setStep('minting');
     setError('');
-    
     try {
-      // For now, open the main mint UI in Warpcast or redirect
-      // This is a placeholder - the actual mint would integrate with the registry contract
-      const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${agentName}&source=${fromParam}`;
-      
+      const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${sldLabel}&source=${fromParam}`;
       if (isInWarpcast) {
         await sdk.actions.openUrl(mintUrl);
       } else {
         window.open(mintUrl, '_blank');
       }
-      
-      // Show success state briefly
       setTimeout(() => setStep('success'), 500);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Mint failed');
@@ -120,28 +94,44 @@ function MintPageContent() {
     }
   };
 
+  const handleBackToFarcaster = async () => {
+    try {
+      await sdk.actions.close();
+    } catch {
+      window.history.back();
+    }
+  };
+
+  const gradientBg = {
+    background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)',
+  };
+
   if (step === 'mobile-check') {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={gradientBg}>
         <div className="w-full max-w-sm text-center">
-          <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-6 rounded-xl" />
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <Image src={LOGO_URL} alt="nftmail.box" width={40} height={40} className="opacity-95" />
+            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-lg">nftmail.box</span>
+          </div>
           <h2 className="text-white font-bold text-xl mb-4">Use Mobile for Minting</h2>
-          <p className="text-gray-400 text-sm mb-6">
-            To connect your Farcaster wallet and mint directly to your associated address, 
-            please open this in the Warpcast mobile app.
+          <p className="text-gray-400 text-sm mb-2">
+            To connect your Farcaster wallet and mint directly to your verified address, open this in Warpcast on your phone.
           </p>
+          <p className="text-gray-500 font-mono text-xs mb-8">{sldLabel}.nftmail.gno ({selectedTier})</p>
           <div className="space-y-3">
-            <button 
+            <button
+              onClick={handleBackToFarcaster}
+              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
+              style={{ backgroundColor: '#855DCD' }}
+            >
+              ← Back to Farcaster
+            </button>
+            <button
               onClick={() => setStep('select')}
-              className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 text-gray-300 py-3 rounded-xl text-sm transition-colors hover:border-gray-500"
             >
               ← Back to Tiers
-            </button>
-            <button 
-              onClick={() => startMint(selectedTier)}
-              className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors"
-            >
-              Continue Anyway →
             </button>
           </div>
         </div>
@@ -151,12 +141,12 @@ function MintPageContent() {
 
   if (step === 'minting') {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={gradientBg}>
         <div className="text-center">
-          <Image src={LOGO_URL} alt="nftmail.box" width={64} height={64} className="mx-auto mb-4" />
+          <Image src={LOGO_URL} alt="nftmail.box" width={64} height={64} className="mx-auto mb-4 opacity-95" />
           <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-green-400 font-mono text-sm">Preparing mint...</p>
-          <p className="text-gray-600 text-xs mt-2">{agentName}{selectedTier === 'PUPA' ? '.nftmail.gno (PUPA)' : '.nftmail.gno (IMAGO)'}</p>
+          <p className="text-gray-600 text-xs mt-2">{sldLabel}.nftmail.gno ({selectedTier})</p>
         </div>
       </div>
     );
@@ -164,20 +154,24 @@ function MintPageContent() {
 
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={gradientBg}>
         <div className="w-full max-w-sm text-center">
-          <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-6 rounded-xl" />
+          <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-6 opacity-95" />
           <h2 className="text-white font-bold text-2xl mb-2">Opening Mint...</h2>
-          <p className="text-green-400 font-mono text-sm mb-4">{agentName}{selectedTier === 'PUPA' ? '.nftmail.gno (PUPA)' : '.nftmail.gno (IMAGO)'}</p>
-          <p className="text-gray-400 text-xs mb-6">
-            Complete the mint in the opened window. Return here when done.
-          </p>
-          <button 
-            onClick={() => setStep('select')}
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors"
-          >
-            Back to Tiers
-          </button>
+          <p className="text-green-400 font-mono text-sm mb-4">{sldLabel}.nftmail.gno ({selectedTier})</p>
+          <p className="text-gray-400 text-xs mb-6">Complete the mint in the opened window. Return here when done.</p>
+          <div className="space-y-3">
+            <button
+              onClick={handleBackToFarcaster}
+              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
+              style={{ backgroundColor: '#855DCD' }}
+            >
+              ← Back to Farcaster
+            </button>
+            <button onClick={() => setStep('select')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 py-3 rounded-xl text-sm">
+              Back to Tiers
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -185,16 +179,22 @@ function MintPageContent() {
 
   if (step === 'error') {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={gradientBg}>
         <div className="w-full max-w-sm text-center">
           <h2 className="text-white font-bold text-xl mb-3">Mint Error</h2>
           <p className="text-red-400 font-mono text-xs mb-6">{error}</p>
-          <button 
-            onClick={() => setStep('select')}
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-lg transition-colors"
-          >
-            Try Again
-          </button>
+          <div className="space-y-3">
+            <button onClick={() => setStep('select')} className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl transition-colors">
+              Try Again
+            </button>
+            <button
+              onClick={handleBackToFarcaster}
+              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
+              style={{ backgroundColor: '#855DCD' }}
+            >
+              ← Back to Farcaster
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -202,9 +202,7 @@ function MintPageContent() {
 
   // Tier selection (default step)
   return (
-    <div className="min-h-screen flex flex-col px-4 py-6" style={{
-      background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)'
-    }}>
+    <div className="min-h-screen flex flex-col px-4 py-6" style={gradientBg}>
       <div className="w-full max-w-sm mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -213,36 +211,36 @@ function MintPageContent() {
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-xl">nftmail.box</span>
           </div>
           <h1 style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-2xl font-bold mb-1">Upgrade Your Inbox</h1>
-          <p className="text-gray-400 text-sm">Mint a permanent NFT-backed address</p>
-          {agentName && (
-            <p className="text-green-400 font-mono text-xs mt-2">Current: {agentName}@nftmail.box</p>
+          <p className="text-gray-400 text-sm">Mint a permanent NFT-governed address</p>
+          {sldLabel && (
+            <p className="text-green-400 font-mono text-xs mt-2">Current: {rawName}@nftmail.box</p>
           )}
         </div>
 
-        {/* Tier Cards */}
-        <div className="space-y-4 mb-8">
+        {/* Tier Cards — click only selects, does not navigate */}
+        <div className="space-y-4 mb-6">
           {/* PUPA Tier */}
           <div
-            onClick={() => handleTierSelect('PUPA')}
+            onClick={() => handleCardClick('PUPA')}
             className={`relative border rounded-xl p-5 cursor-pointer transition-all ${
               selectedTier === 'PUPA'
                 ? 'border-green-400 bg-gray-900/80'
-                : 'border-gray-800 bg-gray-900/40 hover:border-gray-700'
+                : 'border-gray-800 bg-gray-900/40 hover:border-gray-600'
             }`}
           >
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h3 className="text-white font-bold text-xl">PUPA</h3>
-                <p className="text-gray-400 font-mono text-sm">{agentName || 'your-agent'}.nftmail.gno</p>
+                <p className="text-gray-400 font-mono text-sm">{sldLabel || 'your-agent'}.nftmail.gno</p>
               </div>
               <div className="text-right">
                 <p className="text-white font-bold text-xl">10 xDAI</p>
                 <p className="text-gray-500 text-xs">~$10 USD</p>
               </div>
             </div>
-            <p className="text-gray-400 text-sm mb-3">Permanent NFT-backed email address</p>
+            <p className="text-gray-400 text-sm mb-3">Permanent NFT-governed email address</p>
             <ul className="space-y-1.5">
-              {['Unlimited inbox storage', 'Send 100 emails/day', 'Gnosis Safe multi-sig', 'Agent autonomies (HITL, Budget)', 'On-chain identity verification', 'Tradeable NFT', '30 day history window'].map((feature, i) => (
+              {PUPA_FEATURES.map((feature, i) => (
                 <li key={i} className="text-gray-400 text-xs flex items-center gap-2">
                   <span className="text-green-400">✓</span> {feature}
                 </li>
@@ -250,22 +248,22 @@ function MintPageContent() {
             </ul>
           </div>
 
-          {/* IMAGO Tier - Purple */}
+          {/* IMAGO Tier — purple */}
           <div
-            onClick={() => handleTierSelect('IMAGO')}
+            onClick={() => handleCardClick('IMAGO')}
             className={`relative border rounded-xl p-5 cursor-pointer transition-all ${
               selectedTier === 'IMAGO'
                 ? 'border-[#4722d1] bg-[#4722d1]/20'
                 : 'border-[#4722d1]/50 bg-[#4722d1]/10 hover:border-[#4722d1]'
             }`}
           >
-            <span className="absolute -top-2 right-4 bg-[#4722d1] text-white text-xs font-bold px-2 py-0.5 rounded">
+            <span className="absolute -top-2.5 right-4 bg-[#4722d1] text-white text-xs font-bold px-2 py-0.5 rounded">
               RECOMMENDED
             </span>
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h3 className="text-white font-bold text-xl">IMAGO</h3>
-                <p className="text-[#a78bfa] font-mono text-sm">{agentName || 'your-agent'}.nftmail.gno</p>
+                <p className="text-[#a78bfa] font-mono text-sm">{sldLabel || 'your-agent'}.nftmail.gno</p>
               </div>
               <div className="text-right">
                 <p className="text-white font-bold text-xl">24 xDAI</p>
@@ -274,7 +272,7 @@ function MintPageContent() {
             </div>
             <p className="text-gray-300 text-sm mb-3">Sovereign email with Safe treasury</p>
             <ul className="space-y-1.5">
-              {['Everything in PUPA', 'Auto-forwarding', 'Disposable email', 'ghostmail.box', 'Send and receive attachments', 'Persistent history', 'Transferable with governance'].map((feature, i) => (
+              {IMAGO_FEATURES.map((feature, i) => (
                 <li key={i} className="text-gray-300 text-xs flex items-center gap-2">
                   <span className="text-[#a78bfa]">✓</span> {feature}
                 </li>
@@ -283,10 +281,10 @@ function MintPageContent() {
           </div>
         </div>
 
-        {/* Mint Button */}
+        {/* Mint Button — this is what triggers navigation */}
         <button
-          onClick={() => handleTierSelect(selectedTier)}
-          className={`w-full font-bold py-4 rounded-xl transition-colors mb-4 ${
+          onClick={handleMintClick}
+          className={`w-full font-bold py-4 rounded-xl transition-colors mb-3 ${
             selectedTier === 'IMAGO'
               ? 'bg-[#4722d1] hover:bg-[#5a35e0] text-white'
               : 'bg-green-500 hover:bg-green-400 text-black'
@@ -295,20 +293,9 @@ function MintPageContent() {
           Mint {selectedTier} →
         </button>
 
-        {/* Info */}
         <p className="text-gray-600 text-xs text-center">
-          Minted on Gnosis Chain. Gas paid in xDAI. 
-          {isInWarpcast ? ' Connected to Farcaster wallet.' : ' Open in Warpcast for best experience.'}
+          Minted on Gnosis Chain · Gas paid in xDAI
         </p>
-
-        {!isMobile && fromParam === 'mini' && (
-          <div className="mt-4 p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-            <p className="text-amber-300 text-xs text-center">
-              Desktop detected. For wallet connection with your Farcaster account, 
-              use Warpcast mobile app.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
