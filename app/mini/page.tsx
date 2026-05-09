@@ -8,6 +8,11 @@ import { LOGO_URL, MAILBOX_ICON_URL } from './images';
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
+// Ayathaya font for header - Google Font
+const AYATHAYA_FONT_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Ayathaya&display=swap');
+`;
+
 // ── Client-side ECIES decrypt (P-256 / AES-256-GCM — mirrors worker ecies.ts) ──
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
@@ -239,12 +244,20 @@ export default function MiniApp() {
   const loadInboxDirect = async (name: string, privKey: string | null) => {
     setStep('inbox');
     try {
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getInbox', localPart: name }),
-      });
-      const data: InboxResult = await res.json();
+      // Fetch inbox and quota in parallel for accurate sendsRemaining
+      const [inboxRes, quotaRes] = await Promise.all([
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getInbox', localPart: name }),
+        }),
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'checkSendLimit', agentName: name }),
+        }).catch(() => null), // non-fatal if quota check fails
+      ]);
+      const data: InboxResult = await inboxRes.json();
       const decrypted = await Promise.all((data.messages || []).map(async (msg) => {
         if ((msg as any).encrypted && (msg as any).envelope && privKey) {
           try {
@@ -256,7 +269,17 @@ export default function MiniApp() {
         return msg;
       }));
       setMessages(decrypted);
-      setSendsRemaining(data.sendsRemaining ?? 10);
+      // Use checkSendLimit quota if available, fallback to getInbox value
+      let quota = data.sendsRemaining ?? 10;
+      if (quotaRes) {
+        try {
+          const quotaData = await quotaRes.json() as { sendsRemaining?: number };
+          if (typeof quotaData.sendsRemaining === 'number') {
+            quota = quotaData.sendsRemaining;
+          }
+        } catch {}
+      }
+      setSendsRemaining(quota);
     } catch {
       setMessages([]);
     }
@@ -474,11 +497,12 @@ export default function MiniApp() {
   if (step === 'inbox') {
     return (
       <div className="min-h-screen bg-[#43a574] flex flex-col px-4 py-6">
+        <style>{AYATHAYA_FONT_CSS}</style>
         <div className="w-full max-w-sm mx-auto">
           {/* Header with Logo */}
           <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/20">
             <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
-            <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
+            <span className="text-white font-bold text-2xl whitespace-nowrap" style={{ fontFamily: 'Ayathaya, sans-serif' }}>nftmail.box</span>
           </div>
           
           <div className="flex items-center justify-between mb-4">

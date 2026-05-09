@@ -1,2 +1,3 @@
-export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
-export const MAILBOX_ICON_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
+// Use local static images for reliability (not IPFS)
+export const LOGO_URL = '/nftmail-logo-64.png';
+export const MAILBOX_ICON_URL = '/nftmail-logo-64.png';
