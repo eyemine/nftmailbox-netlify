@@ -109,6 +109,7 @@ interface InboxMessage {
 interface InboxResult {
   messages: InboxMessage[];
   sendsRemaining: number | string;
+  tier?: string;
   error?: string;
 }
 
@@ -119,6 +120,7 @@ export default function MiniApp() {
   const [agentName, setAgentName] = useState('');
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
+  const [inboxTier, setInboxTier] = useState<string>('larva');
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
@@ -269,6 +271,10 @@ export default function MiniApp() {
         return msg;
       }));
       setMessages(decrypted);
+      // Set tier from response or default to larva
+      if (data.tier) {
+        setInboxTier(data.tier.toLowerCase());
+      }
       // Load sentbox from worker if available
       if (sentboxRes) {
         try {
