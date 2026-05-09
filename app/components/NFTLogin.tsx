@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Link from 'next/link';
+import { SignInWithFarcaster } from './SignInWithFarcaster';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -319,8 +320,20 @@ export function NFTLogin() {
     }
   };
 
+  const handleFarcasterSuccess = (profile: { fid: number; username?: string; displayName?: string }) => {
+    console.log('Signed in with Farcaster:', profile);
+    // Store Farcaster session - user still needs wallet connect for ENS/NFT
+    // but we can show their FC profile
+    setError(null);
+  };
+
+  const handleFarcasterError = (err: string) => {
+    console.error('Farcaster sign-in failed:', err);
+  };
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Wallet Connect */}
       <button
         onClick={handleLogin}
         className="group relative w-full overflow-hidden rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-6 py-4 text-sm font-semibold text-[rgb(160,220,255)] transition-all hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_32px_rgba(0,163,255,0.12)]"
@@ -330,13 +343,27 @@ export function NFTLogin() {
             <rect x="2" y="6" width="20" height="12" rx="2" />
             <path d="M22 8l-10 5L2 8" />
           </svg>
-          Connect
+          Connect Wallet
           <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14" />
             <path d="m12 5 7 7-7 7" />
           </svg>
         </div>
       </button>
+
+      {/* Divider */}
+      <div className="relative py-2">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-700" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-black px-2 text-gray-500">or</span>
+        </div>
+      </div>
+
+      {/* Sign in with Farcaster */}
+      <SignInWithFarcaster onSuccess={handleFarcasterSuccess} onError={handleFarcasterError} />
+
       <p className="text-center text-[10px] text-[var(--muted)]">mint your nftmail address</p>
       <p className="text-center text-[10px] text-[var(--muted)]"><a href="/terms" className="underline">Terms of Use</a> and <a href="/privacy" className="underline">Privacy Policy</a></p>
       {error && <p className="text-center text-xs text-amber-400">{error}</p>}
