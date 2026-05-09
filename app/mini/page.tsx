@@ -8,11 +8,6 @@ import { LOGO_URL, MAILBOX_ICON_URL } from './images';
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 
-// Ayathaya font for header - Google Font
-const AYATHAYA_FONT_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Ayathaya&display=swap');
-`;
-
 // ── Client-side ECIES decrypt (P-256 / AES-256-GCM — mirrors worker ecies.ts) ──
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
@@ -354,10 +349,10 @@ export default function MiniApp() {
 
   if (step === 'loading') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <Image src={LOGO_URL} alt="" width={120} height={120} className="mx-auto mb-4" />
-          <p className="text-white font-mono text-sm">Initialising...</p>
+          <p className="text-green-400 font-mono text-sm">Initialising...</p>
         </div>
       </div>
     );
@@ -365,23 +360,23 @@ export default function MiniApp() {
 
   if (step === 'entry') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-4">
               <Image src={LOGO_URL} alt="" width={80} height={80} className="rounded-xl" />
             </div>
             <h1 className="text-white font-bold text-4xl mb-1 font-mono">nftmail.box</h1>
-            <p className="text-white/80 text-sm">Encrypted mail · Farcaster wallet secured</p>
+            <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
             {fid
-              ? <p className="text-white font-mono text-xs mt-2">FID: {fid} ✓</p>
-              : <p className="text-yellow-200 font-mono text-xs mt-2">Open in Warpcast to link FID</p>
+              ? <p className="text-green-400 font-mono text-xs mt-2">FID: {fid} ✓</p>
+              : <p className="text-yellow-400 font-mono text-xs mt-2">Open in Warpcast to link FID</p>
             }
           </div>
           <div className="space-y-3">
             <input
               type="text"
-              className="w-full bg-white/10 border border-white/30 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-white/50 focus:outline-none focus:border-white"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
               placeholder={fid ? `Custom name (default: your Farcaster name · FID ${fid})` : 'Custom name (optional)'}
               value={customName}
               onChange={e => setCustomName(e.target.value)}
@@ -392,11 +387,11 @@ export default function MiniApp() {
             <button
               onClick={() => setStep('naming')}
               disabled={!fid}
-              className="w-full bg-[#2d7a52] hover:bg-[#246644] disabled:bg-white/20 disabled:text-white/60 text-white font-bold py-3 rounded-lg transition-colors"
+              className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
               {fid ? 'Claim Account (LARVA) →' : 'Open in Warpcast to Claim'}
             </button>
-            <p className="text-white/60 text-xs text-center">8-day free inbox · Upgrade to permanent anytime</p>
+            <p className="text-gray-500 text-xs text-center">8-day free inbox · Upgrade to permanent anytime</p>
           </div>
         </div>
       </div>
@@ -407,34 +402,34 @@ export default function MiniApp() {
     const name = customName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     const displayName = name || `your-farcaster-name`;
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="text-4xl mb-3">🔒</div>
             <h2 className="text-white font-bold text-xl mb-1">Privacy Settings</h2>
-            <p className="text-white/80 font-mono text-sm">{displayName}.cast@nftmail.box</p>
+            <p className="text-gray-400 font-mono text-sm">{displayName}.cast@nftmail.box</p>
           </div>
-          <p className="text-white/70 text-sm text-center mb-6">Who can see your Farcaster identity?</p>
+          <p className="text-gray-500 text-sm text-center mb-6">Who can see your Farcaster identity?</p>
           <div className="space-y-3">
             <button
               onClick={() => provision(name, 'hidden')}
-              className="w-full bg-white/10 border border-white/30 hover:border-white text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
             >
               🕵️ Hidden — No FID visible
             </button>
             <button
               onClick={() => provision(name, 'fid-only')}
-              className="w-full bg-white/10 border border-white/30 hover:border-white text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
             >
               👁 FID Only — Show FID number
             </button>
             <button
               onClick={() => provision(name, 'full')}
-              className="w-full bg-white/10 border border-white/30 hover:border-white text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
             >
               🌐 Full Profile — Show username + avatar
             </button>
-            <button onClick={() => setStep('entry')} className="w-full text-white/60 text-sm py-2">
+            <button onClick={() => setStep('entry')} className="w-full text-gray-500 text-sm py-2">
               ← Back
             </button>
           </div>
@@ -445,11 +440,11 @@ export default function MiniApp() {
 
   if (step === 'provisioning') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white font-mono text-sm">Creating your account...</p>
-          <p className="text-white/60 text-xs mt-2">Resolving Farcaster name · Setting up inbox</p>
+          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-green-400 font-mono text-sm">Creating your account...</p>
+          <p className="text-gray-500 text-xs mt-2">Resolving Farcaster name · Setting up inbox</p>
         </div>
       </div>
     );
@@ -458,33 +453,33 @@ export default function MiniApp() {
   if (step === 'success') {
     const expiresStr = expiresAt ? new Date(expiresAt).toLocaleDateString() : '30 days';
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm text-center">
           <div className="text-5xl mb-3">🎉</div>
           <h2 className="text-white font-bold text-2xl mb-2">Account Created!</h2>
-          <div className="bg-white/10 border border-white/30 rounded-lg p-4 my-6">
-            <p className="text-white font-mono text-sm font-bold">{humanEmail}</p>
-            <p className="text-white/60 text-xs mt-1">LARVA · Active until {expiresStr} · 8-day inbox history</p>
+          <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
+            <p className="text-green-400 font-mono text-sm font-bold">{humanEmail}</p>
+            <p className="text-gray-500 text-xs mt-1">LARVA · Active until {expiresStr} · 8-day inbox history</p>
           </div>
-          <p className="text-white/70 text-xs mb-6">
+          <p className="text-gray-400 text-xs mb-6">
             Secured by your Farcaster wallet. Upgrade to permanent by minting an NFT.
           </p>
           <div className="space-y-3">
             <button
               onClick={() => loadInbox(agentName)}
-              className="w-full bg-[#2d7a52] hover:bg-[#246644] text-white font-bold py-3 rounded-lg transition-colors">
+              className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
               Read Inbox →
             </button>
-            <button onClick={() => setStep('compose')} className="w-full bg-white/10 border border-white/30 hover:border-white text-white py-3 rounded-lg text-sm transition-colors">
+            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
               Compose
             </button>
-            <button onClick={sendTest} className="w-full text-white/70 text-sm py-2">
+            <button onClick={sendTest} className="w-full text-gray-400 text-sm py-2">
               Send Test to Self
             </button>
-            <button onClick={openUpgrade} className="w-full text-white/70 text-sm py-2">
+            <button onClick={openUpgrade} className="w-full text-gray-400 text-sm py-2">
               Upgrade to Permanent →
             </button>
-            <button onClick={openByoMolt} className="w-full text-white/50 text-xs py-1">
+            <button onClick={openByoMolt} className="w-full text-gray-500 text-xs py-1">
               Already have an NFT? Use BYO Molt
             </button>
           </div>
@@ -496,25 +491,24 @@ export default function MiniApp() {
 
   if (step === 'inbox') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col px-4 py-6">
-        <style>{AYATHAYA_FONT_CSS}</style>
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
         <div className="w-full max-w-sm mx-auto">
           {/* Header with Logo */}
-          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/20">
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800">
             <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
-            <span className="text-white font-bold text-2xl whitespace-nowrap" style={{ fontFamily: 'Ayathaya, sans-serif' }}>nftmail.box</span>
+            <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
           </div>
           
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">Inbox</h2>
-            <button onClick={() => loadInbox(agentName)} className="text-white text-sm hover:text-white/80">Refresh</button>
+            <button onClick={() => loadInbox(agentName)} className="text-green-400 text-sm hover:text-green-300">Refresh</button>
           </div>
-          <p className="text-white/80 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
+          <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <Image src={MAILBOX_ICON_URL} alt="" width={64} height={64} className="mx-auto mb-3 opacity-70" />
-              <p className="text-white/60 text-sm">No messages yet</p>
-              <p className="text-white/50 text-xs mt-1">Send a test email to verify delivery</p>
+              <p className="text-gray-500 text-sm">No messages yet</p>
+              <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
           ) : (
             <div className="space-y-2 mb-4">
@@ -524,7 +518,7 @@ export default function MiniApp() {
                 return (
                   <div
                     key={msg.id}
-                    className={`bg-white/10 border rounded-lg p-3 cursor-pointer transition-colors ${isOpen ? 'border-white/50' : 'border-white/20 hover:border-white/40'}`}
+                    className={`bg-gray-900 border rounded-lg p-3 cursor-pointer transition-colors ${isOpen ? 'border-green-500/50' : 'border-gray-800 hover:border-gray-700'}`}
                   >
                     <div 
                       className="flex items-start justify-between gap-2"
@@ -532,10 +526,10 @@ export default function MiniApp() {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-white text-sm font-medium truncate">{msg.subject || '(no subject)'}</p>
-                        <p className="text-white/60 text-xs mt-0.5 truncate">{msg.from}</p>
+                        <p className="text-gray-500 text-xs mt-0.5 truncate">{msg.from}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-white/50 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-gray-600 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         <button 
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -550,7 +544,7 @@ export default function MiniApp() {
                               setMessages(prev => prev.filter(m => m.id !== msg.id));
                             }
                           }}
-                          className="text-red-400 hover:text-red-300 text-xs px-1"
+                          className="text-red-500 hover:text-red-400 text-xs px-1"
                           title="Delete"
                         >
                           ×
@@ -558,11 +552,11 @@ export default function MiniApp() {
                       </div>
                     </div>
                     {isOpen && (
-                      <div className="mt-3 pt-3 border-t border-white/20">
+                      <div className="mt-3 pt-3 border-t border-gray-800">
                         {body ? (
                           <SafeMarkdown text={body} />
                         ) : (
-                          <p className="text-white/50 text-xs italic">(no body — message may be encrypted without a local key)</p>
+                          <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
                         )}
                       </div>
                     )}
@@ -572,16 +566,16 @@ export default function MiniApp() {
             </div>
           )}
           {/* Sentbox Section */}
-          <div className="mt-6 pt-4 border-t border-white/20">
+          <div className="mt-6 pt-4 border-t border-gray-800">
             <button 
               className="w-full flex items-center justify-between py-2 text-left"
               onClick={() => setOpenMsgId(openMsgId === 'sentbox-header' ? null : 'sentbox-header')}
             >
-              <span className="text-white/80 text-sm">Sentbox</span>
-              <span className="text-white/50 text-xs">{sentMessages.length}/10</span>
+              <span className="text-gray-400 text-sm">Sentbox</span>
+              <span className="text-gray-500 text-xs">{sentMessages.length}/10</span>
             </button>
             {sentMessages.length === 0 ? (
-              <p className="text-white/50 text-xs">No sent emails yet</p>
+              <p className="text-gray-600 text-xs">No sent emails yet</p>
             ) : (
               <div className="space-y-2 mt-2">
                 {sentMessages.map(msg => {
@@ -590,16 +584,16 @@ export default function MiniApp() {
                   return (
                     <div 
                       key={msg.id} 
-                      className={`bg-white/10 border rounded-lg p-2 cursor-pointer transition-colors ${isOpen ? 'border-white/50' : 'border-white/20 hover:border-white/40'}`}
+                      className={`bg-gray-900 border rounded-lg p-2 cursor-pointer transition-colors ${isOpen ? 'border-green-500/50' : 'border-gray-800 hover:border-gray-700'}`}
                       onClick={() => setOpenMsgId(isOpen ? null : msg.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-white text-sm truncate">{msg.subject || '(no subject)'}</p>
-                          <p className="text-white/60 text-xs truncate">To: {msg.to}</p>
+                          <p className="text-gray-500 text-xs truncate">To: {msg.to}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-white/50 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-gray-600 text-xs">{new Date(msg.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           <button 
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -607,7 +601,7 @@ export default function MiniApp() {
                                 setSentMessages(prev => prev.filter(m => m.id !== msg.id));
                               }
                             }}
-                            className="text-red-400 hover:text-red-300 text-xs px-1"
+                            className="text-red-500 hover:text-red-400 text-xs px-1"
                             title="Delete"
                           >
                             ×
@@ -615,7 +609,7 @@ export default function MiniApp() {
                         </div>
                       </div>
                       {isOpen && body && (
-                        <div className="mt-2 pt-2 border-t border-white/20">
+                        <div className="mt-2 pt-2 border-t border-gray-800">
                           <SafeMarkdown text={body} />
                         </div>
                       )}
@@ -627,14 +621,14 @@ export default function MiniApp() {
           </div>
 
           <div className="space-y-2 mt-6">
-            <button onClick={() => setStep('compose')} className="w-full bg-[#2d7a52] hover:bg-[#246644] text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
+            <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
               <span>✉️</span> Compose
             </button>
-            <button onClick={openDashboard} className="w-full bg-white/10 hover:bg-white/20 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
+            <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
               Dashboard
             </button>
-            <p className="text-white/60 text-xs text-center">{sendsRemaining} sends remaining</p>
-            <button onClick={openUpgrade} className="w-full text-white/50 text-xs py-1">Upgrade to Permanent →</button>
+            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
+            <button onClick={openUpgrade} className="w-full text-gray-600 text-xs py-1">Upgrade to Permanent →</button>
           </div>
         </div>
       </div>
@@ -644,20 +638,20 @@ export default function MiniApp() {
   if (step === 'compose') {
     const fromAddr = humanEmail || `${agentName}@nftmail.box`;
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col px-4 py-6">
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
         <div className="w-full max-w-sm mx-auto">
           <div className="flex items-center gap-3 mb-5">
-            <button onClick={() => setStep('inbox')} className="text-white/80 text-lg hover:text-white">←</button>
+            <button onClick={() => setStep('inbox')} className="text-gray-500 text-lg hover:text-white">←</button>
             <h2 className="text-white font-bold text-lg">Compose</h2>
           </div>
-          <p className="text-white/60 font-mono text-xs mb-4">From: {fromAddr}</p>
+          <p className="text-gray-600 font-mono text-xs mb-4">From: {fromAddr}</p>
           <div className="space-y-3">
             <input
               type="email"
               placeholder="To: recipient@example.com"
               value={composeTo}
               onChange={e => setComposeTo(e.target.value)}
-              className="w-full bg-white/10 border border-white/30 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-white/50 focus:outline-none focus:border-white"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
               autoCapitalize="none"
               autoComplete="off"
             />
@@ -666,23 +660,23 @@ export default function MiniApp() {
               placeholder="Subject"
               value={composeSubject}
               onChange={e => setComposeSubject(e.target.value)}
-              className="w-full bg-white/10 border border-white/30 rounded-lg px-4 py-3 text-white text-sm placeholder-white/50 focus:outline-none focus:border-white"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
             />
             <textarea
               placeholder="Message body..."
               value={composeBody}
               onChange={e => setComposeBody(e.target.value)}
               rows={6}
-              className="w-full bg-white/10 border border-white/30 rounded-lg px-4 py-3 text-white text-sm placeholder-white/50 focus:outline-none focus:border-white resize-none"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400 resize-none"
             />
             <button
               onClick={sendCompose}
               disabled={!composeTo || !composeSubject || !composeBody}
-              className="w-full bg-[#2d7a52] hover:bg-[#246644] disabled:bg-white/20 disabled:text-white/60 text-white font-bold py-3 rounded-lg transition-colors"
+              className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
               Send →
             </button>
-            <p className="text-white/60 text-xs text-center">{sendsRemaining} sends remaining</p>
+            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
           </div>
         </div>
       </div>
@@ -691,10 +685,10 @@ export default function MiniApp() {
 
   if (step === 'sending') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white font-mono text-sm">Sending...</p>
+          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-green-400 font-mono text-sm">Sending...</p>
         </div>
       </div>
     );
@@ -702,20 +696,20 @@ export default function MiniApp() {
 
   if (step === 'sent') {
     return (
-      <div className="min-h-screen bg-[#43a574] flex flex-col items-center justify-center px-6 py-8">
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm text-center">
           <Image src={MAILBOX_ICON_URL} alt="Sent" width={64} height={64} className="mx-auto mb-3 opacity-70" />
           <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
-          <div className="bg-white/10 border border-white/30 rounded-lg p-4 my-6">
-            <p className="text-white font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
-            <p className="text-white/60 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
+          <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
+            <p className="text-green-400 font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
+            <p className="text-gray-500 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
           </div>
-          <p className="text-white/70 text-xs mb-6">Your email is on its way to the recipient.</p>
+          <p className="text-gray-400 text-xs mb-6">Your email is on its way to the recipient.</p>
           <div className="space-y-3">
-            <button onClick={() => loadInbox(agentName)} className="w-full bg-[#2d7a52] hover:bg-[#246644] text-white font-bold py-3 rounded-lg transition-colors">
+            <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
               Back to Inbox →
             </button>
-            <button onClick={openUpgrade} className="w-full bg-white/10 border border-white/30 hover:bg-white/20 text-white py-3 rounded-lg text-sm">
+            <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-sm">
               Upgrade to PUPA →
             </button>
           </div>
@@ -727,21 +721,21 @@ export default function MiniApp() {
   const isSendLimitError = error?.toLowerCase().includes('send limit');
   
   return (
-    <div className="min-h-screen bg-[#43a574] flex flex-col items-center justify-center px-6">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
         <h2 className="text-white font-bold text-xl mb-3">Something went wrong</h2>
-        <p className="text-red-300 font-mono text-xs mb-6 break-words">{error}</p>
+        <p className="text-red-400 font-mono text-xs mb-6 break-words">{error}</p>
         {isSendLimitError ? (
           <div className="space-y-3">
-            <button onClick={openUpgrade} className="w-full bg-[#2d7a52] hover:bg-[#246644] text-white font-bold py-3 rounded-lg transition-colors">
+            <button onClick={openUpgrade} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
               Upgrade to PUPA →
             </button>
-            <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-white/10 border border-white/30 hover:bg-white/20 text-white py-3 rounded-lg">
+            <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg">
               Try Again
             </button>
           </div>
         ) : (
-          <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-white/10 border border-white/30 hover:bg-white/20 text-white py-3 rounded-lg">
+          <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg">
             Try Again
           </button>
         )}

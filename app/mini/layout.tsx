@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
-// Use local static logo for reliability
-const LOGO_URL = `${APP_URL}/nftmail-logo-64.png`;
+// Local static logo (robust, no IPFS dependency)
+const LOGO_URL = `${APP_URL}/nftmail-logo-pinata.png`;
 
 const miniAppEmbed = JSON.stringify({
   version: '1',
@@ -14,7 +14,7 @@ const miniAppEmbed = JSON.stringify({
       name: 'nftmail.box',
       url: `${APP_URL}/mini`,
       splashImageUrl: LOGO_URL,
-      splashBackgroundColor: '#43a574',
+      splashBackgroundColor: '#000000',
     },
   },
 });
