@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
-import { LOGO_URL, MAILBOX_ICON_URL } from './images';
+import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES } from './images';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
@@ -513,10 +513,27 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex flex-col px-4 py-6">
         <div className="w-full max-w-sm mx-auto">
-          {/* Header with Logo */}
-          <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-800">
-            <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
-            <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
+          {/* Header with Logo, Tier Indicator, and Account Dropdown */}
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
+            <div className="flex items-center gap-3">
+              <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
+              <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Tier indicator */}
+              <div className="flex items-center gap-1.5 bg-gray-900 rounded-full px-2.5 py-1">
+                <Image 
+                  src={inboxTier === 'imago' ? TIER_IMAGES.imago : inboxTier === 'pupa' ? TIER_IMAGES.pupa : TIER_IMAGES.larva} 
+                  alt={inboxTier || 'larva'} 
+                  width={16} 
+                  height={16} 
+                  className="shrink-0"
+                />
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
+                  {inboxTier === 'imago' ? 'IMAGO' : inboxTier === 'pupa' ? 'PUPA' : 'LARVA'}
+                </span>
+              </div>
+            </div>
           </div>
           
           <div className="flex items-center justify-between mb-4">

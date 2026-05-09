@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
-// Local static logo (robust, no IPFS dependency)
-const LOGO_URL = `${APP_URL}/nftmail-logo-hd.png`;
+// High-res IPFS logo for Farcaster app icon and splash
+const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreiasnbw4tnbomnw2fp4qdeq2cijivffolvzwdxt3ppo4ohn57kta5e';
 
 const miniAppEmbed = JSON.stringify({
   version: '1',
