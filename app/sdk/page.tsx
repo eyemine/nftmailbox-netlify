@@ -1,124 +1,32 @@
 'use client';
 
 // SDK Documentation page - https://nftmail.box/sdk
-// Build: 2026-04-06 21:00
+// Build: 2026-04-05 15:10
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
-const ICONS = {
-  vault:        'https://gateway.lighthouse.storage/ipfs/bafkreidhmmskdp5w2co2dqqgjlgb6hhictf7gfe7q55arz7tmgpxaaamwu',
-  basic:        'https://gateway.lighthouse.storage/ipfs/bafkreih4l6xohngnu3vpkgkw7gle7swod7rnnom6oiq7lotkuvagzxgkv4',
-  molt:         'https://gateway.lighthouse.storage/ipfs/bafkreicfkdqqgyfauvkzt4j26nezyisu3ki6qspxmvu2gfvss432ngwd7i',
-  freemium:     'https://gateway.lighthouse.storage/ipfs/bafkreif46lhvy5m3mydemuvnsm4nmnpxhp4sscn7cbeiy2uxejf3iw56ou',
-  quick:        'https://gateway.lighthouse.storage/ipfs/bafkreibz6x522otlnkzad5e75gx4hhew3gckxjm7xz6lvc7fpvufkbdyji',
-  paid:         'https://gateway.lighthouse.storage/ipfs/bafkreigjuxs7sdbgaonykcqeciepgubryegtl3irb3x4okodzpzh3kezaq',
-  journey:      'https://gateway.lighthouse.storage/ipfs/bafkreib3lfdmfleetjsbcmlf6y223dayeqkyhif644oxwyzza7gvmdijpy',
-  professional: 'https://gateway.lighthouse.storage/ipfs/bafkreibaydbqyzbtr2ukyogoj2wgplbn46rjltkxg5swnkjg5ftir2tyau',
-  beta:         'https://gateway.lighthouse.storage/ipfs/bafkreiftxujbfvz4t73rkcmisobkxasuj7tpblu4zrro2lnamftbxclhay',
-  keyFeatures:  'https://gateway.lighthouse.storage/ipfs/bafkreiczfomb6nap53t3ji7d3nzxbdvqtchlhnxs72qdxht4lb4pybsimi',
-  pricing:      'https://gateway.lighthouse.storage/ipfs/bafkreigjuxs7sdbgaonykcqeciepgubryegtl3irb3x4okodzpzh3kezaq',
-  brain:        'https://gateway.lighthouse.storage/ipfs/bafkreibib7gms7uadsofihzrp63fsmzf2ijjf63etqy7p2o2upelmzjd4i',
-  install:      'https://gateway.lighthouse.storage/ipfs/bafkreihotgdvy35ptxcxuu2ketfjomvwccfeifrkahzrutfkyntvmm7xmi',
-} as const;
-
 const codeBlocks = {
-  install: `# npm install (GitHub Packages — Ghost-Agency org)
-echo "@ghost-agency:registry=https://npm.pkg.github.com" >> .npmrc
-echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> .npmrc
-npm install @ghost-agency/nftmail
-
-# No npm? cURL install (recommended for agents)
-curl -fsSL https://nftmail.box/install.sh | bash
-
-# With options
-curl -fsSL https://nftmail.box/install.sh | bash -s -- --name my-agent --tier professional`,
+  install: `npm install @ghostagent/nftmail`,
   setup: `npx nftmail-setup`,
-  basic: `import NFTMail from '@ghost-agency/nftmail';
+  basic: `import NFTMail from '@ghostagent/nftmail';
 
 const nftmail = new NFTMail();
 
-// Register trial inbox (no wallet required)
-// Result: my-agent_@nftmail.box (trial, 10 sends, 8-day history)
-const trial = await fetch('https://nftmail.box/api/register-trial', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ name: 'my-agent_' })
-});
-const { email, claimUrl } = await trial.json();
+// Create freemium agent
+const agent = await nftmail.createAgent('my-agent', 'freemium');
 
-// Check inbox (works immediately)
-const messages = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ action: 'listMessages', agent: 'my-agent_' })
-});
-
-// Send email (free tier: 10 outbound emails)
-await fetch('https://nftmail.box/api/send', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    from: 'my-agent_@nftmail.box',
-    to: 'recipient@example.com',
-    subject: 'Hello from my agent',
-    text: 'Sent via nftmail.box trial tier'
-  })
-});
-
-// Later: claim permanent NFT (human connects wallet at claimUrl)
-// After claiming: unlimited sending, transferable NFT
-`,
+// Send email with optional payment
+await nftmail.sendEmail(
+  'my-agent@nftmail.box',
+  'recipient@example.com',
+  'Hello from GhostAgent',
+  'This email includes blockchain payment',
+  { amount: '0.1', recipient: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb' }
+);`,
   upgrade: `npx nftmail-upgrade --agent my-agent --tier professional`,
   brain: `npx ghostagent-add-brain --agent my-agent --model gpt-4`,
-  molt: `npx ghostagent-molt --agent my-agent --tld gno`,
-  curl: `# Register trial inbox (no wallet)
-curl -X POST https://nftmail.box/api/register-trial \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"my-agent_"}'
-# Returns: { email: "my-agent_@nftmail.box", claimUrl: "https://nftmail.box/claim/abc123xyz" }
-
-# Check inbox (works immediately)
-curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
-  -H "Content-Type: application/json" \\
-  -d '{"action":"getBlindInbox","localPart":"my-agent_"}'
-
-# Send email (free tier: 10 sends)
-curl -X POST https://nftmail.box/api/send \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "from": "my-agent_@nftmail.box",
-    "to": "recipient@example.com",
-    "subject": "Hello from agent",
-    "text": "Sent via nftmail.box trial"
-  }'
-
-# Store an inbound message (used by Mailgun webhook)
-curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "action":"storeBlindEnvelope",
-    "localPart":"my-agent",
-    "payload":{
-      "subject":"Hello",
-      "from":"sender@example.com",
-      "body":"Message body"
-    }
-  }'
-
-# List agents by Safe address
-curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
-  -H "Content-Type: application/json" \\
-  -d '{"action":"listAgents","safeAddress":"0xYourSafeAddress"}'
-
-# Delete a message
-curl -X POST https://nftmail-email-worker.richard-159.workers.dev \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "action":"deleteMessage",
-    "localPart":"my-agent",
-    "messageId":"msg-id-here"
-  }'`
+  molt: `npx ghostagent-molt --agent my-agent --tld gno`
 };
 
 export default function SDKPage() {
@@ -153,7 +61,7 @@ export default function SDKPage() {
           </h1>
           <p className="mx-auto max-w-2xl text-sm text-[var(--muted)] mb-6">
             Blockchain-native email service with x402 payments, sovereign identity, and marketplace integration.
-            Agent inboxes use a trailing underscore: <code className="text-[rgb(160,220,255)]">name_@nftmail.box</code>. Human inboxes: <code className="text-[rgb(160,220,255)]">name@nftmail.box</code>. No wallet required to start.
+            NPX users receive <code className="text-[rgb(160,220,255)]">[name].agent@nftmail.box</code> — no ENS screening required.
           </p>
           <div className="flex justify-center gap-4">
             <a
@@ -165,12 +73,12 @@ export default function SDKPage() {
               View on GitHub
             </a>
             <a
-              href="https://github.com/orgs/Ghost-Agency/packages/npm/package/nftmail"
+              href="https://www.npmjs.com/package/@ghostagent/nftmail"
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-[var(--border)] bg-black/20 px-6 py-2.5 text-xs font-semibold text-[var(--foreground)] transition hover:bg-black/30"
             >
-              Ghost-Agency Packages
+              NPM Package
             </a>
           </div>
         </section>
@@ -178,10 +86,7 @@ export default function SDKPage() {
         {/* Key Features */}
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <img src={ICONS.keyFeatures} alt="Key Features" width={88} height={88} className="rounded-sm object-cover" />
-              Key Features
-            </h2>
+            <h2 className="text-lg font-semibold text-white mb-4">🏆 Key Features</h2>
             <div className="grid md:grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
                 <div className="flex justify-between">
@@ -220,26 +125,23 @@ export default function SDKPage() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
             <div className="flex gap-2 mb-6 flex-wrap">
               {[
-                { id: 'install', label: 'Install',       imgSrc: ICONS.install },
-                { id: 'setup',   label: 'Quick Setup',   imgSrc: ICONS.quick },
-                { id: 'basic',   label: 'Basic Usage',   imgSrc: ICONS.basic },
-                { id: 'upgrade', label: 'Upgrade',       imgSrc: ICONS.paid },
-                { id: 'brain',   label: 'Add Brain',     imgSrc: ICONS.brain },
-                { id: 'molt',    label: 'Molt',          imgSrc: ICONS.molt },
-                { id: 'curl',    label: 'cURL',          imgSrc: ICONS.quick, extraImgSrc: ICONS.quick },
+                { id: 'install', label: '📦 Install', icon: '📦' },
+                { id: 'setup', label: '⚡ Quick Setup', icon: '⚡' },
+                { id: 'basic', label: '💻 Basic Usage', icon: '💻' },
+                { id: 'upgrade', label: '💰 Upgrade', icon: '💰' },
+                { id: 'brain', label: '🧠 Add Brain', icon: '🧠' },
+                { id: 'molt', label: '🔥 Molt', icon: '🔥' }
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${
                     activeTab === tab.id
                       ? 'bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)] text-[rgb(160,220,255)]'
                       : 'bg-black/20 border border-[var(--border)] text-[var(--foreground)] hover:bg-black/30'
                   }`}
                 >
-                  <img src={tab.imgSrc} alt={tab.label} width={28} height={28} className="rounded-sm object-cover" />
-                  {'extraImgSrc' in tab && <img src={(tab as any).extraImgSrc} alt="" width={28} height={28} className="rounded-sm object-cover" />}
-                  {tab.label}
+                  {tab.icon} {tab.label}
                 </button>
               ))}
             </div>
@@ -251,45 +153,33 @@ export default function SDKPage() {
             </div>
 
             {activeTab === 'install' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.install} alt="Install" width={16} height={16} className="rounded-sm object-cover" />
-                <p>npm package hosted at <code className="text-[rgb(160,220,255)]">@ghost-agency/nftmail</code> on GitHub Packages. Requires a GitHub token in <code className="text-[rgb(160,220,255)]">.npmrc</code>. For agents with no npm setup, use the cURL method instead.</p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>📦 Blockchain-native email service with x402 payments and sovereign identity</p>
               </div>
             )}
             {activeTab === 'setup' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.quick} alt="Quick" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Creates freemium agent inbox. Agents get <code className="text-[rgb(160,220,255)]">name_@nftmail.box</code>, humans get <code className="text-[rgb(160,220,255)]">name@nftmail.box</code>. Free tier: 10 outbound emails, 8-day storage.</p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>⚡ Creates freemium agent with 100 emails, 8-day storage</p>
               </div>
             )}
             {activeTab === 'basic' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.basic} alt="Basic" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Agent addresses end with <code className="text-[rgb(160,220,255)]">_</code> — Glassbox audit trail, XMTP encrypted pathway, no HITL. Human addresses are plain. Both share the same .gno NFT when minted.</p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>💻 Send emails with optional x402 payments for blockchain transactions</p>
               </div>
             )}
             {activeTab === 'upgrade' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.paid} alt="Paid" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Professional: 10 xDAI/month unlimited, Vault: 24 xDAI/year unlimited</p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>💰 Professional: 10 xDAI one-time for unlimited, Vault: 24 xDAI one-time for unlimited</p>
               </div>
             )}
             {activeTab === 'brain' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.brain} alt="Brain" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Add AI brain for autonomous decision-making and email processing</p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>🧠 Add AI brain for autonomous decision-making and email processing</p>
               </div>
             )}
             {activeTab === 'molt' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.molt} alt="Molt" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Convert to sellable agent with 3x-14x ROI on marketplace</p>
-              </div>
-            )}
-            {activeTab === 'curl' && (
-              <div className="mt-4 text-xs text-[var(--muted)] flex items-center gap-2">
-                <img src={ICONS.quick} alt="cURL" width={16} height={16} className="rounded-sm object-cover" />
-                <p>Direct HTTP calls to the NFTMail worker — no SDK required. Worker endpoint: <code className="text-[rgb(160,220,255)]">https://nftmail-email-worker.richard-159.workers.dev</code></p>
+              <div className="mt-4 text-xs text-[var(--muted)]">
+                <p>🔥 Convert to sellable agent with 3x-14x ROI on marketplace</p>
               </div>
             )}
           </div>
@@ -298,18 +188,15 @@ export default function SDKPage() {
         {/* User Journey */}
         <section className="mb-12">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <img src={ICONS.journey} alt="Journey" width={44} height={44} className="rounded-sm object-cover" />
-            User Journey
-          </h2>
+            <h2 className="text-lg font-semibold text-white mb-4">🚀 User Journey</h2>
             <div className="space-y-4 text-sm">
               <div className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-full bg-[rgba(0,163,255,0.2)] border border-[rgba(0,163,255,0.3)] flex items-center justify-center text-xs font-bold text-[rgb(160,220,255)]">
                   1
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Register Trial (No Wallet)</div>
-                  <div className="text-[var(--muted)] text-xs">{`curl -X POST https://nftmail.box/api/register-trial -d '{"name":"my-agent_"}'`} Creates trial inbox with claim URL. 10 free sends, 8-day history.</div>
+                  <div className="font-semibold text-white">Start with Freemium</div>
+                  <div className="text-[var(--muted)] text-xs">npx nftmail-setup → Creates my-agent@nftmail.box</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -317,8 +204,8 @@ export default function SDKPage() {
                   2
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Claim Permanent NFT</div>
-                  <div className="text-[var(--muted)] text-xs">Human visits claim URL, connects wallet, mints my-agent_.nftmail.gno. Address stays same, now transferable.</div>
+                  <div className="font-semibold text-white">Upgrade for Unlimited</div>
+                  <div className="text-[var(--muted)] text-xs">npx nftmail-upgrade --agent my-agent --tier professional</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -326,8 +213,8 @@ export default function SDKPage() {
                   3
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Molt to Full Agent</div>
-                  <div className="text-[var(--muted)] text-xs">ghostagent.ninja deploys ERC-6551 TBA + Safe. Agent becomes autonomous, sellable on marketplace.</div>
+                  <div className="font-semibold text-white">Add Brain for Autonomy</div>
+                  <div className="text-[var(--muted)] text-xs">npx ghostagent-add-brain --agent my-agent --model gpt-4</div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -335,8 +222,8 @@ export default function SDKPage() {
                   4
                 </div>
                 <div>
-                  <div className="font-semibold text-white">Molt to Full Agent</div>
-                  <div className="text-[var(--muted)] text-xs">ghostagent.ninja deploys ERC-6551 TBA + Safe. Agent becomes autonomous, sellable on marketplace.</div>
+                  <div className="font-semibold text-white">Molt to Sellable</div>
+                  <div className="text-[var(--muted)] text-xs">npx ghostagent-molt --agent my-agent --tld gno → Creates my-agent.gno</div>
                 </div>
               </div>
             </div>
@@ -346,46 +233,33 @@ export default function SDKPage() {
         {/* Pricing */}
         <section>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <img src={ICONS.pricing} alt="Pricing" width={44} height={44} className="rounded-sm object-cover" />
-              Pricing & Tiers
-            </h2>
+            <h2 className="text-lg font-semibold text-white mb-4">💰 Pricing & Tiers</h2>
             <div className="grid md:grid-cols-3 gap-4 text-sm">
               <div className="border border-[var(--border)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.freemium} alt="Freemium" width={40} height={40} className="rounded-sm object-cover" />
-                  Freemium
-                </div>
+                <div className="font-semibold text-white mb-2">🆓 Freemium</div>
                 <div className="text-green-400 font-bold mb-2">Free</div>
                 <div className="text-[var(--muted)] space-y-1">
-                  <div>• Receive email (unlimited)</div>
-                  <div>• Send 10 emails free</div>
-                  <div>• 8-day history</div>
-                  <div>• Up to 5 addresses/wallet</div>
+                  <div>• 100 emails</div>
+                  <div>• 8 days storage</div>
+                  <div>• Basic email</div>
                 </div>
               </div>
               <div className="border border-[rgba(0,163,255,0.3)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.professional} alt="Professional" width={40} height={40} className="rounded-sm object-cover" />
-                  Professional
-                </div>
-                <div className="text-[rgb(160,220,255)] font-bold mb-2">10 xDAI/month</div>
+                <div className="font-semibold text-white mb-2">💼 Professional</div>
+                <div className="text-[rgb(160,220,255)] font-bold mb-2">10 xDAI one-time</div>
                 <div className="text-[var(--muted)] space-y-1">
                   <div>• Unlimited emails</div>
                   <div>• 30 days storage</div>
-                  <div>• Send emails</div>
+                  <div>• Priority support</div>
                 </div>
               </div>
               <div className="border border-[rgba(124,77,255,0.3)] rounded-lg p-4">
-                <div className="font-semibold text-white mb-2 flex items-center gap-2">
-                  <img src={ICONS.vault} alt="Vault" width={40} height={40} className="rounded-sm object-cover" />
-                  Vault
-                </div>
-                <div className="text-[rgb(180,160,255)] font-bold mb-2">24 xDAI/year</div>
+                <div className="font-semibold text-white mb-2">🏦 Vault</div>
+                <div className="text-[rgb(180,160,255)] font-bold mb-2">24 xDAI one-time</div>
                 <div className="text-[var(--muted)] space-y-1">
                   <div>• Unlimited emails</div>
                   <div>• 365 days storage</div>
-                  <div>• Send emails</div>
+                  <div>• Priority support</div>
                 </div>
               </div>
             </div>

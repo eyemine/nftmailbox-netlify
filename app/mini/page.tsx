@@ -239,13 +239,18 @@ export default function MiniApp() {
   const loadInboxDirect = async (name: string, privKey: string | null) => {
     setStep('inbox');
     try {
-      // Fetch inbox and quota in parallel for accurate sendsRemaining
-      const [inboxRes, quotaRes] = await Promise.all([
+      // Fetch inbox, sentbox, and quota in parallel for accurate sendsRemaining
+      const [inboxRes, sentboxRes, quotaRes] = await Promise.all([
         fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getInbox', localPart: name }),
         }),
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getSentbox', localPart: name }),
+        }).catch(() => null), // non-fatal if sentbox fails
         fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -264,6 +269,15 @@ export default function MiniApp() {
         return msg;
       }));
       setMessages(decrypted);
+      // Load sentbox from worker if available
+      if (sentboxRes) {
+        try {
+          const sentData = await sentboxRes.json() as { messages?: InboxMessage[] };
+          if (sentData.messages) {
+            setSentMessages(sentData.messages.slice(0, 10));
+          }
+        } catch {}
+      }
       // Use checkSendLimit quota if available, fallback to getInbox value
       let quota = data.sendsRemaining ?? 10;
       if (quotaRes) {
@@ -327,7 +341,7 @@ export default function MiniApp() {
       const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
       if (data.error) throw new Error(data.error);
       setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
-      // Add to sentbox
+      // Add to sentbox locally and save to worker
       const now = Date.now();
       const newSent: InboxMessage = {
         id: `sent-${now}`,
@@ -339,13 +353,19 @@ export default function MiniApp() {
         type: 'sent',
       };
       setSentMessages(prev => [newSent, ...prev].slice(0, 10));
+      // Persist to worker (non-blocking)
+      fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'saveSentMessage', localPart: agentName, message: newSent }),
+      }).catch(() => {});
       setComposeTo(''); setComposeSubject(''); setComposeBody('');
       setStep('sent');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Send failed');
       setStep('error');
     }
-  }, [agentName, composeTo, composeSubject, composeBody, sendsRemaining]);
+  }, [agentName, composeTo, composeSubject, composeBody, sendsRemaining, humanEmail]);
 
   if (step === 'loading') {
     return (
@@ -598,6 +618,12 @@ export default function MiniApp() {
                             onClick={async (e) => {
                               e.stopPropagation();
                               if (confirm('Delete this sent email?')) {
+                                // Delete from worker (non-blocking)
+                                fetch(WORKER_URL, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ action: 'deleteSentMessage', localPart: agentName, messageId: msg.id }),
+                                }).catch(() => {});
                                 setSentMessages(prev => prev.filter(m => m.id !== msg.id));
                               }
                             }}

@@ -11,7 +11,7 @@ const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-
  */
 export async function POST(req: NextRequest) {
   try {
-    const { name, enabled, walletAddress } = await req.json() as { name: string; enabled: boolean; walletAddress: string };
+    const { name, enabled, walletAddress } = await req.json();
 
     if (!name || typeof enabled !== 'boolean' || !walletAddress) {
       return NextResponse.json(
@@ -26,13 +26,12 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         action: 'setPrivacy',
         localPart: name,
-        tier: enabled ? 'private' : 'exposed',
         privacyEnabled: enabled,
         walletAddress,
       }),
     });
 
-    const data = await res.json() as { error?: string; [key: string]: any };
+    const data = await res.json();
     if (!res.ok) {
       return NextResponse.json({ error: data.error || 'Worker error' }, { status: res.status });
     }

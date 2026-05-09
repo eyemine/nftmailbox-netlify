@@ -1,39 +1,31 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface TogglePrivacyProps {
   name: string;
   walletAddress: string;
   onPrivacyChange?: (enabled: boolean) => void;
-  isImago?: boolean;
 }
 
-export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }: TogglePrivacyProps) {
+export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePrivacyProps) {
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
-  const [toggleError, setToggleError] = useState<string | null>(null);
-
-  // Use ref for callback to avoid fetchPrivacy dep-cycle re-triggering on every parent render
-  const onPrivacyChangeRef = useRef(onPrivacyChange);
-  useEffect(() => { onPrivacyChangeRef.current = onPrivacyChange; }, [onPrivacyChange]);
-
-  // Privacy is stored under the full name (including trailing _ for agent aliases)
-  const baseName = name;
+  const [toggleError, setToggleError] = useState('');
 
   const fetchPrivacy = useCallback(async () => {
     try {
-      const res = await fetch(`/api/resolve-privacy?name=${encodeURIComponent(baseName)}`);
+      const res = await fetch(`/api/resolve-privacy?name=${encodeURIComponent(name)}`);
       const data = await res.json() as { privacyEnabled?: boolean };
       setPrivacyEnabled(data.privacyEnabled ?? false);
-      onPrivacyChangeRef.current?.(data.privacyEnabled ?? false);
+      onPrivacyChange?.(data.privacyEnabled ?? false);
     } catch {
       setPrivacyEnabled(false);
     } finally {
       setLoading(false);
     }
-  }, [baseName]);
+  }, [name, onPrivacyChange]);
 
   useEffect(() => {
     if (name) fetchPrivacy();
@@ -41,14 +33,14 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }:
 
   const handleToggle = async () => {
     setToggling(true);
-    setToggleError(null);
+    setToggleError('');
     try {
       const newState = !privacyEnabled;
       const res = await fetch('/api/toggle-privacy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: baseName,
+          name,
           enabled: newState,
           walletAddress,
         }),
@@ -56,12 +48,12 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }:
       const data = await res.json() as { error?: string };
       if (res.ok) {
         setPrivacyEnabled(newState);
-        onPrivacyChangeRef.current?.(newState);
+        onPrivacyChange?.(newState);
       } else {
-        setToggleError(data.error || 'Failed to update privacy');
+        setToggleError(data.error || `Error ${res.status}`);
       }
-    } catch (err: any) {
-      setToggleError(err?.message || 'Network error');
+    } catch (err: unknown) {
+      setToggleError(err instanceof Error ? err.message : 'Toggle failed');
     } finally {
       setToggling(false);
     }
@@ -131,12 +123,15 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange, isImago }:
         </button>
       </div>
 
+      {/* Toggle error */}
       {toggleError && (
-        <p className="text-[10px] text-red-400 px-1">{toggleError}</p>
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-2">
+          <p className="text-[10px] text-amber-300">Toggle error: {toggleError}</p>
+        </div>
       )}
 
-      {/* Upsell nudge when private — not shown for IMAGO (persistent storage) */}
-      {privacyEnabled && !isImago && (
+      {/* Upsell nudge when private */}
+      {privacyEnabled && (
         <div className="rounded-lg border border-violet-500/15 bg-violet-500/5 px-4 py-2">
           <p className="text-[10px] text-violet-300">
             Your data is private, but still ephemeral (8-day decay).{' '}

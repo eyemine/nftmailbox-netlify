@@ -9,18 +9,8 @@ import {
   encodePacked,
   namehash,
 } from 'viem';
-import { mainnet } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
-
-const ENS_BASE_REGISTRAR = '0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85' as const;
-const ENS_ABI = [{
-  inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
-  name: 'ownerOf',
-  outputs: [{ internalType: 'address', name: '', type: 'address' }],
-  stateMutability: 'view',
-  type: 'function',
-}] as const;
 
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
@@ -109,24 +99,11 @@ export async function POST(req: NextRequest) {
 
     // Parse request
     const body = await req.json();
-    const { label, owner, ensProof, fidAgent, fid } = body as {
-      label?: string;
-      owner?: string;
-      ensProof?: { name: string };
-      fidAgent?: string; // LARVA cast account name e.g. "ghostagent-og.cast"
-      fid?: number;      // Farcaster ID of the upgrading user
-    };
+    const { label, owner } = body as { label?: string; owner?: string };
 
     if (!label || typeof label !== 'string' || label.length < 3) {
       return NextResponse.json(
         { error: 'Label must be at least 3 characters' },
-        { status: 400 }
-      );
-    }
-    // Block multi-part agent addresses: foo-bar_ → foo.bar_@nftmail.box is unsupported
-    if (label.includes('-') && label.endsWith('_')) {
-      return NextResponse.json(
-        { error: 'Multi-part agent addresses (e.g. foo.bar_@nftmail.box) are not supported. Use a single-part label.' },
         { status: 400 }
       );
     }
@@ -152,69 +129,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── ENS holder verification (free mint for name.eth owners) ─────────────
-    // If ensProof is provided, caller must own label.eth on Ethereum mainnet.
-    // ENS holders bypass the daily rate limit — they're entitled to their own name.
-    let isEnsHolder = false;
-    if (ensProof?.name) {
-      const ensLabel = ensProof.name.toLowerCase().replace(/\.eth$/, '');
-      // ENS proof name must match the GNS label (single-part names only)
-      if (ensLabel !== label) {
-        return NextResponse.json(
-          { error: `ENS proof name "${ensLabel}" does not match label "${label}"` },
-          { status: 400 },
-        );
-      }
-      const ethClient = createPublicClient({
-        chain: mainnet,
-        transport: http(process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com'),
-      });
-      try {
-        const tokenId = BigInt(keccak256(encodePacked(['string'], [ensLabel])));
-        const ensOwner = await ethClient.readContract({
-          address: ENS_BASE_REGISTRAR,
-          abi: ENS_ABI,
-          functionName: 'ownerOf',
-          args: [tokenId],
-        });
-        if (!ensOwner || ensOwner.toLowerCase() !== owner.toLowerCase()) {
-          return NextResponse.json(
-            { error: `${ensLabel}.eth is not owned by ${owner}. Connect the wallet that owns ${ensLabel}.eth.` },
-            { status: 403 },
-          );
-        }
-        isEnsHolder = true;
-      } catch {
-        return NextResponse.json(
-          { error: `${ensLabel}.eth does not exist on Ethereum mainnet — cannot verify ENS ownership` },
-          { status: 403 },
-        );
-      }
-    }
-
-    // ── 5-account per wallet limit ──────────────────────────────────────────
-    const workerUrlCheck = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
-    try {
-      const existingRes = await fetch(workerUrlCheck, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'listNftmailByController', controller: owner }),
-      });
-      if (existingRes.ok) {
-        const existing = await existingRes.json() as { names?: unknown[]; total?: number };
-        const count = existing.names?.length ?? existing.total ?? 0;
-        if (count >= 10) {
-          return NextResponse.json(
-            { error: `Wallet already has ${count} NFTMail addresses. Maximum 10 per wallet.` },
-            { status: 429 }
-          );
-        }
-      }
-    } catch { /* non-fatal — proceed if check fails */ }
-    // ────────────────────────────────────────────────────────────────────────
-
-    // Rate limit — ENS holders bypass (they're entitled to their own name)
-    if (!isEnsHolder && !checkRateLimit()) {
+    // Rate limit
+    if (!checkRateLimit()) {
       return NextResponse.json(
         { error: 'Daily gasless mint limit reached. Try again tomorrow or mint with your own wallet.' },
         { status: 429 }
@@ -224,15 +140,14 @@ export async function POST(req: NextRequest) {
     // Create treasury signer
     const account = privateKeyToAccount(treasuryKey as `0x${string}`);
 
-    const gnosisRpc = process.env.GNOSIS_RPC_URL || process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://gnosis.drpc.org';
     const publicClient = createPublicClient({
       chain: gnosis,
-      transport: http(gnosisRpc),
+      transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
     });
 
     const walletClient = createWalletClient({
       chain: gnosis,
-      transport: http(gnosisRpc),
+      transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
       account,
     });
 
@@ -250,18 +165,13 @@ export async function POST(req: NextRequest) {
     // GNS registry owner() reverts for unminted subnodes — treat revert as available
     const labelhash = keccak256(encodePacked(['string'], [label]));
     const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-    const checkGnsOwner = async (rpc: string): Promise<string> => {
-      const c = createPublicClient({ chain: gnosis, transport: http(rpc) });
-      return await c.readContract({
+    try {
+      const existingOwner = await publicClient.readContract({
         address: GNS_REGISTRY,
         abi: GNSRegistryABI,
         functionName: 'owner',
         args: [subnode],
       });
-    };
-    try {
-      const existingOwner = await checkGnsOwner(gnosisRpc)
-        .catch(() => checkGnsOwner('https://rpc.gnosischain.com'));
       if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
         return NextResponse.json(
           { error: `${label}.nftmail.gno is already minted. Choose a different name.` },
@@ -269,8 +179,7 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch {
-      // Both RPCs failed — proceed; in-flight mutex + worker KV duplicate check prevent doubles
-      console.warn('GNS availability check failed on both RPCs — proceeding with mint');
+      // Revert means subnode doesn't exist in registry — name is available, proceed
     }
 
     // In-flight mutex: reject if another request is already minting this label
@@ -319,94 +228,30 @@ export async function POST(req: NextRequest) {
 
       // ─── Register sovereign inbox in nftmail-email-worker KV ───
       const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
-      const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET || '';
+      const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET;
       let kvRegistered = false;
-      try {
-        const kvRes = await fetch(workerUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'registerSovereign',
-            secret: webhookSecret,
-            label,
-            controller: owner,
-            originNft: `${label}.nftmail.gno`,
-            legacyIdentity: emailLocal,
-            mintedTokenId: null,
-            privacyTier: 'exposed',
-          }),
-        });
-        const kvJson = await kvRes.json() as any;
-        kvRegistered = kvJson?.status === 'registered';
-
-        // ── Upgrade LARVA cast account → PUPA if fidAgent provided ──────────
-        if (fidAgent && fid) {
-          try {
-            await fetch(workerUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': webhookSecret },
-              body: JSON.stringify({
-                action: 'upgradeFidAgent',
-                secret: webhookSecret,
-                fid,
-                wallet: owner,
-                originNft: `${label}.nftmail.gno`,
-                tokenId: null,
-              }),
-            });
-          } catch { /* non-fatal */ }
-        }
-      } catch {
-        // Non-fatal — KV can be backfilled manually
-      }
-
-      // ── Welcome email ────────────────────────────────────────────────────
-      try {
-        const mailgunApiKey = process.env.MAILGUN_API_KEY;
-        const mailgunDomain = process.env.MAILGUN_DOMAIN || 'nftmail.box';
-        const mailgunBase = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
-        if (mailgunApiKey) {
-          const welcomeForm = new URLSearchParams();
-          welcomeForm.set('from', `NFTMail <welcome@${mailgunDomain}>`);
-          welcomeForm.set('to', `${emailLocal}@nftmail.box`);
-          welcomeForm.set('subject', `Welcome to nftmail.box — your inbox is live`);
-          welcomeForm.set('text', [
-            `Hi ${emailLocal},`,
-            ``,
-            `Your NFTmail.gno address is live:`,
-            `  ${label}.nftmail.gno → ${emailLocal}@nftmail.box`,
-            ``,
-            `You are born a Larva. Larva tier includes:`,
-            `  · Receive unlimited emails`,
-            `  · Send up to 10 emails`,
-            `  · 8-day message history`,
-            ``,
-            `Read inbox:   https://nftmail.box/inbox/${emailLocal}`,
-            `Dashboard:    https://nftmail.box/dashboard`,
-            ``,
-            `To test delivery, reply to this email.`,
-            ``,
-            `— — —`,
-            ``,
-            `Molt to Pupa for:`,
-            `  · Unlimited sending`,
-            `  · 30-day message history`,
-            ``,
-            `Molt at: https://nftmail.box/nftmail?label=${label}&upgrade=lite`,
-            ``,
-            `— nftmail.box`,
-          ].join('\n'));
-          await fetch(`${mailgunBase}/${mailgunDomain}/messages`, {
+      if (webhookSecret) {
+        try {
+          const kvRes = await fetch(workerUrl, {
             method: 'POST',
-            headers: {
-              Authorization: `Basic ${btoa(`api:${mailgunApiKey}`)}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: welcomeForm.toString(),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'registerSovereign',
+              secret: webhookSecret,
+              label,
+              controller: owner,
+              originNft: `${label}.nftmail.gno`,
+              legacyIdentity: emailLocal,
+              mintedTokenId: null,
+              privacyTier: 'exposed',
+            }),
           });
+          const kvJson = await kvRes.json() as any;
+          kvRegistered = kvJson?.status === 'registered';
+        } catch {
+          // Non-fatal — KV can be backfilled manually
         }
-      } catch { /* non-fatal */ }
-      // ────────────────────────────────────────────────────────────────────
+      }
 
       return NextResponse.json({
         success: true,
