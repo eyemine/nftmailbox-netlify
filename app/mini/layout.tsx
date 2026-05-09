@@ -1,18 +1,19 @@
 import type { Metadata } from 'next';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
+const PINATA_LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
 
 const miniAppEmbed = JSON.stringify({
   version: '1',
-  imageUrl: `${APP_URL}/nftmail-logo.png`,
+  imageUrl: PINATA_LOGO_URL,
   button: {
-    title: '👻 Claim Agent',
+    title: 'Claim Agent',
     action: {
       type: 'launch_frame',
       name: 'nftmail.box',
       url: `${APP_URL}/mini`,
-      splashImageUrl: `${APP_URL}/nftmail-logo-32.png`,
-      splashBackgroundColor: '#000000',
+      splashImageUrl: PINATA_LOGO_URL,
+      splashBackgroundColor: '#43a574',
     },
   },
 });

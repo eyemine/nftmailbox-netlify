@@ -71,7 +71,7 @@ interface MintResult {
   ownerAddress?: string;
 }
 
-export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { initialName?: string; ensName?: string; agentMode?: boolean; hideName?: boolean }) {
+export function MintNFTMail({ initialName, ensName, agentMode, hideName, fidAgent, fid }: { initialName?: string; ensName?: string; agentMode?: boolean; hideName?: boolean; fidAgent?: string; fid?: number }) {
   const { authenticated } = usePrivy();
   const { wallets } = useWallets();
 
@@ -222,7 +222,12 @@ export function MintNFTMail({ initialName, ensName, agentMode, hideName }: { ini
       const res = await fetch('/api/gasless-mint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, owner: ownerAddress, ...(ensProof ? { ensProof } : {}) }),
+        body: JSON.stringify({
+          label,
+          owner: ownerAddress,
+          ...(ensProof ? { ensProof } : {}),
+          ...(fidAgent ? { fidAgent, fid } : {}),
+        }),
       });
 
       const data = await res.json() as { error?: string; email?: string; tbaAddress?: string; txHash?: string; label?: string; sponsor?: string; kvRegistered?: boolean };

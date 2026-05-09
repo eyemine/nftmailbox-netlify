@@ -109,10 +109,12 @@ export async function POST(req: NextRequest) {
 
     // Parse request
     const body = await req.json();
-    const { label, owner, ensProof } = body as {
+    const { label, owner, ensProof, fidAgent, fid } = body as {
       label?: string;
       owner?: string;
       ensProof?: { name: string };
+      fidAgent?: string; // LARVA cast account name e.g. "ghostagent-og.cast"
+      fid?: number;      // Farcaster ID of the upgrading user
     };
 
     if (!label || typeof label !== 'string' || label.length < 3) {
@@ -336,6 +338,24 @@ export async function POST(req: NextRequest) {
         });
         const kvJson = await kvRes.json() as any;
         kvRegistered = kvJson?.status === 'registered';
+
+        // ── Upgrade LARVA cast account → PUPA if fidAgent provided ──────────
+        if (fidAgent && fid) {
+          try {
+            await fetch(workerUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': webhookSecret },
+              body: JSON.stringify({
+                action: 'upgradeFidAgent',
+                secret: webhookSecret,
+                fid,
+                wallet: owner,
+                originNft: `${label}.nftmail.gno`,
+                tokenId: null,
+              }),
+            });
+          } catch { /* non-fatal */ }
+        }
       } catch {
         // Non-fatal — KV can be backfilled manually
       }

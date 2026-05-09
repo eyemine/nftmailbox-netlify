@@ -420,6 +420,9 @@ export default function NftmailPage() {
   const upgradeTier = searchParams?.get('upgrade') || '';
   const claimName = searchParams?.get('claim') || '';
   const isUpgradeFlow = !!(upgradeLabel && (upgradeTier === 'lite' || upgradeTier === 'pro' || upgradeTier === 'premium'));
+  // LARVA → PUPA upgrade from Mini App: ?agent=ghostagent-og.cast&fid=349061
+  const fidAgent = searchParams?.get('agent') || '';
+  const fidParam = parseInt(searchParams?.get('fid') || '0', 10) || undefined;
 
   const [mintedName, setMintedName] = useState('');
   const [mintedTba, setMintedTba] = useState('');
@@ -580,16 +583,27 @@ export default function NftmailPage() {
                   <span className="ml-auto text-[10px] text-[var(--muted)]">TBA: {mintedTba.slice(0, 8)}...</span>
                 </div>
               ) : (
-                <MintNFTMailWithCallback
-                  initialName={claimName}
-                  nameType={nameType}
-                  onNameTypeChange={setNameType}
-                  onMinted={(name, tba) => {
-                    setMintedName(name);
-                    setMintedTba(tba);
-                    setTier('free');
-                  }}
-                />
+                <>
+                  {fidAgent && (
+                    <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3">
+                      <p className="text-xs font-semibold text-amber-300">Upgrading LARVA account</p>
+                      <p className="text-[10px] text-amber-200/70 mt-0.5 font-mono">{fidAgent}@nftmail.box → permanent</p>
+                      <p className="text-[10px] text-[var(--muted)] mt-1">After minting, your cast account upgrades to PUPA and your agent address is provisioned.</p>
+                    </div>
+                  )}
+                  <MintNFTMailWithCallback
+                    initialName={claimName || fidAgent.replace(/\.cast$/, '')}
+                    nameType={nameType}
+                    onNameTypeChange={setNameType}
+                    fidAgent={fidAgent || undefined}
+                    fid={fidParam}
+                    onMinted={(name, tba) => {
+                      setMintedName(name);
+                      setMintedTba(tba);
+                      setTier('free');
+                    }}
+                  />
+                </>
               )}
             </div>
           </section>
@@ -662,7 +676,7 @@ export default function NftmailPage() {
   );
 }
 
-function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeChange }: { onMinted: (name: string, tba: string) => void; initialName?: string; nameType: 'human' | 'ens' | 'agent'; onNameTypeChange: (t: 'human' | 'ens' | 'agent') => void }) {
+function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeChange, fidAgent, fid }: { onMinted: (name: string, tba: string) => void; initialName?: string; nameType: 'human' | 'ens' | 'agent'; onNameTypeChange: (t: 'human' | 'ens' | 'agent') => void; fidAgent?: string; fid?: number }) {
   const [manualName, setManualName] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [selectedEns, setSelectedEns] = useState<string | null>(null);
@@ -753,7 +767,7 @@ function MintNFTMailWithCallback({ onMinted, initialName, nameType, onNameTypeCh
           <div className="rounded-lg border border-[rgba(0,163,255,0.2)] bg-[rgba(0,163,255,0.05)] px-3 py-2 text-[10px] text-[rgb(160,220,255)]/80">
             Mint {'{name1}'}-{'{name2}'}.nftmail.gno → get {'{name1}'}.{'{name2}'}@nftmail.box. Free — born a Larva. 8-day history, send 10 emails. Molt to Pupa for a 30-day window and unlimited send.
           </div>
-          <MintNFTMail initialName={initialName} />
+          <MintNFTMail initialName={initialName} fidAgent={fidAgent} fid={fid} />
         </div>
       ) : nameType === 'ens' ? (
         <div className="space-y-3">
