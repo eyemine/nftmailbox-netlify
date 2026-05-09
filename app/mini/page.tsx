@@ -372,7 +372,7 @@ export default function MiniApp() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <Image src={LOGO_URL} alt="" width={120} height={120} className="mx-auto mb-4" />
-          <p className="text-green-400 font-mono text-sm">Initialising...</p>
+          <p className="text-[#43a574] font-mono text-sm">Initialising...</p>
         </div>
       </div>
     );
@@ -389,14 +389,14 @@ export default function MiniApp() {
             <h1 className="text-white font-bold text-4xl mb-1 font-mono">nftmail.box</h1>
             <p className="text-gray-400 text-sm">Encrypted mail · Farcaster wallet secured</p>
             {fid
-              ? <p className="text-green-400 font-mono text-xs mt-2">FID: {fid} ✓</p>
+              ? <p className="text-[#43a574] font-mono text-xs mt-2">FID: {fid} ✓</p>
               : <p className="text-yellow-400 font-mono text-xs mt-2">Open in Warpcast to link FID</p>
             }
           </div>
           <div className="space-y-3">
             <input
               type="text"
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
               placeholder={fid ? `Custom name (default: your Farcaster name · FID ${fid})` : 'Custom name (optional)'}
               value={customName}
               onChange={e => setCustomName(e.target.value)}
@@ -407,7 +407,7 @@ export default function MiniApp() {
             <button
               onClick={() => setStep('naming')}
               disabled={!fid}
-              className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
+              className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
               {fid ? 'Claim Account (LARVA) →' : 'Open in Warpcast to Claim'}
             </button>
@@ -433,19 +433,19 @@ export default function MiniApp() {
           <div className="space-y-3">
             <button
               onClick={() => provision(name, 'hidden')}
-              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors"
             >
               🕵️ Hidden — No FID visible
             </button>
             <button
               onClick={() => provision(name, 'fid-only')}
-              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors"
             >
               👁 FID Only — Show FID number
             </button>
             <button
               onClick={() => provision(name, 'full')}
-              className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors"
+              className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors"
             >
               🌐 Full Profile — Show username + avatar
             </button>
@@ -462,8 +462,8 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-green-400 font-mono text-sm">Creating your account...</p>
+          <div className="w-12 h-12 border-2 border-[#43a574] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#43a574] font-mono text-sm">Creating your account...</p>
           <p className="text-gray-500 text-xs mt-2">Resolving Farcaster name · Setting up inbox</p>
         </div>
       </div>
@@ -477,8 +477,8 @@ export default function MiniApp() {
         <div className="w-full max-w-sm text-center">
           <div className="text-5xl mb-3">🎉</div>
           <h2 className="text-white font-bold text-2xl mb-2">Account Created!</h2>
-          <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
-            <p className="text-green-400 font-mono text-sm font-bold">{humanEmail}</p>
+          <div className="bg-gray-900 border border-[#43a574] rounded-lg p-4 my-6">
+            <p className="text-[#43a574] font-mono text-sm font-bold">{humanEmail}</p>
             <p className="text-gray-500 text-xs mt-1">LARVA · Active until {expiresStr} · 8-day inbox history</p>
           </div>
           <p className="text-gray-400 text-xs mb-6">
@@ -487,10 +487,10 @@ export default function MiniApp() {
           <div className="space-y-3">
             <button
               onClick={() => loadInbox(agentName)}
-              className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+              className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
               Read Inbox →
             </button>
-            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-green-400 text-white py-3 rounded-lg text-sm transition-colors">
+            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors">
               Compose
             </button>
             <button onClick={sendTest} className="w-full text-gray-400 text-sm py-2">
@@ -521,9 +521,9 @@ export default function MiniApp() {
           
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">Inbox</h2>
-            <button onClick={() => loadInbox(agentName)} className="text-green-400 text-sm hover:text-green-300">Refresh</button>
+            <button onClick={() => loadInbox(agentName)} className="text-[#43a574] text-sm hover:text-[#5ab883]">Refresh</button>
           </div>
-          <p className="text-green-400 font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
+          <p className="text-[#43a574] font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <Image src={MAILBOX_ICON_URL} alt="" width={64} height={64} className="mx-auto mb-3 opacity-70" />
@@ -647,7 +647,7 @@ export default function MiniApp() {
           </div>
 
           <div className="space-y-2 mt-6">
-            <button onClick={() => setStep('compose')} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
+            <button onClick={() => setStep('compose')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
               <span>✉️</span> Compose
             </button>
             <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
@@ -677,7 +677,7 @@ export default function MiniApp() {
               placeholder="To: recipient@example.com"
               value={composeTo}
               onChange={e => setComposeTo(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
               autoCapitalize="none"
               autoComplete="off"
             />
@@ -686,19 +686,19 @@ export default function MiniApp() {
               placeholder="Subject"
               value={composeSubject}
               onChange={e => setComposeSubject(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
             />
             <textarea
               placeholder="Message body..."
               value={composeBody}
               onChange={e => setComposeBody(e.target.value)}
               rows={6}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-green-400 resize-none"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574] resize-none"
             />
             <button
               onClick={sendCompose}
               disabled={!composeTo || !composeSubject || !composeBody}
-              className="w-full bg-green-500 hover:bg-green-400 disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
+              className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
               Send →
             </button>
@@ -713,8 +713,8 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-green-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-green-400 font-mono text-sm">Sending...</p>
+          <div className="w-12 h-12 border-2 border-[#43a574] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-[#43a574] font-mono text-sm">Sending...</p>
         </div>
       </div>
     );
@@ -726,13 +726,13 @@ export default function MiniApp() {
         <div className="w-full max-w-sm text-center">
           <Image src={MAILBOX_ICON_URL} alt="Sent" width={64} height={64} className="mx-auto mb-3 opacity-70" />
           <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
-          <div className="bg-gray-900 border border-green-400 rounded-lg p-4 my-6">
-            <p className="text-green-400 font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
+          <div className="bg-gray-900 border border-[#43a574] rounded-lg p-4 my-6">
+            <p className="text-[#43a574] font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
             <p className="text-gray-500 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
           </div>
           <p className="text-gray-400 text-xs mb-6">Your email is on its way to the recipient.</p>
           <div className="space-y-3">
-            <button onClick={() => loadInbox(agentName)} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+            <button onClick={() => loadInbox(agentName)} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
               Back to Inbox →
             </button>
             <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-sm">
@@ -753,7 +753,7 @@ export default function MiniApp() {
         <p className="text-red-400 font-mono text-xs mb-6 break-words">{error}</p>
         {isSendLimitError ? (
           <div className="space-y-3">
-            <button onClick={openUpgrade} className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded-lg transition-colors">
+            <button onClick={openUpgrade} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
               Upgrade to PUPA →
             </button>
             <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg">
