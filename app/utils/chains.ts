@@ -29,3 +29,20 @@ export const ERC6551_REGISTRY = '0x000000006551c19487814612e58FE06813775758' as 
 export const GHOST_REGISTRY = (process.env.NEXT_PUBLIC_GHOST_REGISTRY || '0x73F2d7f43B3aa98D434F53e921d3A41aa570bE13') as `0x${string}`;
 export const BRAIN_MODULE = (process.env.NEXT_PUBLIC_BRAIN_MODULE || '0x0000000000000000000000000000000000000000') as `0x${string}`;
 export const NFTMAIL_SAFE = '0xb7e493e3d226f8fe722cc9916ff164b793af13f4' as const;
+
+// ─── Story Protocol ───
+export const storyProtocol = {
+  id: 1514,
+  name: 'Story',
+  network: 'story',
+  nativeCurrency: { name: 'IP', symbol: 'IP', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://mainnet.storyrpc.io'] },
+    public: { http: ['https://mainnet.storyrpc.io'] },
+  },
+  blockExplorers: {
+    default: { name: 'Storyscan', url: 'https://storyscan.xyz' },
+  },
+} as const;
+
+export const STORY_SUB_REGISTRAR = (process.env.NEXT_PUBLIC_STORY_SUB_REGISTRAR || '0x0000000000000000000000000000000000000000') as `0x${string}`;
