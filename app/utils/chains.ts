@@ -15,6 +15,11 @@ export const gnosis = defineChain({
 });
 
 export const GNO_REGISTRARS = {
+  agent: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+  openclaw: '0xbD8285A8455CCEC4bE671D9eE3924Ab1264fcbbe' as `0x${string}`,
+  molt: '0x4b54213c1e5826497ff39ba8c87a7b75d2bc3c50' as `0x${string}`,
+  picoclaw: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+  vault: '0x0000000000000000000000000000000000000000' as `0x${string}`,
   nftmail: '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as `0x${string}`,
 } as const;
 
