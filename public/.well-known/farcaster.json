@@ -1,11 +1,18 @@
 {
-  "version": "1",
-  "name": "GhostAgent Lite",
-  "iconUrl": "https://nftmail.box/icon-v2.png",
-  "homeUrl": "https://nftmail.box/mini",
-  "imageUrl": "https://nftmail.box/og-3-2.png",
-  "splashImageUrl": "https://nftmail.box/splash-200.png",
-  "splashBackgroundColor": "#000000",
-  "subtitle": "FID-based ephemeral inbox",
-  "description": "Claim your handle and send 10 free emails. Upgrade for sovereign storage."
+  "accountAssociation": {
+    "header": "eyJmaWQiOjMxOTksInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhBMjU0RTlkQjA5Mzk1YjI0YzI2MzRBNUM2QTc1QjZEOTAwQzFiY0U4In0",
+    "payload": "eyJkb21haW4iOiJuZnRtYWlsLmJveCJ9",
+    "signature": "MHhiNTBjZDdjOWQ3NTc2MDg3MjUyN2E0YzNhMjE5Yjk3MzA0MjJkN2YxYjJiYzViOTg1MjEyNjY0MWQzYjEwMTM2MGIwYzJiYzk3NDIxY2U5MjUwMjMzZGE3NTFiYjJmMGNkMjZlOGQ5MjgyMjA5ZDczYzY0ZmJiMGE0NDU5NmUxOTFj"
+  },
+  "frame": {
+    "version": "1",
+    "name": "GhostAgent Lite",
+    "iconUrl": "https://nftmail.box/icon-v2.png",
+    "homeUrl": "https://nftmail.box/mini",
+    "imageUrl": "https://nftmail.box/og-3-2.png",
+    "splashImageUrl": "https://nftmail.box/splash-200.png",
+    "splashBackgroundColor": "#000000",
+    "subtitle": "FID-based ephemeral inbox",
+    "description": "Claim your handle and send 10 free emails. Upgrade for sovereign storage."
+  }
 }
