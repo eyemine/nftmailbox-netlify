@@ -1,6 +1,6 @@
 // High-res IPFS images for Farcaster mini app
-// App icon / splash screen logo
-export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreiasnbw4tnbomnw2fp4qdeq2cijivffolvzwdxt3ppo4ohn57kta5e';
+// App icon / splash screen logo (sharp icon for Farcaster well-known)
+export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
 // Loading screen and top-left logo
 export const LOADING_LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
 export const MAILBOX_ICON_URL = LOGO_URL;
