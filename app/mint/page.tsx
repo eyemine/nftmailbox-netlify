@@ -84,7 +84,8 @@ function MintPageContent() {
     setStep('minting');
     setError('');
     try {
-      const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${sldLabel}&source=${fromParam}`;
+      const codeParam = otpCode ? `&code=${otpCode}` : '';
+      const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${sldLabel}&source=${fromParam}${codeParam}`;
       if (isInWarpcast) {
         await sdk.actions.openUrl(mintUrl);
       } else {
@@ -219,6 +220,28 @@ function MintPageContent() {
             <p className="text-green-400 font-mono text-xs mt-2">Current: {rawName}@nftmail.box</p>
           )}
         </div>
+
+        {/* Agent Name Display */}
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-6">
+          <p className="text-gray-400 text-xs mb-1">Your NFTmail address:</p>
+          <p className="text-[#43a574] font-mono text-sm font-bold">{displayName}.nftmail.gno</p>
+        </div>
+
+        {/* OTP Input (if from mini app) */}
+        {fromParam === 'mini' && (
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-6">
+            <label className="text-gray-400 text-xs mb-2 block">Upgrade Code (from Farcaster):</label>
+            <input
+              type="text"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="6-digit code"
+              className="w-full bg-black border border-gray-700 text-white text-center text-xl font-mono tracking-widest py-3 rounded focus:border-[#43a574] focus:outline-none"
+              maxLength={6}
+            />
+            <p className="text-gray-500 text-xs mt-2">Enter the 6-digit code shown in your Farcaster Mini App</p>
+          </div>
+        )}
 
         {/* Tier Cards — click only selects, does not navigate */}
         <div className="space-y-4 mb-6">
