@@ -1,10 +1,26 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useCallback } from 'react';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { createWalletClient, createPublicClient, custom, http, decodeEventLog, keccak256, encodePacked, namehash } from 'viem';
+import { gnosis } from '../utils/chains';
+import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
 
 const LOGO_URL = '/nftmail-logo.png';
+
+const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
+const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
+const GNSRegistryABI = [
+  {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 const PUPA_FEATURES = [
   'Unlimited inbox storage',
@@ -35,10 +51,13 @@ function isMobileUserAgent(): boolean {
 }
 
 function MintPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const agentParam = searchParams.get('agent') || '';
   const fromParam = searchParams.get('from') || '';
   const codeParam = searchParams.get('code') || '';
+  const { login, logout, authenticated, ready } = usePrivy();
+  const { wallets } = useWallets();
 
   // Convert agent name: strip .cast suffix, replace dots with hyphens for display as SLD label
   const rawName = agentParam.replace(/\.cast$/i, '');
@@ -49,6 +68,11 @@ function MintPageContent() {
   const [step, setStep] = useState<'select' | 'minting' | 'success' | 'error'>('select');
   const [error, setError] = useState('');
   const [otpCode, setOtpCode] = useState(codeParam);
+  const [txHash, setTxHash] = useState('');
+
+  const injectedWallet = wallets.find((w: any) => w?.walletClientType === 'injected');
+  const anyWallet = wallets[0];
+  const walletAddress = (injectedWallet || anyWallet)?.address;
 
   // Card click: just select the tier, never navigate
   const handleCardClick = (tier: 'PUPA' | 'IMAGO') => {
@@ -60,19 +84,93 @@ function MintPageContent() {
     startMint(selectedTier);
   };
 
-  const startMint = async (tier: 'PUPA' | 'IMAGO') => {
+  const startMint = useCallback(async (tier: 'PUPA' | 'IMAGO') => {
+    if (!authenticated || !walletAddress) {
+      setError('Connect your wallet first');
+      return;
+    }
+    if (!sldLabel || sldLabel.length < 2) {
+      setError('Invalid name');
+      return;
+    }
+    
     setStep('minting');
     setError('');
+    
     try {
-      const codeParam = otpCode ? `&code=${otpCode}` : '';
-      const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${sldLabel}&source=${fromParam}${codeParam}`;
-      window.open(mintUrl, '_blank');
-      setTimeout(() => setStep('success'), 500);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Mint failed');
+      // Check if already minted
+      const publicClient = createPublicClient({ chain: gnosis, transport: http() });
+      const labelhash = keccak256(encodePacked(['string'], [sldLabel]));
+      const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+      const existingOwner = await publicClient.readContract({ 
+        address: GNS_REGISTRY, 
+        abi: GNSRegistryABI, 
+        functionName: 'owner', 
+        args: [subnode] 
+      });
+      
+      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+        throw new Error(`${sldLabel}.nftmail.gno is already minted.`);
+      }
+
+      // Switch to Gnosis and get provider
+      const wallet = injectedWallet || anyWallet;
+      if (!wallet) throw new Error('No wallet connected');
+      
+      await wallet.switchChain(gnosis.id);
+      const provider = await wallet.getEthereumProvider();
+      const walletClient = createWalletClient({ 
+        chain: gnosis, 
+        transport: custom(provider), 
+        account: wallet.address as `0x${string}` 
+      });
+
+      // Check balance
+      const balanceWei = await publicClient.getBalance({ address: wallet.address as `0x${string}` });
+      if (balanceWei === BigInt(0)) {
+        throw new Error(`Wallet ${wallet.address} has 0 xDAI for gas.`);
+      }
+
+      // Mint NFT
+      const registrar = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as `0x${string}`;
+      const hash = await walletClient.writeContract({
+        address: registrar, 
+        abi: NamespaceRegistrarABI, 
+        functionName: 'mintSubname',
+        args: [sldLabel, wallet.address as `0x${string}`, '0x', '0x0000000000000000000000000000000000000000000000000000000000000000'],
+      });
+
+      // Wait for receipt
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      setTxHash(hash);
+
+      // Verify OTP and migrate if from mini app
+      if (fromParam === 'mini' && otpCode) {
+        try {
+          await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              action: 'verifyOTP', 
+              code: otpCode,
+              newAddress: wallet.address 
+            }),
+          });
+        } catch {}
+      }
+
+      setStep('success');
+      
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 2000);
+      
+    } catch (err: any) {
+      setError(err?.shortMessage || err?.message || 'Minting failed');
       setStep('error');
     }
-  };
+  }, [authenticated, walletAddress, sldLabel, injectedWallet, anyWallet, otpCode, fromParam, router]);
 
   const gradientBg = {
     background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)',
@@ -228,17 +326,26 @@ function MintPageContent() {
           </div>
         </div>
 
-        {/* Mint Button — this is what triggers navigation */}
-        <button
-          onClick={handleMintClick}
-          className={`w-full font-bold py-4 rounded-xl transition-colors mb-3 ${
-            selectedTier === 'IMAGO'
-              ? 'bg-[#4722d1] hover:bg-[#5a35e0] text-white'
-              : 'bg-green-500 hover:bg-green-400 text-black'
-          }`}
-        >
-          Mint {selectedTier} →
-        </button>
+        {/* Mint or Connect Wallet Button */}
+        {!authenticated ? (
+          <button
+            onClick={login}
+            className="w-full font-bold py-4 rounded-xl transition-colors mb-3 bg-[#855DCD] hover:bg-[#9a6fd9] text-white"
+          >
+            Connect Wallet to Mint →
+          </button>
+        ) : (
+          <button
+            onClick={handleMintClick}
+            className={`w-full font-bold py-4 rounded-xl transition-colors mb-3 ${
+              selectedTier === 'IMAGO'
+                ? 'bg-[#4722d1] hover:bg-[#5a35e0] text-white'
+                : 'bg-green-500 hover:bg-green-400 text-black'
+            }`}
+          >
+            Mint {selectedTier} →
+          </button>
+        )}
 
         <p className="text-gray-600 text-xs text-center">
           Minted on Gnosis Chain · Gas paid in xDAI
