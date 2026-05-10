@@ -98,19 +98,26 @@ function MintPageContent() {
     setError('');
     
     try {
-      // Check if already minted
       const publicClient = createPublicClient({ chain: gnosis, transport: http() });
-      const labelhash = keccak256(encodePacked(['string'], [sldLabel]));
-      const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
-      const existingOwner = await publicClient.readContract({ 
-        address: GNS_REGISTRY, 
-        abi: GNSRegistryABI, 
-        functionName: 'owner', 
-        args: [subnode] 
-      });
       
-      if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
-        throw new Error(`${sldLabel}.nftmail.gno is already minted.`);
+      // Check if already minted (best effort - don't block if check fails)
+      try {
+        const labelhash = keccak256(encodePacked(['string'], [sldLabel]));
+        const subnode = keccak256(encodePacked(['bytes32', 'bytes32'], [NFTMAIL_GNO_NAMEHASH, labelhash]));
+        const existingOwner = await publicClient.readContract({ 
+          address: GNS_REGISTRY, 
+          abi: GNSRegistryABI, 
+          functionName: 'owner', 
+          args: [subnode] 
+        });
+        
+        if (existingOwner && existingOwner !== '0x0000000000000000000000000000000000000000') {
+          throw new Error(`${sldLabel}.nftmail.gno is already minted.`);
+        }
+      } catch (checkErr: any) {
+        // If the check itself failed (e.g., contract revert), log but continue
+        // The actual mint transaction will fail if name is taken
+        console.log('Pre-mint check failed, continuing:', checkErr?.message);
       }
 
       // Switch to Gnosis and get provider
