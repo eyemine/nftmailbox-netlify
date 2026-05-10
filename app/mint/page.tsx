@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useState, Suspense } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { sdk } from '@farcaster/miniapp-sdk';
 
 const LOGO_URL = '/nftmail-logo.png';
 
@@ -46,37 +45,18 @@ function MintPageContent() {
   const sldLabel = rawName.replace(/\./g, '-');
   const displayName = sldLabel || 'your-farcaster-name';
 
-  const [isMobile, setIsMobile] = useState(true);
-  const [isInWarpcast, setIsInWarpcast] = useState(false);
   const [selectedTier, setSelectedTier] = useState<'PUPA' | 'IMAGO'>('PUPA');
-  const [step, setStep] = useState<'select' | 'mobile-check' | 'minting' | 'success' | 'error'>('select');
+  const [step, setStep] = useState<'select' | 'minting' | 'success' | 'error'>('select');
   const [error, setError] = useState('');
   const [otpCode, setOtpCode] = useState(codeParam);
-
-  useEffect(() => {
-    setIsMobile(isMobileUserAgent());
-    const checkWarpcast = async () => {
-      try {
-        const context = await sdk.context;
-        if (context?.user?.fid) setIsInWarpcast(true);
-      } catch {
-        setIsInWarpcast(false);
-      }
-    };
-    checkWarpcast();
-  }, []);
 
   // Card click: just select the tier, never navigate
   const handleCardClick = (tier: 'PUPA' | 'IMAGO') => {
     setSelectedTier(tier);
   };
 
-  // Mint button: navigate (mobile-check on desktop, startMint on mobile/warpcast)
+  // Mint button: proceed directly to minting (wallet connect)
   const handleMintClick = () => {
-    if (!isMobile && !isInWarpcast) {
-      setStep('mobile-check');
-      return;
-    }
     startMint(selectedTier);
   };
 
@@ -86,11 +66,7 @@ function MintPageContent() {
     try {
       const codeParam = otpCode ? `&code=${otpCode}` : '';
       const mintUrl = `https://nftmail.box/?tier=${tier.toLowerCase()}&agent=${sldLabel}&source=${fromParam}${codeParam}`;
-      if (isInWarpcast) {
-        await sdk.actions.openUrl(mintUrl);
-      } else {
-        window.open(mintUrl, '_blank');
-      }
+      window.open(mintUrl, '_blank');
       setTimeout(() => setStep('success'), 500);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Mint failed');
@@ -98,50 +74,9 @@ function MintPageContent() {
     }
   };
 
-  const handleBackToFarcaster = async () => {
-    try {
-      await sdk.actions.close();
-    } catch {
-      window.history.back();
-    }
-  };
-
   const gradientBg = {
     background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)',
   };
-
-  if (step === 'mobile-check') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={gradientBg}>
-        <div className="w-full max-w-sm text-center">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <Image src={LOGO_URL} alt="nftmail.box" width={40} height={40} className="opacity-95" />
-            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-lg">nftmail.box</span>
-          </div>
-          <h2 className="text-white font-bold text-xl mb-4">Use Mobile for Minting</h2>
-          <p className="text-gray-400 text-sm mb-2">
-            To connect your Farcaster wallet and mint directly to your verified address, open this in Warpcast on your phone.
-          </p>
-          <p className="text-gray-500 font-mono text-xs mb-8">{sldLabel}.nftmail.gno ({selectedTier})</p>
-          <div className="space-y-3">
-            <button
-              onClick={handleBackToFarcaster}
-              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
-              style={{ backgroundColor: '#855DCD' }}
-            >
-              ← Back to Farcaster
-            </button>
-            <button
-              onClick={() => setStep('select')}
-              className="w-full bg-gray-900 border border-gray-700 text-gray-300 py-3 rounded-xl text-sm transition-colors hover:border-gray-500"
-            >
-              ← Back to Tiers
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (step === 'minting') {
     return (
@@ -165,13 +100,6 @@ function MintPageContent() {
           <p className="text-green-400 font-mono text-sm mb-4">{sldLabel}.nftmail.gno ({selectedTier})</p>
           <p className="text-gray-400 text-xs mb-6">Complete the mint in the opened window. Return here when done.</p>
           <div className="space-y-3">
-            <button
-              onClick={handleBackToFarcaster}
-              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
-              style={{ backgroundColor: '#855DCD' }}
-            >
-              ← Back to Farcaster
-            </button>
             <button onClick={() => setStep('select')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 py-3 rounded-xl text-sm">
               Back to Tiers
             </button>
@@ -190,13 +118,6 @@ function MintPageContent() {
           <div className="space-y-3">
             <button onClick={() => setStep('select')} className="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl transition-colors">
               Try Again
-            </button>
-            <button
-              onClick={handleBackToFarcaster}
-              className="w-full font-bold py-3 rounded-xl transition-colors text-white"
-              style={{ backgroundColor: '#855DCD' }}
-            >
-              ← Back to Farcaster
             </button>
           </div>
         </div>
