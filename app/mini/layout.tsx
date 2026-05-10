@@ -9,10 +9,10 @@ const miniAppEmbed = JSON.stringify({
   version: '1',
   imageUrl: ICON_URL,
   button: {
-    title: 'Claim Agent',
+    title: 'Claim Inbox',
     action: {
       type: 'launch_frame',
-      name: 'GhostAgent Lite',
+      name: 'NFTmail Inbox',
       url: `${APP_URL}/mini`,
       splashImageUrl: SPLASH_URL,
       splashBackgroundColor: '#000000',
