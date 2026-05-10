@@ -1,6 +1,6 @@
 // NFTmail Mini - Static local images (non-transparent PNGs)
 // App icon (for Farcaster manifest + header)
-export const LOGO_URL = '/icon-v2.png';
+export const LOGO_URL = '/nftmail-logo.png';
 // Loading screen / splash
 export const LOADING_LOGO_URL = '/splash-200.png';
 export const MAILBOX_ICON_URL = '/nftmail-logo.png';

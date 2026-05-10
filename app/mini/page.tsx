@@ -148,8 +148,27 @@ export default function MiniApp() {
 
   const openUpgrade = useCallback(() => {
     const encodedAgent = encodeURIComponent(`${agentName}.cast`);
-    sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini`);
-  }, [agentName, sdk]);
+    const otpParam = upgradeOtp ? `&code=${upgradeOtp}` : '';
+    sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini${otpParam}`);
+  }, [agentName, sdk, upgradeOtp]);
+
+  // Manual OTP generation function
+  const generateOtp = useCallback(() => {
+    if (!fid || upgradeOtpLoading) return;
+    otpRequestedRef.current = true;
+    setUpgradeOtpLoading(true);
+    setUpgradeOtp(null);
+    fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'generateOTP', fid }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.otp) setUpgradeOtp(data.otp);
+      })
+      .finally(() => setUpgradeOtpLoading(false));
+  }, [fid, upgradeOtpLoading]);
 
   // Generate OTP when entering upgrade step
   useEffect(() => {
@@ -867,11 +886,7 @@ export default function MiniApp() {
             </div>
           ) : (
             <button
-              onClick={() => {
-                otpRequestedRef.current = false;
-                setUpgradeOtp(null);
-                setStep('upgrade');
-              }}
+              onClick={generateOtp}
               className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
             >
               Generate Code
@@ -885,6 +900,15 @@ export default function MiniApp() {
           <p className="text-gray-400 text-xs">3. Pay $10 for Pupa or $24 for Imago tier</p>
           <p className="text-gray-500 text-[10px] italic">(mint to your EOA — an attestation will maintain FID access)</p>
         </div>
+
+        {upgradeOtp && (
+          <button
+            onClick={openUpgrade}
+            className="w-full py-3 px-4 bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold text-sm rounded transition-colors"
+          >
+            Go to Mint Page →
+          </button>
+        )}
 
         <button
           onClick={() => {
