@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "name": "GhostAgent Lite",
+  "iconUrl": "https://nftmail.box/icon-v2.png",
+  "homeUrl": "https://nftmail.box/mini",
+  "imageUrl": "https://nftmail.box/og-3-2.png",
+  "splashImageUrl": "https://nftmail.box/splash-200.png",
+  "splashBackgroundColor": "#000000",
+  "subtitle": "FID-based ephemeral inbox",
+  "description": "Claim your handle and send 10 free emails. Upgrade for sovereign storage."
+}

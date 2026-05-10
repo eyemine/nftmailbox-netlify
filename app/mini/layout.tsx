@@ -1,27 +1,28 @@
 import type { Metadata } from 'next';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
-// High-res IPFS logo for Farcaster app icon and splash
-const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreiasnbw4tnbomnw2fp4qdeq2cijivffolvzwdxt3ppo4ohn57kta5e';
+// Cache-busted local images for Farcaster (must be 1024x1024 PNG, no alpha)
+const ICON_URL = `${APP_URL}/icon-v2.png`;
+const SPLASH_URL = `${APP_URL}/splash-200.png`;
 
 const miniAppEmbed = JSON.stringify({
   version: '1',
-  imageUrl: LOGO_URL,
+  imageUrl: ICON_URL,
   button: {
     title: 'Claim Agent',
     action: {
       type: 'launch_frame',
-      name: 'nftmail.box',
+      name: 'GhostAgent Lite',
       url: `${APP_URL}/mini`,
-      splashImageUrl: LOGO_URL,
+      splashImageUrl: SPLASH_URL,
       splashBackgroundColor: '#000000',
     },
   },
 });
 
 export const metadata: Metadata = {
-  title: 'nftmail.box — Encrypted Agent Email',
-  description: 'Claim your FID-powered encrypted email agent. No wallet required. 8-day free trial.',
+  title: 'GhostAgent Lite — FID Email',
+  description: 'FID-based ephemeral inbox. 10 free emails. Upgrade for sovereign storage.',
   other: {
     'fc:miniapp': miniAppEmbed,
     'fc:frame': miniAppEmbed,
