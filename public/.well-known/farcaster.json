@@ -15,10 +15,11 @@
     "webhookUrl": "https://nftmail.box/api/farcaster/webhook",
     "subtitle": "FID-based ephemeral inbox",
     "description": "Claim your address, get an 8-day-window inbox and send 10 emails. Upgrade for moar.",
-    "tagline": "To whom it may (privately) concern",
+    "tagline": "To FID it may concern",
     "ogTitle": "NFTmail Mini",
     "ogDescription": "Secure, FID-based ephemeral inboxes. Claim your account in 2 clicks.",
     "ogImageUrl": "https://nftmail.box/og-3-2.png",
-    "heroImageUrl": "https://nftmail.box/hero.png"
+    "heroImageUrl": "https://nftmail.box/hero.png",
+    "castShareUrl": "https://warpcast.com/~/compose?text=Per%20my%20previous%20sovereign%20email%2C%20inbox%20me%20%40NFTmail%20Mini.&embeds[]=https://nftmail.box/mini"
   }
 }
