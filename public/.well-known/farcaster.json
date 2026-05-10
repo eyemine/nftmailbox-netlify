@@ -6,13 +6,19 @@
   },
   "frame": {
     "version": "1",
-    "name": "GhostAgent Lite",
+    "name": "NFTmail Mini",
     "iconUrl": "https://nftmail.box/icon-v2.png",
     "homeUrl": "https://nftmail.box/mini",
     "imageUrl": "https://nftmail.box/og-3-2.png",
     "splashImageUrl": "https://nftmail.box/splash-200.png",
     "splashBackgroundColor": "#000000",
+    "webhookUrl": "https://nftmail.box/api/farcaster/webhook",
     "subtitle": "FID-based ephemeral inbox",
-    "description": "Claim your handle and send 10 free emails. Upgrade for sovereign storage."
+    "description": "Claim your address, get an 8-day-window inbox and send 10 emails. Upgrade for moar.",
+    "tagline": "To whom it may (privately) concern",
+    "ogTitle": "NFTmail Mini",
+    "ogDescription": "Secure, FID-based ephemeral inboxes. Claim your account in 2 clicks.",
+    "ogImageUrl": "https://nftmail.box/og-3-2.png",
+    "heroImageUrl": "https://nftmail.box/hero.png"
   }
 }
