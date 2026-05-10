@@ -149,7 +149,7 @@ export default function MiniApp() {
   const openUpgrade = useCallback(() => {
     const encodedAgent = encodeURIComponent(`${agentName}.cast`);
     sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini`);
-  }, [agentName]);
+  }, [agentName, sdk]);
 
   // Generate OTP when entering upgrade step
   useEffect(() => {
@@ -689,11 +689,32 @@ export default function MiniApp() {
             <button onClick={() => setStep('compose')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
               <span>✉️</span> Compose
             </button>
-            <button onClick={openDashboard} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
-              Dashboard
-            </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
-            <button onClick={openUpgrade} className="w-full text-gray-600 text-xs py-1">Upgrade to Permanent →</button>
+            
+            {/* LARVA Progress Bar + Upgrade CTA */}
+            {inboxTier === 'larva' && (
+              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400">LARVA Status</span>
+                  <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
+                </div>
+                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+                  <div 
+                    className="h-full bg-[#43a574] transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
+                  />
+                </div>
+                <button
+                  onClick={openUpgrade}
+                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+                >
+                  Mint Sovereign Identity →
+                </button>
+                <p className="text-center text-[10px] text-gray-500 mt-2">
+                  $10 for Pupa or $24 for Imago tier
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -742,31 +763,6 @@ export default function MiniApp() {
               Send →
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
-            
-            {/* LARVA Progress Bar + Upgrade CTA */}
-            {inboxTier === 'larva' && (
-              <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">LARVA Status</span>
-                  <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
-                </div>
-                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
-                  <div 
-                    className="h-full bg-[#43a574] transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
-                  />
-                </div>
-                <button
-                  onClick={() => setStep('upgrade')}
-                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-                >
-                  mint sovereign ID →
-                </button>
-                <p className="text-center text-[10px] text-gray-500 mt-2">
-                  $10 for Pupa or $24 for Imago tier
-                </p>
-              </div>
-            )}
           </div>
         </div>
       </div>
