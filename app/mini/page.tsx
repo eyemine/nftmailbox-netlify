@@ -84,7 +84,7 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'error';
 
 interface ProvisionResult {
   status: string;
@@ -546,7 +546,33 @@ export default function MiniApp() {
             <h2 className="text-white font-bold text-lg">Inbox</h2>
             <button onClick={() => loadInbox(agentName)} className="text-[#43a574] text-sm hover:text-[#5ab883]">Refresh</button>
           </div>
-          <p className="text-[#43a574] font-mono text-xs mb-4">{humanEmail || `${agentName}@nftmail.box`}</p>
+          <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
+          
+          {/* LARVA Progress Bar + Upgrade CTA */}
+          {inboxTier === 'larva' && (
+            <div className="mb-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">LARVA Status</span>
+                <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
+              </div>
+              <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+                <div 
+                  className="h-full bg-[#43a574] transition-all"
+                  style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
+                />
+              </div>
+              <button
+                onClick={() => setStep('upgrade')}
+                className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+              >
+                Go Permanent →
+              </button>
+              <p className="text-center text-[10px] text-gray-500 mt-2">
+                $14 one-time + $24/yr sovereign storage
+              </p>
+            </div>
+          )}
+          
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <Image src={MAILBOX_ICON_URL} alt="" width={64} height={64} className="mx-auto mb-3 opacity-70" />
