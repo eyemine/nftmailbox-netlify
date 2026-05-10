@@ -848,10 +848,10 @@ export default function MiniApp() {
     return (
       <div className="flex flex-col gap-4">
         <div className="text-center">
-          <h2 className="text-white font-bold text-xl mb-2">Go Permanent</h2>
-          <p className="text-gray-400 text-sm">Generate a code to upgrade on desktop</p>
+          <h2 className="text-white font-bold text-xl mb-2">Your NFT, Your Email</h2>
+          <p className="text-gray-400 text-sm">Mint once. Access forever.</p>
         </div>
-        
+
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
           <p className="text-gray-400 text-xs mb-3">Your upgrade code:</p>
           {upgradeOtpLoading ? (
@@ -866,18 +866,32 @@ export default function MiniApp() {
               <p className="text-gray-500 text-xs mt-2">Valid for 10 minutes</p>
             </div>
           ) : (
-            <p className="text-amber-400 text-xs">Failed to generate code</p>
+            <button
+              onClick={() => {
+                otpRequestedRef.current = false;
+                setUpgradeOtp(null);
+                setStep('upgrade');
+              }}
+              className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+            >
+              Generate Code
+            </button>
           )}
         </div>
-        
+
         <div className="text-center space-y-2">
           <p className="text-gray-400 text-xs">1. Open <span className="text-[#43a574]">nftmail.box/mint</span> on desktop</p>
           <p className="text-gray-400 text-xs">2. Enter the OTP code we sent to your inbox</p>
           <p className="text-gray-400 text-xs">3. Pay $10 for Pupa or $24 for Imago tier</p>
+          <p className="text-gray-500 text-[10px] italic">(mint to your EOA — an attestation will maintain FID access)</p>
         </div>
-        
+
         <button
-          onClick={() => setStep('inbox')}
+          onClick={() => {
+            otpRequestedRef.current = false;
+            setUpgradeOtp(null);
+            setStep('inbox');
+          }}
           className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
         >
           ← Back to Inbox
