@@ -21,7 +21,7 @@ const miniAppEmbed = JSON.stringify({
 });
 
 export const metadata: Metadata = {
-  title: 'GhostAgent Lite — FID Email',
+  title: 'NFTmail Mini — Farcaster Inbox',
   description: 'FID-based ephemeral inbox. 10 free emails. Upgrade for sovereign storage.',
   other: {
     'fc:miniapp': miniAppEmbed,
