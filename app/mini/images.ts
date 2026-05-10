@@ -1,16 +1,22 @@
-// High-res IPFS images for Farcaster mini app
-// App icon / splash screen logo (sharp icon for Farcaster well-known)
-export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
-// Loading screen and top-left logo
-export const LOADING_LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
+// NFTmail Mini - Exact IPFS assets
+// App icon (for Farcaster manifest + header)
+export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreia4mxzq7xrsobujks4ktruaicufm4z6baqfryh7m5yhfkufohtgtm';
+// Loading screen / splash
+export const LOADING_LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreidtaxjyazvmwxbnlf4nqbcuhqwpo3yjt3hv2ygpldnbjuhnuy2lve';
 export const MAILBOX_ICON_URL = LOGO_URL;
+
+// Hero image for Home URL embed
+export const HERO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreif3ml7a67youduubrwjzssjluexhf47fq45ycxszd55gotjse5jxy';
+
+// OG image (3:2 ratio)
+export const OG_IMAGE_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreie54eazthk7p2p5lzstjwam4jfk2foi6p6a75g73qpja53cfdkwsq';
 
 // Empty inbox mailbox image
 export const EMPTY_INBOX_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreigsbizftt4tysymzdxea62juyhjcoy7xwiqjvalaxnrlkoddy2iae';
 
-// Tier indicator images (top right)
+// Tier indicator images (top right) - DISABLED due to transparency issues
 export const TIER_IMAGES = {
-  larva: 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreicekhu7rr7noqtv2t4sivy5mqncqgbqnf6cq63dfqyvi5klgk7bv4',
-  pupa: 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreihajbm2nwtuwp4hsgputfqintlw7zxbz4jbpx772ur3rfvfhwadge',
-  imago: 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreifm4gtqaxgyb2quyykij4np5naoxzpf5w6za6maywemcvl7tltt7u',
+  larva: '',
+  pupa: '',
+  imago: '',
 } as const;
