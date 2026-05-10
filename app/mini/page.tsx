@@ -130,6 +130,8 @@ export default function MiniApp() {
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
+  const [upgradeOtp, setUpgradeOtp] = useState<string | null>(null);
+  const [upgradeOtpLoading, setUpgradeOtpLoading] = useState(false);
 
   const openDashboard = useCallback(() => {
     sdk.actions.openUrl(`${APP_URL}`);
@@ -147,6 +149,23 @@ export default function MiniApp() {
     const encodedAgent = encodeURIComponent(`${agentName}.cast`);
     sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini`);
   }, [agentName]);
+
+  // Generate OTP when entering upgrade step
+  useEffect(() => {
+    if (step === 'upgrade' && fid && !upgradeOtp && !upgradeOtpLoading) {
+      setUpgradeOtpLoading(true);
+      fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateOTP', fid }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.otp) setUpgradeOtp(data.otp);
+        })
+        .finally(() => setUpgradeOtpLoading(false));
+    }
+  }, [step, fid, upgradeOtp, upgradeOtpLoading]);
 
   useEffect(() => {
     const init = async () => {
@@ -789,6 +808,49 @@ export default function MiniApp() {
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  {/* Upgrade: Show OTP for website migration */}
+  if (step === 'upgrade') {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="text-center">
+          <h2 className="text-white font-bold text-xl mb-2">Go Permanent</h2>
+          <p className="text-gray-400 text-sm">Generate a code to upgrade on desktop</p>
+        </div>
+        
+        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+          <p className="text-gray-400 text-xs mb-3">Your upgrade code:</p>
+          {upgradeOtpLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#43a574] border-t-transparent" />
+            </div>
+          ) : upgradeOtp ? (
+            <div className="text-center">
+              <div className="text-3xl font-mono font-bold text-[#43a574] tracking-widest">
+                {upgradeOtp}
+              </div>
+              <p className="text-gray-500 text-xs mt-2">Valid for 10 minutes</p>
+            </div>
+          ) : (
+            <p className="text-amber-400 text-xs">Failed to generate code</p>
+          )}
+        </div>
+        
+        <div className="text-center space-y-2">
+          <p className="text-gray-400 text-xs">1. Open <span className="text-[#43a574]">nftmail.box/upgrade</span> on desktop</p>
+          <p className="text-gray-400 text-xs">2. Enter this code + connect wallet</p>
+          <p className="text-gray-400 text-xs">3. Pay $14 to mint your NFT</p>
+        </div>
+        
+        <button
+          onClick={() => setStep('inbox')}
+          className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
+        >
+          ← Back to Inbox
+        </button>
       </div>
     );
   }
