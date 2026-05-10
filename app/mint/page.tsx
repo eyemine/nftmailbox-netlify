@@ -122,7 +122,7 @@ function MintPageContent() {
 
       // Switch to Gnosis and get provider
       const wallet = injectedWallet || anyWallet;
-      if (!wallet) throw new Error('No wallet connected');
+      if (!wallet) throw new Error('No wallet connected. Use MetaMask or Rabby.');
       
       await wallet.switchChain(gnosis.id);
       const provider = await wallet.getEthereumProvider();
@@ -132,19 +132,22 @@ function MintPageContent() {
         account: wallet.address as `0x${string}` 
       });
 
-      // Check balance
+      // Check balance (need 10 or 100 xDAI + gas)
+      const mintPrice = selectedTier === 'IMAGO' ? BigInt(100 * 10**18) : BigInt(10 * 10**18);
       const balanceWei = await publicClient.getBalance({ address: wallet.address as `0x${string}` });
-      if (balanceWei === BigInt(0)) {
-        throw new Error(`Wallet ${wallet.address} has 0 xDAI for gas.`);
+      if (balanceWei < mintPrice) {
+        const needed = selectedTier === 'IMAGO' ? '100' : '10';
+        throw new Error(`Need ${needed} xDAI + gas. Balance: ${Number(balanceWei) / 10**18} xDAI`);
       }
 
-      // Mint NFT
+      // Mint NFT with payment
       const registrar = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as `0x${string}`;
       const hash = await walletClient.writeContract({
         address: registrar, 
         abi: NamespaceRegistrarABI, 
         functionName: 'mintSubname',
         args: [sldLabel, wallet.address as `0x${string}`, '0x', '0x0000000000000000000000000000000000000000000000000000000000000000'],
+        value: mintPrice,
       });
 
       // Wait for receipt
@@ -177,7 +180,7 @@ function MintPageContent() {
       setError(err?.shortMessage || err?.message || 'Minting failed');
       setStep('error');
     }
-  }, [authenticated, walletAddress, sldLabel, injectedWallet, anyWallet, otpCode, fromParam, router]);
+  }, [authenticated, walletAddress, sldLabel, injectedWallet, anyWallet, otpCode, fromParam, router, selectedTier]);
 
   const gradientBg = {
     background: 'radial-gradient(1200px circle at 20% -10%, rgba(0,163,255,0.16), transparent 45%), radial-gradient(900px circle at 90% 10%, rgba(124,77,255,0.14), transparent 40%), linear-gradient(180deg, #0a0a0a, #03040a)',
@@ -201,14 +204,19 @@ function MintPageContent() {
       <div className="min-h-screen flex flex-col items-center justify-center px-6 py-8" style={gradientBg}>
         <div className="w-full max-w-sm text-center">
           <Image src={LOGO_URL} alt="nftmail.box" width={80} height={80} className="mx-auto mb-6 opacity-95" />
-          <h2 className="text-white font-bold text-2xl mb-2">Opening Mint...</h2>
+          <h2 className="text-white font-bold text-2xl mb-2">Minted!</h2>
           <p className="text-green-400 font-mono text-sm mb-4">{sldLabel}.nftmail.gno ({selectedTier})</p>
-          <p className="text-gray-400 text-xs mb-6">Complete the mint in the opened window. Return here when done.</p>
-          <div className="space-y-3">
-            <button onClick={() => setStep('select')} className="w-full bg-gray-900 border border-gray-700 text-gray-300 py-3 rounded-xl text-sm">
-              Back to Tiers
-            </button>
-          </div>
+          <p className="text-gray-400 text-xs mb-6">Redirecting to dashboard...</p>
+          {txHash && (
+            <a 
+              href={`https://gnosisscan.io/tx/${txHash}`} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[#855DCD] text-xs hover:underline block mb-4"
+            >
+              View Transaction →
+            </a>
+          )}
         </div>
       </div>
     );
