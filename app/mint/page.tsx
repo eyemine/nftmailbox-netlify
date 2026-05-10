@@ -39,16 +39,19 @@ function MintPageContent() {
   const searchParams = useSearchParams();
   const agentParam = searchParams.get('agent') || '';
   const fromParam = searchParams.get('from') || '';
+  const codeParam = searchParams.get('code') || '';
 
   // Convert agent name: strip .cast suffix, replace dots with hyphens for display as SLD label
   const rawName = agentParam.replace(/\.cast$/i, '');
   const sldLabel = rawName.replace(/\./g, '-');
+  const displayName = sldLabel || 'your-farcaster-name';
 
   const [isMobile, setIsMobile] = useState(true);
   const [isInWarpcast, setIsInWarpcast] = useState(false);
   const [selectedTier, setSelectedTier] = useState<'PUPA' | 'IMAGO'>('PUPA');
   const [step, setStep] = useState<'select' | 'mobile-check' | 'minting' | 'success' | 'error'>('select');
   const [error, setError] = useState('');
+  const [otpCode, setOtpCode] = useState(codeParam);
 
   useEffect(() => {
     setIsMobile(isMobileUserAgent());

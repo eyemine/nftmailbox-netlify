@@ -940,11 +940,11 @@ export default function MiniApp() {
         <p className="text-red-400 font-mono text-xs mb-6 break-words">{error}</p>
         {isSendLimitError ? (
           <div className="space-y-3">
-            <button onClick={openUpgrade} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
-              Upgrade to PUPA →
+            <button onClick={() => setStep('upgrade')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
+              Mint Sovereign Identity
             </button>
-            <button onClick={() => { setStep('entry'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg">
-              Try Again
+            <button onClick={() => { setStep('inbox'); setError(''); }} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg">
+              Return to Inbox
             </button>
           </div>
         ) : (
