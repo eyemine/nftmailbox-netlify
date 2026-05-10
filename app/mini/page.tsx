@@ -182,11 +182,20 @@ export default function MiniApp() {
       })
         .then(r => r.json())
         .then(data => {
-          if (data.otp) setUpgradeOtp(data.otp);
+          if (data.otp) {
+            setUpgradeOtp(data.otp);
+          } else if (data.error) {
+            console.error('OTP generation failed:', data.error);
+            otpRequestedRef.current = false;
+          }
+        })
+        .catch(err => {
+          console.error('OTP fetch error:', err);
+          otpRequestedRef.current = false;
         })
         .finally(() => setUpgradeOtpLoading(false));
     }
-  }, [step, fid]);
+  }, [step, fid, upgradeOtp, upgradeOtpLoading]);
 
   useEffect(() => {
     const init = async () => {
