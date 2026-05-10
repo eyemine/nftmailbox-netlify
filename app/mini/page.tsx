@@ -464,7 +464,7 @@ export default function MiniApp() {
               disabled={!fid}
               className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
-              {fid ? 'Claim Account (LARVA) →' : 'Open in Warpcast to Claim'}
+              {fid ? 'Claim Inbox (LARVA) →' : 'Open in Warpcast to Claim'}
             </button>
             <p className="text-gray-500 text-xs text-center">8-day free inbox · 10 free sends · Upgrade to permanent anytime</p>
           </div>
