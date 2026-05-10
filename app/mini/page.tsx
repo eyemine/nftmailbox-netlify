@@ -551,6 +551,7 @@ export default function MiniApp() {
               className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
             >
               Return to Inbox
+            </button>
             <button onClick={openByoMolt} className="w-full text-gray-500 text-xs py-1">
               Already have an NFT? Use BYO Molt
             </button>
