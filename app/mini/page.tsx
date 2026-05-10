@@ -466,7 +466,7 @@ export default function MiniApp() {
             >
               {fid ? 'Claim Account (LARVA) →' : 'Open in Warpcast to Claim'}
             </button>
-            <p className="text-gray-500 text-xs text-center">8-day free inbox · Upgrade to permanent anytime</p>
+            <p className="text-gray-500 text-xs text-center">8-day free inbox · 10 free sends · Upgrade to permanent anytime</p>
           </div>
         </div>
       </div>
@@ -541,19 +541,16 @@ export default function MiniApp() {
           </p>
           <div className="space-y-3">
             <button
-              onClick={() => loadInbox(agentName)}
-              className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
-              Read Inbox →
+              onClick={() => setStep('upgrade')}
+              className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors"
+            >
+              Mint Sovereign Identity
             </button>
-            <button onClick={() => setStep('compose')} className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors">
-              Compose
-            </button>
-            <button onClick={sendTest} className="w-full text-gray-400 text-sm py-2">
-              Send Test to Self
-            </button>
-            <button onClick={openUpgrade} className="w-full text-gray-400 text-sm py-2">
-              Upgrade to Permanent →
-            </button>
+            <button
+              onClick={() => setStep('inbox')}
+              className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
+            >
+              Return to Inbox
             <button onClick={openByoMolt} className="w-full text-gray-500 text-xs py-1">
               Already have an NFT? Use BYO Molt
             </button>
