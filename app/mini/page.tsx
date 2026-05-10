@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES } from './images';
@@ -132,6 +132,7 @@ export default function MiniApp() {
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
   const [upgradeOtp, setUpgradeOtp] = useState<string | null>(null);
   const [upgradeOtpLoading, setUpgradeOtpLoading] = useState(false);
+  const otpRequestedRef = useRef(false);
 
   const openDashboard = useCallback(() => {
     sdk.actions.openUrl(`${APP_URL}`);
@@ -152,7 +153,8 @@ export default function MiniApp() {
 
   // Generate OTP when entering upgrade step
   useEffect(() => {
-    if (step === 'upgrade' && fid && !upgradeOtp && !upgradeOtpLoading) {
+    if (step === 'upgrade' && fid && !upgradeOtp && !upgradeOtpLoading && !otpRequestedRef.current) {
+      otpRequestedRef.current = true;
       setUpgradeOtpLoading(true);
       fetch(WORKER_URL, {
         method: 'POST',
@@ -165,7 +167,7 @@ export default function MiniApp() {
         })
         .finally(() => setUpgradeOtpLoading(false));
     }
-  }, [step, fid, upgradeOtp, upgradeOtpLoading]);
+  }, [step, fid]);
 
   useEffect(() => {
     const init = async () => {
@@ -540,20 +542,12 @@ export default function MiniApp() {
         <div className="w-full max-w-sm mx-auto">
           {/* Header with Logo, Tier Indicator, and Account Dropdown */}
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-            <div className="flex items-center gap-3">
-              <Image src={LOGO_URL} alt="" width={32} height={32} className="rounded shrink-0" />
+            <div className="flex items-center">
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
               {/* Tier indicator */}
-              <div className="flex items-center gap-1.5 bg-gray-900 rounded-full px-2.5 py-1">
-                <Image 
-                  src={inboxTier === 'imago' ? TIER_IMAGES.imago : inboxTier === 'pupa' ? TIER_IMAGES.pupa : TIER_IMAGES.larva} 
-                  alt={inboxTier || 'larva'} 
-                  width={16} 
-                  height={16} 
-                  className="shrink-0"
-                />
+              <div className="flex items-center bg-gray-900 rounded-full px-2.5 py-1">
                 <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
                   {inboxTier === 'imago' ? 'IMAGO' : inboxTier === 'pupa' ? 'PUPA' : 'LARVA'}
                 </span>
@@ -567,30 +561,7 @@ export default function MiniApp() {
           </div>
           <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
           
-          {/* LARVA Progress Bar + Upgrade CTA */}
-          {inboxTier === 'larva' && (
-            <div className="mb-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-400">LARVA Status</span>
-                <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
-              </div>
-              <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
-                <div 
-                  className="h-full bg-[#43a574] transition-all"
-                  style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
-                />
-              </div>
-              <button
-                onClick={() => setStep('upgrade')}
-                className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-              >
-                Go Permanent →
-              </button>
-              <p className="text-center text-[10px] text-gray-500 mt-2">
-                $14 one-time + $24/yr sovereign storage
-              </p>
-            </div>
-          )}
+          {/* LARVA Progress Bar + Upgrade CTA - MOVED BELOW COMPOSE */}
           
           {messages.length === 0 ? (
             <div className="text-center py-12">
@@ -771,6 +742,31 @@ export default function MiniApp() {
               Send →
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
+            
+            {/* LARVA Progress Bar + Upgrade CTA */}
+            {inboxTier === 'larva' && (
+              <div className="mt-4 p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400">LARVA Status</span>
+                  <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
+                </div>
+                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+                  <div 
+                    className="h-full bg-[#43a574] transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
+                  />
+                </div>
+                <button
+                  onClick={() => setStep('upgrade')}
+                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+                >
+                  mint sovereign ID →
+                </button>
+                <p className="text-center text-[10px] text-gray-500 mt-2">
+                  $10 for Pupa or $24 for Imago tier
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -840,9 +836,9 @@ export default function MiniApp() {
         </div>
         
         <div className="text-center space-y-2">
-          <p className="text-gray-400 text-xs">1. Open <span className="text-[#43a574]">nftmail.box/upgrade</span> on desktop</p>
-          <p className="text-gray-400 text-xs">2. Enter this code + connect wallet</p>
-          <p className="text-gray-400 text-xs">3. Pay $14 to mint your NFT</p>
+          <p className="text-gray-400 text-xs">1. Open <span className="text-[#43a574]">nftmail.box/mint</span> on desktop</p>
+          <p className="text-gray-400 text-xs">2. Enter the OTP code we sent to your inbox</p>
+          <p className="text-gray-400 text-xs">3. Pay $10 for Pupa or $24 for Imago tier</p>
         </div>
         
         <button
