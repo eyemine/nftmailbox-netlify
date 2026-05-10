@@ -5,6 +5,9 @@ export const LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/ba
 export const LOADING_LOGO_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreibjca4jhti5cijjn2rc3hgrbb2u75ceimjg4ydzxuijdoyolhalia';
 export const MAILBOX_ICON_URL = LOGO_URL;
 
+// Empty inbox mailbox image
+export const EMPTY_INBOX_URL = 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreigsbizftt4tysymzdxea62juyhjcoy7xwiqjvalaxnrlkoddy2iae';
+
 // Tier indicator images (top right)
 export const TIER_IMAGES = {
   larva: 'https://moccasin-useful-vole-840.mypinata.cloud/ipfs/bafkreicekhu7rr7noqtv2t4sivy5mqncqgbqnf6cq63dfqyvi5klgk7bv4',

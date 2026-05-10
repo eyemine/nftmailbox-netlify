@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
-import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES } from './images';
+import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
@@ -398,7 +398,7 @@ export default function MiniApp() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
-          <Image src={LOGO_URL} alt="" width={120} height={120} className="mx-auto mb-4" />
+          <Image src={LOADING_LOGO_URL} alt="" width={80} height={80} className="mx-auto mb-4 opacity-80" />
           <p className="text-[#43a574] font-mono text-sm">Initialising...</p>
         </div>
       </div>
@@ -542,7 +542,8 @@ export default function MiniApp() {
         <div className="w-full max-w-sm mx-auto">
           {/* Header with Logo, Tier Indicator, and Account Dropdown */}
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
+              <Image src={LOGO_URL} alt="" width={28} height={28} className="shrink-0" />
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
@@ -565,7 +566,7 @@ export default function MiniApp() {
           
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <Image src={MAILBOX_ICON_URL} alt="" width={64} height={64} className="mx-auto mb-3 opacity-70" />
+              <Image src={EMPTY_INBOX_URL} alt="" width={80} height={80} className="mx-auto mb-3 opacity-70" />
               <p className="text-gray-500 text-sm">No messages yet</p>
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
@@ -705,13 +706,51 @@ export default function MiniApp() {
                   />
                 </div>
                 <button
-                  onClick={openUpgrade}
+                  onClick={() => setStep('upgrade')}
                   className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
                 >
                   Mint Sovereign Identity →
                 </button>
                 <p className="text-center text-[10px] text-gray-500 mt-2">
                   $10 for Pupa or $24 for Imago tier
+                </p>
+              </div>
+            )}
+            
+            {/* PUPA Upgrade to IMAGO */}
+            {inboxTier === 'pupa' && (
+              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400">PUPA Status</span>
+                  <span className="text-xs font-mono text-[#43a574]">Limited</span>
+                </div>
+                <button
+                  onClick={() => setStep('upgrade')}
+                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+                >
+                  Upgrade to IMAGO →
+                </button>
+                <p className="text-center text-[10px] text-gray-500 mt-2">
+                  $14 more for full IMAGO tier
+                </p>
+              </div>
+            )}
+            
+            {/* IMAGO Annual Renew */}
+            {inboxTier === 'imago' && (
+              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-400">IMAGO Status</span>
+                  <span className="text-xs font-mono text-[#43a574]">Sovereign</span>
+                </div>
+                <button
+                  onClick={() => setStep('upgrade')}
+                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+                >
+                  Annual Renew →
+                </button>
+                <p className="text-center text-[10px] text-gray-500 mt-2">
+                  $24/yr to maintain IMAGO status
                 </p>
               </div>
             )}
