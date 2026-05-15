@@ -7,6 +7,71 @@ import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
+const TREASURY = '0xeD0B0694953158dd54D0c36D320b391f44cd67f3';
+const BASE_USDC_CAIP19 = 'eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
+type NftmailTier = 'free' | 'pro' | 'premium';
+const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: string; border: string; description: string; features: Array<[string,string]>; upgradeCta: string | null; upgradeFee: number }> = {
+  free: {
+    label: 'FREE', emoji: '👻', color: 'text-green-400', border: 'border-green-800',
+    description: 'Free inbox secured by your Farcaster identity. 8-day history, 10 sends.',
+    features: [['Inbox history','8 days'],['Outbound sends','10'],['Account expiry','Never'],['Identity','Farcaster FID']],
+    upgradeCta: 'Upgrade to Pro — 10 USDC', upgradeFee: 10,
+  },
+  pro: {
+    label: 'PRO', emoji: '⚡', color: 'text-yellow-400', border: 'border-yellow-800',
+    description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 50 sends.',
+    features: [['Inbox history','30 days'],['Outbound sends','50'],['Account expiry','Never'],['Beacon NFT','Base chain']],
+    upgradeCta: 'Upgrade to Premium — 14 USDC', upgradeFee: 14,
+  },
+  premium: {
+    label: 'PREMIUM', emoji: '👑', color: 'text-purple-400', border: 'border-purple-800',
+    description: 'Sovereign agent inbox. Unlimited retention, 200 sends, full agent stack.',
+    features: [['Inbox history','Unlimited'],['Outbound sends','200'],['Account expiry','Never'],['Agent stack','ghostagent.ninja']],
+    upgradeCta: null, upgradeFee: 0,
+  },
+};
+function normaliseTier(raw: string | undefined): NftmailTier {
+  const t = (raw ?? '').toLowerCase();
+  if (t === 'premium' || t === 'imago') return 'premium';
+  if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
+  return 'free';
+}
+function TierBadge({ tier, onClick }: { tier: NftmailTier; onClick: () => void }) {
+  const m = TIER_META[tier];
+  return (
+    <button onClick={onClick} className={`bg-gray-900 border ${m.border} ${m.color} font-mono text-xs px-2.5 py-1 rounded-full transition-colors`}>
+      {m.emoji} {m.label}
+    </button>
+  );
+}
+function TierAboutPanel({ tier, onClose, onUpgrade }: { tier: NftmailTier; onClose: () => void; onUpgrade: () => void }) {
+  const m = TIER_META[tier];
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={onClose}>
+      <div className="w-full max-w-sm bg-gray-950 border border-gray-800 rounded-t-2xl p-6 pb-8" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <span className={`${m.color} font-mono text-xs font-bold tracking-widest uppercase`}>{m.emoji} {m.label}</span>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <p className="text-gray-300 text-sm mb-4">{m.description}</p>
+        <div className="space-y-2 mb-5 text-xs text-gray-400">
+          {m.features.map(([k,v]) => (
+            <div key={k} className="flex justify-between"><span>{k}</span><span className="text-white">{v}</span></div>
+          ))}
+        </div>
+        {m.upgradeCta && (
+          <button onClick={() => { onClose(); onUpgrade(); }} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg text-sm transition-colors">
+            {m.upgradeCta} →
+          </button>
+        )}
+        {!m.upgradeCta && (
+          <div className="text-xs text-gray-500 text-center">Manage your agent at <span className="text-white">ghostagent.ninja</span></div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Client-side ECIES decrypt (P-256 / AES-256-GCM — mirrors worker ecies.ts) ──
 function hexToBytes(hex: string): Uint8Array {
@@ -120,7 +185,9 @@ export default function MiniApp() {
   const [agentName, setAgentName] = useState('');
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [inboxTier, setInboxTier] = useState<string>('larva');
+  const [inboxTier, setInboxTier] = useState<NftmailTier>('free');
+  const [showTierAbout, setShowTierAbout] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
@@ -130,8 +197,6 @@ export default function MiniApp() {
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
-  const [upgradeOtp, setUpgradeOtp] = useState<string | null>(null);
-  const [upgradeOtpLoading, setUpgradeOtpLoading] = useState(false);
   const otpRequestedRef = useRef(false);
 
   const openDashboard = useCallback(() => {
@@ -146,56 +211,42 @@ export default function MiniApp() {
     sdk.actions.openUrl(`${APP_URL}/mini`);
   }, []);
 
-  const openUpgrade = useCallback(() => {
-    const encodedAgent = encodeURIComponent(`${agentName}.cast`);
-    const otpParam = upgradeOtp ? `&code=${upgradeOtp}` : '';
-    sdk.actions.openUrl(`${APP_URL}/mint?agent=${encodedAgent}&from=mini${otpParam}`);
-  }, [agentName, sdk, upgradeOtp]);
+  const openUpgrade = useCallback(() => setStep('upgrade'), []);
 
-  // Manual OTP generation function
-  const generateOtp = useCallback(() => {
-    if (!fid || upgradeOtpLoading) return;
-    otpRequestedRef.current = true;
-    setUpgradeOtpLoading(true);
-    setUpgradeOtp(null);
-    fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'generateOTP', fid }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (data.otp) setUpgradeOtp(data.otp);
-      })
-      .finally(() => setUpgradeOtpLoading(false));
-  }, [fid, upgradeOtpLoading]);
-
-  // Generate OTP when entering upgrade step
-  useEffect(() => {
-    if (step === 'upgrade' && fid && !upgradeOtp && !upgradeOtpLoading && !otpRequestedRef.current) {
-      otpRequestedRef.current = true;
-      setUpgradeOtpLoading(true);
-      fetch(WORKER_URL, {
+  async function handlePayAndUpgrade() {
+    if (!agentName || upgrading) return;
+    const tierMeta = TIER_META[inboxTier];
+    if (!tierMeta.upgradeFee) return;
+    setUpgrading(true);
+    try {
+      const amountMicro = String(tierMeta.upgradeFee * 1_000_000);
+      const result = await (sdk.actions as any).sendToken({
+        token: BASE_USDC_CAIP19,
+        amount: amountMicro,
+        recipientAddress: TREASURY,
+      });
+      if (!result.success) {
+        setUpgrading(false);
+        return;
+      }
+      const res = await fetch('/api/mini-upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'generateOTP', fid }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.otp) {
-            setUpgradeOtp(data.otp);
-          } else if (data.error) {
-            console.error('OTP generation failed:', data.error);
-            otpRequestedRef.current = false;
-          }
-        })
-        .catch(err => {
-          console.error('OTP fetch error:', err);
-          otpRequestedRef.current = false;
-        })
-        .finally(() => setUpgradeOtpLoading(false));
+        body: JSON.stringify({ fid, agentName, txHash: result.send.transaction, currentTier: inboxTier }),
+      });
+      const data = await res.json() as { status?: string; newTier?: string; error?: string };
+      if (data.status === 'upgraded' && data.newTier) {
+        setInboxTier(normaliseTier(data.newTier));
+      }
+      setStep('inbox');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upgrade failed');
+      setStep('error');
+    } finally {
+      setUpgrading(false);
     }
-  }, [step, fid, upgradeOtp, upgradeOtpLoading]);
+  }
+
 
   useEffect(() => {
     const init = async () => {
@@ -322,7 +373,7 @@ export default function MiniApp() {
       setMessages(decrypted);
       // Set tier from response or default to larva
       if (data.tier) {
-        setInboxTier(data.tier.toLowerCase());
+        setInboxTier(normaliseTier(data.tier));
       }
       // Load sentbox from worker if available
       if (sentboxRes) {
@@ -464,7 +515,7 @@ export default function MiniApp() {
               disabled={!fid}
               className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
             >
-              {fid ? 'Claim Inbox (LARVA) →' : 'Open in Warpcast to Claim'}
+              {fid ? 'Claim Free Inbox →' : 'Open in Warpcast to Claim'}
             </button>
             <p className="text-gray-500 text-xs text-center">8-day free inbox · 10 free sends · Upgrade to permanent anytime</p>
           </div>
@@ -534,7 +585,7 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-2xl mb-2">Account Created!</h2>
           <div className="bg-gray-900 border border-[#43a574] rounded-lg p-4 my-6">
             <p className="text-[#43a574] font-mono text-sm font-bold">{humanEmail}</p>
-            <p className="text-gray-500 text-xs mt-1">LARVA · Active until {expiresStr} · 8-day inbox history</p>
+            <p className="text-gray-500 text-xs mt-1">FREE · Active until {expiresStr} · 8-day inbox history</p>
           </div>
           <p className="text-gray-400 text-xs mb-6">
             Secured by your Farcaster wallet. Upgrade to permanent by minting an NFT.
@@ -573,12 +624,8 @@ export default function MiniApp() {
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
-              {/* Tier indicator */}
-              <div className="flex items-center bg-gray-900 rounded-full px-2.5 py-1">
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
-                  {inboxTier === 'imago' ? 'IMAGO' : inboxTier === 'pupa' ? 'PUPA' : 'LARVA'}
-                </span>
-              </div>
+              {/* Tier badge — tap for about panel */}
+              <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />
             </div>
           </div>
           
@@ -588,7 +635,7 @@ export default function MiniApp() {
           </div>
           <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
           
-          {/* LARVA Progress Bar + Upgrade CTA - MOVED BELOW COMPOSE */}
+          {showTierAbout && <TierAboutPanel tier={inboxTier} onClose={() => setShowTierAbout(false)} onUpgrade={() => { setShowTierAbout(false); setStep('upgrade'); }} />}
           
           {messages.length === 0 ? (
             <div className="text-center py-12">
@@ -718,66 +765,24 @@ export default function MiniApp() {
             </button>
             <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
             
-            {/* LARVA Progress Bar + Upgrade CTA */}
-            {inboxTier === 'larva' && (
+            {/* Tier upgrade CTA */}
+            {TIER_META[inboxTier].upgradeCta && (
               <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">LARVA Status</span>
-                  <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 free</span>
+                  <span className="text-xs text-gray-400">{TIER_META[inboxTier].label} Status</span>
+                  {inboxTier === 'free' && <span className="text-xs font-mono text-[#43a574]">{sendsRemaining}/10 sends</span>}
                 </div>
-                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
-                  <div 
-                    className="h-full bg-[#43a574] transition-all"
-                    style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }}
-                  />
-                </div>
+                {inboxTier === 'free' && (
+                  <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+                    <div className="h-full bg-[#43a574] transition-all" style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }} />
+                  </div>
+                )}
                 <button
                   onClick={() => setStep('upgrade')}
                   className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
                 >
-                  Mint Sovereign Identity →
+                  {TIER_META[inboxTier].upgradeCta} →
                 </button>
-                <p className="text-center text-[10px] text-gray-500 mt-2">
-                  $10 for Pupa or $24 for Imago tier
-                </p>
-              </div>
-            )}
-            
-            {/* PUPA Upgrade to IMAGO */}
-            {inboxTier === 'pupa' && (
-              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">PUPA Status</span>
-                  <span className="text-xs font-mono text-[#43a574]">Limited</span>
-                </div>
-                <button
-                  onClick={() => setStep('upgrade')}
-                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-                >
-                  Upgrade to IMAGO →
-                </button>
-                <p className="text-center text-[10px] text-gray-500 mt-2">
-                  $14 more for full IMAGO tier
-                </p>
-              </div>
-            )}
-            
-            {/* IMAGO Annual Renew */}
-            {inboxTier === 'imago' && (
-              <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-400">IMAGO Status</span>
-                  <span className="text-xs font-mono text-[#43a574]">Sovereign</span>
-                </div>
-                <button
-                  onClick={() => setStep('upgrade')}
-                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-                >
-                  Annual Renew →
-                </button>
-                <p className="text-center text-[10px] text-gray-500 mt-2">
-                  $24/yr to maintain IMAGO status
-                </p>
               </div>
             )}
           </div>
@@ -861,7 +866,7 @@ export default function MiniApp() {
               Back to Inbox →
             </button>
             <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-sm">
-              Upgrade to PUPA →
+              Upgrade to Pro →
             </button>
           </div>
         </div>
@@ -869,64 +874,40 @@ export default function MiniApp() {
     );
   }
 
-  {/* Upgrade: Show OTP for website migration */}
   if (step === 'upgrade') {
+    const tierMeta = TIER_META[inboxTier];
+    const nextTier = inboxTier === 'free' ? TIER_META.pro : TIER_META.premium;
     return (
-      <div className="flex flex-col gap-4">
-        <div className="text-center">
-          <h2 className="text-white font-bold text-xl mb-2">Your NFT, Your Email</h2>
-          <p className="text-gray-400 text-sm">Mint once. Access forever.</p>
-        </div>
-
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <p className="text-gray-400 text-xs mb-3">Your upgrade code:</p>
-          {upgradeOtpLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#43a574] border-t-transparent" />
-            </div>
-          ) : upgradeOtp ? (
-            <div className="text-center">
-              <div className="text-3xl font-mono font-bold text-[#43a574] tracking-widest">
-                {upgradeOtp}
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-sm flex flex-col gap-4">
+          <div className="text-center">
+            <div className="text-4xl mb-3">{nextTier.emoji}</div>
+            <h2 className="text-white font-bold text-xl mb-1">Upgrade to {nextTier.label}</h2>
+            <p className="text-gray-400 text-sm">{nextTier.description}</p>
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-2">
+            {nextTier.features.map(([k, v]) => (
+              <div key={k} className="flex justify-between text-xs">
+                <span className="text-gray-400">{k}</span>
+                <span className="text-white">{v}</span>
               </div>
-              <p className="text-gray-500 text-xs mt-2">Valid for 10 minutes</p>
-            </div>
-          ) : (
-            <button
-              onClick={generateOtp}
-              className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-            >
-              Generate Code
-            </button>
-          )}
-        </div>
-
-        <div className="text-center space-y-2">
-          <p className="text-gray-400 text-xs">1. Open <span className="text-[#43a574]">nftmail.box/mint</span> on desktop</p>
-          <p className="text-gray-400 text-xs">2. Enter the OTP code we sent to your inbox</p>
-          <p className="text-gray-400 text-xs">3. Pay $10 for Pupa or $24 for Imago tier</p>
-          <p className="text-gray-500 text-[10px] italic">(mint to your EOA — an attestation will maintain FID access)</p>
-        </div>
-
-        {upgradeOtp && (
+            ))}
+          </div>
           <button
-            onClick={openUpgrade}
-            className="w-full py-3 px-4 bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold text-sm rounded transition-colors"
+            onClick={handlePayAndUpgrade}
+            disabled={upgrading}
+            className="w-full py-3 px-4 bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold text-sm rounded-lg transition-colors"
           >
-            Go to Mint Page →
+            {upgrading ? 'Processing…' : `${tierMeta.upgradeCta} →`}
           </button>
-        )}
-
-        <button
-          onClick={() => {
-            otpRequestedRef.current = false;
-            setUpgradeOtp(null);
-            setStep('inbox');
-          }}
-          className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
-        >
-          ← Back to Inbox
-        </button>
+          <p className="text-gray-500 text-[10px] text-center">Paid via your Farcaster wallet on Base · NFT beacon minted to your custody address</p>
+          <button
+            onClick={() => setStep('inbox')}
+            className="w-full py-3 px-4 border border-gray-700 text-gray-300 text-sm rounded hover:bg-gray-900 transition-colors"
+          >
+            ← Back to Inbox
+          </button>
+        </div>
       </div>
     );
   }
