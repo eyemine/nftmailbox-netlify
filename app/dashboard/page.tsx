@@ -491,7 +491,7 @@ export default function DashboardPage() {
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
                                     <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                                    {!isImago && (
+                                    {!isPremium && (
                                       <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
                                         <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
                                       </div>
@@ -534,7 +534,7 @@ export default function DashboardPage() {
                             {/* Reply */}
                             <button
                               disabled={!canSend}
-                              title={!canSend ? 'PUPA+ required to reply' : 'Reply'}
+                              title={!canSend ? 'PRO+ required to reply' : 'Reply'}
                               onClick={() => { if (!canSend) return; setComposeTo(selectedMessage.fromAddress || selectedMessage.sender); setComposeSubject(`Re: ${selectedMessage.subject}`); setTab('compose'); }}
                               className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
                             >
@@ -543,7 +543,7 @@ export default function DashboardPage() {
                             {/* Forward */}
                             <button
                               disabled={!canSend}
-                              title={!canSend ? 'PUPA+ required to forward' : 'Forward'}
+                              title={!canSend ? 'PRO+ required to forward' : 'Forward'}
                               onClick={() => { if (!canSend) return; setComposeSubject(`Fwd: ${selectedMessage.subject}`); setComposeBody(`\n\n-------- Forwarded Message --------\nFrom: ${selectedMessage.sender}\nSubject: ${selectedMessage.subject}\n\n${selectedMessage.body || selectedMessage.summary}`); setTab('compose'); }}
                               className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
                             >
@@ -629,8 +629,8 @@ export default function DashboardPage() {
                 {!canSend && (
                   <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">LARVA</span>
-                      <span className="text-sm text-violet-300">Compose &amp; Send requires a PUPA or IMAGO mailbox</span>
+                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">FREE</span>
+                      <span className="text-sm text-violet-300">Compose &amp; Send requires a PRO or PREMIUM mailbox</span>
                     </div>
                     <p className="mt-2 text-xs text-[var(--muted)]">Molt your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
                   </div>
@@ -691,7 +691,7 @@ export default function DashboardPage() {
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
           <span>nftmail.box dashboard — privacy-first email</span>
           <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
-            Molt to Imago →
+            Upgrade to Premium →
           </Link>
         </footer>
       </div>
