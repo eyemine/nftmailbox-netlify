@@ -1333,6 +1333,16 @@ export default function InboxPage() {
                                   className="mx-auto mt-1 flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/20 transition"
                                 >
                                   Load decryption key
+                                  <ComposeEmail
+                                    label={label}
+                                    ownerWallet={ownerWallet}
+                                    tier={normaliseTier(accountTier)}
+                                    onClose={() => setComposeOpen(false)}
+                                    onSent={() => {
+                                      setComposeOpen(false);
+                                      setTimeout(() => window.location.reload(), 800);
+                                    }}
+                                  />
                                 </button>
                               ) : (
                                 <code className="block text-[9px] font-mono text-cyan-300/50 break-all">{msg.contentHash}</code>

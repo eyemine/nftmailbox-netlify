@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+
+type NftmailTier = 'free' | 'pro' | 'premium';
 
 interface ComposeEmailProps {
   label: string;            // sender label e.g. "mac.slave"
   ownerWallet: string;      // authenticated wallet for auth
+  tier?: NftmailTier;       // user tier for feature gating
   onSent?: (messageId: string) => void;
   onClose?: () => void;
   defaultTo?: string;
@@ -24,15 +27,22 @@ const MARKDOWN_TIPS = [
   ['[text](url)', 'Link'],
 ];
 
-export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = '', defaultSubject = '', defaultBody = '' }: ComposeEmailProps) {
+export function ComposeEmail({ label, ownerWallet, tier = 'free', onSent, onClose, defaultTo = '', defaultSubject = '', defaultBody = '' }: ComposeEmailProps) {
   const [to, setTo] = useState(defaultTo);
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
+  const [showCcBcc, setShowCcBcc] = useState(false);
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
   const [sendState, setSendState] = useState<SendState>('idle');
   const [error, setError] = useState('');
   const [sentInfo, setSentInfo] = useState<{ messageId: string; to: string } | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const isPro = tier === 'pro';
+  const isPremium = tier === 'premium';
 
   const fromEmail = `${label}@nftmail.box`;
   const canSend = to.trim() && to.includes('@') && (subject.trim() || body.trim());
@@ -53,26 +63,110 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
     }, 0);
   }, [body]);
 
+  // Draft auto-save to localStorage every 5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (to || subject || body) {
+        const draft = {
+          to,
+          cc,
+          bcc,
+          subject,
+          body,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(`nftmail:draft:${label}`, JSON.stringify(draft));
+        setDraftSavedAt(new Date().toLocaleTimeString());
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [label, to, cc, bcc, subject, body]);
+
+  // Load draft on mount
+  useEffect(() => {
+    if (label) {
+      const saved = localStorage.getItem(`nftmail:draft:${label}`);
+      if (saved) {
+        try {
+          const draft = JSON.parse(saved);
+          setTo(draft.to || defaultTo);
+          setCc(draft.cc || '');
+          setBcc(draft.bcc || '');
+          setSubject(draft.subject || defaultSubject);
+          setBody(draft.body || defaultBody);
+          if (draft.cc || draft.bcc) setShowCcBcc(true);
+        } catch {}
+      }
+    }
+  }, [label, defaultTo, defaultSubject, defaultBody]);
+
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(`nftmail:draft:${label}`);
+    setTo(defaultTo);
+    setCc('');
+    setBcc('');
+    setSubject(defaultSubject);
+    setBody(defaultBody);
+    setDraftSavedAt(null);
+  }, [label, defaultTo, defaultSubject, defaultBody]);
+
   const handleSend = useCallback(async () => {
     if (!canSend || sendState === 'sending') return;
     setSendState('sending');
     setError('');
     try {
-      const res = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, ownerWallet, to: to.trim(), subject: subject.trim(), body }),
-      });
-      const data = await res.json() as any;
-      if (!res.ok) throw new Error(data.error || 'Send failed');
+      // Parse recipients - split by comma for multi-send
+      const allRecipients = to.split(',').map(e => e.trim()).filter(e => e);
+      
+      // Tier-based restrictions
+      // Free: only 1 recipient
+      // Pro: up to 10 recipients + CC/BCC
+      // Premium: unlimited recipients + CC/BCC
+      let recipients = allRecipients;
+      if (!isPro && !isPremium) {
+        recipients = [allRecipients[0]]; // Free tier: first recipient only
+      } else if (isPro && allRecipients.length > 10) {
+        recipients = allRecipients.slice(0, 10); // Pro: max 10
+      }
+      
+      // CC/BCC only for Pro/Premium
+      const ccList = (isPro || isPremium) && cc 
+        ? cc.split(',').map(e => e.trim()).filter(e => e).slice(0, isPro ? 2 : undefined)
+        : [];
+      const bccList = (isPro || isPremium) && bcc
+        ? bcc.split(',').map(e => e.trim()).filter(e => e).slice(0, isPro ? 2 : undefined)
+        : [];
+      
+      // Send to each recipient
+      for (const recipient of recipients) {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            label, 
+            ownerWallet, 
+            to: recipient,
+            cc: ccList,
+            bcc: bccList,
+            subject: subject.trim(), 
+            body 
+          }),
+        });
+        const data = await res.json() as any;
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+      }
+      
+      // Clear draft after successful send
+      clearDraft();
+      
       setSendState('sent');
-      setSentInfo({ messageId: data.messageId, to: data.to });
-      onSent?.(data.messageId);
+      setSentInfo({ messageId: 'sent', to: recipients.join(', ') });
+      onSent?.('sent');
     } catch (err: any) {
       setSendState('error');
       setError(err.message);
     }
-  }, [canSend, sendState, label, ownerWallet, to, subject, body, onSent]);
+  }, [canSend, sendState, label, ownerWallet, to, cc, bcc, subject, body, isPro, isPremium, onSent, clearDraft]);
 
   if (sendState === 'sent' && sentInfo) {
     return (
@@ -119,11 +213,51 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
           type="email"
           value={to}
           onChange={e => setTo(e.target.value)}
-          placeholder="recipient@domain.com"
+          placeholder={isPro || isPremium ? "recipient1@domain.com, recipient2@domain.com (multi-send)" : "recipient@domain.com"}
           className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
           disabled={sendState === 'sending'}
         />
       </div>
+
+      {/* CC/BCC Toggle (Pro/Premium only) */}
+      {(isPro || isPremium) && (
+        <button
+          onClick={() => setShowCcBcc(!showCcBcc)}
+          className="text-[10px] text-[rgb(160,220,255)] hover:text-white text-left transition-colors -mt-1"
+        >
+          {showCcBcc ? 'Hide CC/BCC' : 'Show CC/BCC'}
+        </button>
+      )}
+
+      {/* CC */}
+      {showCcBcc && (isPro || isPremium) && (
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 focus-within:border-[rgba(0,163,255,0.4)]">
+          <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">CC</span>
+          <input
+            type="email"
+            value={cc}
+            onChange={e => setCc(e.target.value)}
+            placeholder={isPro ? "cc@domain.com (max 2)" : "cc@domain.com (unlimited)"}
+            className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
+            disabled={sendState === 'sending'}
+          />
+        </div>
+      )}
+
+      {/* BCC */}
+      {showCcBcc && (isPro || isPremium) && (
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 focus-within:border-[rgba(0,163,255,0.4)]">
+          <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">BCC</span>
+          <input
+            type="email"
+            value={bcc}
+            onChange={e => setBcc(e.target.value)}
+            placeholder={isPro ? "bcc@domain.com (max 2)" : "bcc@domain.com (unlimited)"}
+            className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
+            disabled={sendState === 'sending'}
+          />
+        </div>
+      )}
 
       {/* Subject */}
       <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 focus-within:border-[rgba(0,163,255,0.4)]">
@@ -197,6 +331,14 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
               Discard
             </button>
           )}
+          <button
+            onClick={clearDraft}
+            disabled={sendState === 'sending'}
+            className="rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-xs text-[var(--muted)] hover:text-white transition disabled:opacity-40"
+            title="Clear draft"
+          >
+            Clear
+          </button>
         </div>
         <button
           onClick={handleSend}
@@ -219,6 +361,13 @@ export function ComposeEmail({ label, ownerWallet, onSent, onClose, defaultTo = 
           )}
         </button>
       </div>
+      
+      {/* Draft saved indicator */}
+      {draftSavedAt && (
+        <div className="text-[10px] text-[var(--muted)] text-right">
+          Draft saved {draftSavedAt}
+        </div>
+      )}
     </div>
   );
 }
