@@ -238,6 +238,7 @@ export default function InboxPage() {
 
   // Privacy toggle in-flight
   const [togglingPrivacy, setTogglingPrivacy] = useState(false);
+  const [loadingSent, setLoadingSent] = useState(false);
 
   // Owner check: match authenticated user's linked accounts against onChainOwner.
   // NOTE: useWallets() is intentionally NOT used — browser wallet extensions (ZilPay etc.)
@@ -288,8 +289,9 @@ export default function InboxPage() {
   const [generatedKeyPair, setGeneratedKeyPair] = useState<{ publicKey: string; privateKey: string } | null>(null);
 
   // Folder / compose state
-  type Folder = 'inbox' | 'compose';
+  type Folder = 'inbox' | 'sent' | 'compose';
   const [activeFolder, setActiveFolder] = useState<Folder>('inbox');
+  const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
 
   // Step 1: Resolve the address (+ agent classification if agent route)
   useEffect(() => {
@@ -416,6 +418,46 @@ export default function InboxPage() {
   useEffect(() => {
     if (resolved?.exists && classificationDone) loadInbox();
   }, [resolved, classificationDone, loadInbox]);
+
+  // Load sentbox for agents
+  const loadSentbox = useCallback(async () => {
+    if (!name || !resolved?.exists) return;
+    setLoadingSent(true);
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getSentbox', localPart: name }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { messages?: any[] };
+        const sent = (data.messages || []).map((m: any) => ({
+          id: m.id || `sent-${Math.random().toString(36).slice(2)}`,
+          subject: m.subject || '(no subject)',
+          sender: m.from || 'me',
+          fromAddress: m.from || '',
+          receivedTime: m.receivedAt ? new Date(m.receivedAt).toISOString() : '',
+          summary: m.content || '',
+          body: m.content || '',
+          bodyHtml: m.content?.includes('<') ? m.content : '',
+          encrypted: false,
+          contentHash: m.plaintextHash || '',
+          type: m.channel || 'sent',
+          decayPct: 0,
+          expiresAt: '',
+        }));
+        setSentMessages(sent);
+      }
+    } catch {}
+    setLoadingSent(false);
+  }, [name, resolved]);
+
+  // Load sentbox when viewing sent folder
+  useEffect(() => {
+    if (activeFolder === 'sent' && isAgent && resolved?.exists) {
+      loadSentbox();
+    }
+  }, [activeFolder, isAgent, resolved, loadSentbox]);
 
   // Load blind inbox (ECIES envelopes) when owner views agent inbox
   useEffect(() => {
@@ -1098,7 +1140,7 @@ export default function InboxPage() {
 
         {/* ── Owner action bar: Dashboard + Compose (if canSend) ── */}
         {isOwner && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Link
               href={`/dashboard?email=${encodeURIComponent(name + (isAgent ? '' : '@nftmail.box'))}`}
               className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
@@ -1106,13 +1148,28 @@ export default function InboxPage() {
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
               Dashboard
             </Link>
+            {/* Folder tabs */}
+            <div className="flex items-center rounded-lg border border-[var(--border)] bg-black/20 p-0.5">
+              <button
+                onClick={() => setActiveFolder('inbox')}
+                className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${activeFolder === 'inbox' ? 'bg-[rgba(0,163,255,0.2)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white'}`}
+              >
+                Inbox {messages.length > 0 && `(${messages.length})`}
+              </button>
+              <button
+                onClick={() => setActiveFolder('sent')}
+                className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${activeFolder === 'sent' ? 'bg-[rgba(0,163,255,0.2)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white'}`}
+              >
+                Sent {sentMessages.length > 0 && `(${sentMessages.length})`}
+              </button>
+            </div>
             {canSend && (
               <button
                 onClick={() => setActiveFolder(activeFolder === 'compose' ? 'inbox' : 'compose')}
                 className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
               >
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-                {activeFolder === 'compose' ? 'Back to Inbox' : 'Compose'}
+                {activeFolder === 'compose' ? 'Back' : 'Compose'}
               </button>
             )}
           </div>
@@ -1163,7 +1220,7 @@ export default function InboxPage() {
         )}
 
         {/* ── Loading inbox ── */}
-        {loading && (
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && loading && (
           <div className="flex items-center justify-center py-12">
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
           </div>
@@ -1196,7 +1253,7 @@ export default function InboxPage() {
         )}
 
         {/* ── Empty state: account exists, not blurred, but no emails ── */}
-        {!loading && !error && !isBlurred && messages.length === 0 && (
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && !error && !isBlurred && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <svg className="h-14 w-14 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
             <p className="text-sm text-[var(--muted)]">Inbox empty</p>
@@ -1207,7 +1264,7 @@ export default function InboxPage() {
         )}
 
         {/* ── Message count ── */}
-        {!loading && messages.length > 0 && (
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && messages.length > 0 && (
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
@@ -1220,8 +1277,8 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Message list ── */}
-        {!loading && messages.length > 0 && (
+        {/* ── Message list (inbox) ── */}
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && messages.length > 0 && (
           <div className="space-y-2">
             {messages.map((msg) => {
               const isExpanded = expandedId === msg.id;
@@ -1398,6 +1455,54 @@ export default function InboxPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Sentbox section ── */}
+        {activeFolder === 'sent' && (
+          <div className="space-y-3">
+            {loadingSent && (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
+              </div>
+            )}
+            {!loadingSent && sentMessages.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <svg className="h-12 w-12 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
+                <p className="text-sm text-[var(--muted)]">Sent box empty</p>
+                <p className="text-[11px] text-[var(--muted)]">Sent messages will appear here</p>
+              </div>
+            )}
+            {!loadingSent && sentMessages.length > 0 && (
+              <>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
+                    SENT ({sentMessages.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {sentMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-white">{msg.subject}</span>
+                          <p className="mt-0.5 text-xs text-[var(--muted)]">To: {msg.sender}</p>
+                        </div>
+                        <span className="text-[10px] text-[var(--muted)]">{msg.receivedTime ? formatTimeAgo(msg.receivedTime) : ''}</span>
+                      </div>
+                      {msg.summary && (
+                        <div className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2">
+                          <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-line">{stripHtml(msg.summary).slice(0, 200)}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
