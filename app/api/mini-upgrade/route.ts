@@ -28,12 +28,12 @@ function normaliseTier(raw: string): 'free' | 'pro' | 'premium' {
   return 'free';
 }
 
-async function verifyUsdcPayment(
+async function verifyPayment(
   txHash: string,
   expectedUsdc: number,
-): Promise<{ ok: boolean; fromWallet?: string; error?: string }> {
+): Promise<{ ok: boolean; fromWallet?: string; error?: string; ethValue?: string }> {
   try {
-    const [txRes, rcptRes] = await Promise.all([
+    const [txRes, rcptRes, ethPriceRes] = await Promise.all([
       fetch(BASE_RPC, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -44,6 +44,10 @@ async function verifyUsdcPayment(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'eth_getTransactionReceipt', params: [txHash] }),
       }),
+      // Get ETH price for USD valuation fallback
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', {
+        cache: 'no-store',
+      }).catch(() => null), // Non-fatal: fallback to $3000/ETH
     ]);
     const txData  = await txRes.json()   as { result?: any };
     const rcptData = await rcptRes.json() as { result?: any };
@@ -54,10 +58,12 @@ async function verifyUsdcPayment(
     if (receipt.status !== '0x1') return { ok: false, error: 'Transaction reverted' };
 
     const fromWallet: string = (tx.from as string)?.toLowerCase() ?? '';
+    
+    // 1. First check: USDC transfer (preferred)
     const expectedWei = BigInt(Math.floor(expectedUsdc * 1e6));
     const logs: any[] = receipt.logs ?? [];
 
-    const match = logs.find((log: any) => {
+    const usdcMatch = logs.find((log: any) => {
       if ((log.address as string)?.toLowerCase() !== BASE_USDC) return false;
       if (log.topics?.[0] !== TRANSFER_TOPIC) return false;
       const from = ('0x' + (log.topics[1] ?? '').slice(26)).toLowerCase();
@@ -67,8 +73,40 @@ async function verifyUsdcPayment(
       return BigInt(log.data || '0x0') >= expectedWei;
     });
 
-    if (!match) return { ok: false, error: `No USDC transfer of ≥${expectedUsdc} USDC to treasury in tx` };
-    return { ok: true, fromWallet };
+    if (usdcMatch) return { ok: true, fromWallet };
+
+    // 2. Fallback: Native ETH transfer to treasury
+    const txValue = BigInt(tx.value || '0x0');
+    const txTo = (tx.to || '').toLowerCase();
+    
+    if (txTo === TREASURY && txValue > 0n) {
+      // Get ETH price for USD valuation (fallback $3000 if API fails)
+      let ethUsdPrice = 3000;
+      if (ethPriceRes) {
+        try {
+          const priceData = await ethPriceRes.json() as { ethereum?: { usd?: number } };
+          if (priceData?.ethereum?.usd) {
+            ethUsdPrice = priceData.ethereum.usd;
+          }
+        } catch {}
+      }
+      
+      // Calculate USD value: value (wei) / 1e18 * ethUsdPrice
+      const ethValue = Number(txValue) / 1e18;
+      const usdValue = ethValue * ethUsdPrice;
+      
+      // Accept if >= 90% of expected fee (small buffer for price volatility)
+      const minUsdValue = expectedUsdc * 0.9;
+      
+      if (usdValue >= minUsdValue) {
+        console.log(`[mini-upgrade] Accepted ETH payment: ${ethValue} ETH (~$${usdValue.toFixed(2)}) from ${fromWallet}`);
+        return { ok: true, fromWallet, ethValue: ethValue.toFixed(6) };
+      } else {
+        return { ok: false, error: `ETH payment insufficient: ~$${usdValue.toFixed(2)} (need ≥$${expectedUsdc})` };
+      }
+    }
+
+    return { ok: false, error: `No USDC transfer of ≥${expectedUsdc} USDC or equivalent ETH payment to treasury in tx` };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'Payment verification failed' };
   }
@@ -92,7 +130,7 @@ export async function POST(req: NextRequest) {
   if (!newTier) return NextResponse.json({ error: 'Already at max tier' }, { status: 400 });
 
   const expectedFee = TIER_FEES[currentTier.toLowerCase()] ?? 10;
-  const payment = await verifyUsdcPayment(txHash, expectedFee);
+  const payment = await verifyPayment(txHash, expectedFee);
   if (!payment.ok) return NextResponse.json({ error: payment.error }, { status: 402 });
 
   const walletAddress = payment.fromWallet!;
@@ -166,7 +204,12 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { status: 'upgraded', newTier: upgradeData.newTier ?? newTier, beaconTokenId },
+    { 
+      status: 'upgraded', 
+      newTier: upgradeData.newTier ?? newTier, 
+      beaconTokenId,
+      ...(payment.ethValue ? { ethValue: payment.ethValue } : {}),
+    },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }

@@ -192,12 +192,63 @@ export default function MiniApp() {
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
   const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeBcc, setComposeBcc] = useState('');
+  const [showCcBcc, setShowCcBcc] = useState(false);
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
   const otpRequestedRef = useRef(false);
+
+  // Draft auto-save to localStorage every 5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (composeTo || composeSubject || composeBody) {
+        const draft = {
+          to: composeTo,
+          cc: composeCc,
+          bcc: composeBcc,
+          subject: composeSubject,
+          body: composeBody,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(`nftmail:draft:${agentName}`, JSON.stringify(draft));
+        setDraftSavedAt(new Date().toLocaleTimeString());
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [agentName, composeTo, composeCc, composeBcc, composeSubject, composeBody]);
+
+  // Load draft on mount
+  useEffect(() => {
+    if (agentName) {
+      const saved = localStorage.getItem(`nftmail:draft:${agentName}`);
+      if (saved) {
+        try {
+          const draft = JSON.parse(saved);
+          setComposeTo(draft.to || '');
+          setComposeCc(draft.cc || '');
+          setComposeBcc(draft.bcc || '');
+          setComposeSubject(draft.subject || '');
+          setComposeBody(draft.body || '');
+          if (draft.cc || draft.bcc) setShowCcBcc(true);
+        } catch {}
+      }
+    }
+  }, [agentName]);
+
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(`nftmail:draft:${agentName}`);
+    setComposeTo('');
+    setComposeCc('');
+    setComposeBcc('');
+    setComposeSubject('');
+    setComposeBody('');
+    setDraftSavedAt(null);
+  }, [agentName]);
 
   const openDashboard = useCallback(() => {
     sdk.actions.openUrl(`${APP_URL}`);
@@ -431,22 +482,56 @@ export default function MiniApp() {
       setStep('error');
       return;
     }
+    
+    // Parse recipients - split by comma for multi-send
+    const allRecipients = composeTo.split(',').map(e => e.trim()).filter(e => e);
+    
+    // Tier-based restrictions
+    const isPro = inboxTier === 'pro' || inboxTier === 'pupa';
+    const isPremium = inboxTier === 'premium' || inboxTier === 'imago';
+    
+    // Free: only 1 recipient
+    // Pro: up to 10 recipients + CC/BCC
+    // Premium: unlimited recipients + CC/BCC
+    let recipients = allRecipients;
+    if (!isPro && !isPremium) {
+      recipients = [allRecipients[0]]; // Free tier: first recipient only
+    } else if (isPro && allRecipients.length > 10) {
+      recipients = allRecipients.slice(0, 10); // Pro: max 10
+    }
+    
+    // CC/BCC only for Pro/Premium
+    const ccList = (isPro || isPremium) && composeCc 
+      ? composeCc.split(',').map(e => e.trim()).filter(e => e).slice(0, isPro ? 2 : undefined)
+      : [];
+    const bccList = (isPro || isPremium) && composeBcc
+      ? composeBcc.split(',').map(e => e.trim()).filter(e => e).slice(0, isPro ? 2 : undefined)
+      : [];
+    
     setStep('sending');
     try {
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sendOutbound',
-          agentName,
-          to: composeTo.trim(),
-          subject: composeSubject.trim(),
-          body: composeBody.trim(),
-        }),
-      });
-      const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
-      if (data.error) throw new Error(data.error);
-      setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
+      // Send to each recipient
+      for (const recipient of recipients) {
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'sendOutbound',
+            agentName,
+            to: recipient,
+            cc: ccList,
+            bcc: bccList,
+            subject: composeSubject.trim(),
+            body: composeBody.trim(),
+          }),
+        });
+        const data = await res.json() as { status?: string; sendsRemaining?: number; error?: string };
+        if (data.error) throw new Error(data.error);
+        setSendsRemaining(data.sendsRemaining ?? sendsRemaining);
+      }
+      
+      // Clear draft after successful send
+      clearDraft();
       // Add to sentbox locally and save to worker
       const now = Date.now();
       const newSent: InboxMessage = {
@@ -804,13 +889,45 @@ export default function MiniApp() {
           <div className="space-y-3">
             <input
               type="email"
-              placeholder="To: recipient@example.com"
+              placeholder={inboxTier === 'free' ? "To: recipient@example.com" : "To: recipient1@example.com, recipient2@example.com (multi-send)"}
               value={composeTo}
               onChange={e => setComposeTo(e.target.value)}
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
               autoCapitalize="none"
               autoComplete="off"
             />
+            {(inboxTier === 'pro' || inboxTier === 'pupa' || inboxTier === 'premium' || inboxTier === 'imago') && (
+              <>
+                <button
+                  onClick={() => setShowCcBcc(!showCcBcc)}
+                  className="text-xs text-[#43a574] hover:text-white text-left transition-colors"
+                >
+                  {showCcBcc ? 'Hide CC/BCC' : 'Show CC/BCC'}
+                </button>
+                {showCcBcc && (
+                  <>
+                    <input
+                      type="email"
+                      placeholder="CC: cc@example.com (Pro: max 2, Premium: unlimited)"
+                      value={composeCc}
+                      onChange={e => setComposeCc(e.target.value)}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                    />
+                    <input
+                      type="email"
+                      placeholder="BCC: bcc@example.com (Pro: max 2, Premium: unlimited)"
+                      value={composeBcc}
+                      onChange={e => setComposeBcc(e.target.value)}
+                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
+                      autoCapitalize="none"
+                      autoComplete="off"
+                    />
+                  </>
+                )}
+              </>
+            )}
             <input
               type="text"
               placeholder="Subject"
@@ -825,14 +942,28 @@ export default function MiniApp() {
               rows={6}
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574] resize-none"
             />
-            <button
-              onClick={sendCompose}
-              disabled={!composeTo || !composeSubject || !composeBody}
-              className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
-            >
-              Send →
-            </button>
-            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={sendCompose}
+                disabled={!composeTo || !composeSubject || !composeBody}
+                className="flex-1 bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
+              >
+                Send →
+              </button>
+              <button
+                onClick={() => { clearDraft(); setStep('inbox'); }}
+                className="px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors"
+                title="Clear draft"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-600">{sendsRemaining} sends remaining</span>
+              {draftSavedAt && (
+                <span className="text-gray-500">Draft saved {draftSavedAt}</span>
+              )}
+            </div>
           </div>
         </div>
       </div>
