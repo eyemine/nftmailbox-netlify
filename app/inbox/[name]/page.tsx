@@ -1346,7 +1346,7 @@ export default function InboxPage() {
                         <span className="text-[10px] text-[var(--muted)]">{msg.receivedTime ? formatTimeAgo(msg.receivedTime) : ''}</span>
                         {msg.frozen ? (
                           <span className="text-[8px] text-cyan-300/70">❄️ hardened</span>
-                        ) : isImago ? (
+                        ) : isPremium ? (
                           <span className="text-[8px] text-cyan-300/50">✦ sovereign</span>
                         ) : (
                           <div className="flex items-center gap-1.5">
