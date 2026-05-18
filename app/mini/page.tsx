@@ -413,7 +413,8 @@ export default function MiniApp() {
       const data: InboxResult = await inboxRes.json();
       
       // Also check sovereign account tier (may be different from FID-provisioned)
-      let sovereignTier = accountTier;
+      const fidTier = data.tier || 'free';
+      let sovereignTier = fidTier;
       try {
         const sovereignRes = await fetch(WORKER_URL, {
           method: 'POST',
@@ -428,7 +429,8 @@ export default function MiniApp() {
         // Ignore errors, use FID tier
       }
       
-      const effectiveTier = (data.tier && data.tier !== 'basic' && data.tier !== 'free') ? data.tier : sovereignTier;
+      // Use the higher tier (sovereign takes precedence if upgraded)
+      const effectiveTier = sovereignTier;
       
       const decrypted = await Promise.all((data.messages || []).map(async (msg) => {
         if ((msg as any).encrypted && (msg as any).envelope && privKey) {
