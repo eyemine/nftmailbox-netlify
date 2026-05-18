@@ -1118,6 +1118,7 @@ export default function InboxPage() {
             <ComposeEmail
               label={name}
               ownerWallet={user?.wallet?.address || ''}
+              tier={normaliseTier(accountTier)}
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />
@@ -1336,7 +1337,6 @@ export default function InboxPage() {
                                   <ComposeEmail
                                     label={label}
                                     ownerWallet={ownerWallet}
-                                    tier={normaliseTier(accountTier)}
                                     onClose={() => setComposeOpen(false)}
                                     onSent={() => {
                                       setComposeOpen(false);
