@@ -487,8 +487,8 @@ export default function MiniApp() {
     const allRecipients = composeTo.split(',').map(e => e.trim()).filter(e => e);
     
     // Tier-based restrictions
-    const isPro = inboxTier === 'pro' || inboxTier === 'pupa';
-    const isPremium = inboxTier === 'premium' || inboxTier === 'imago';
+    const isPro = inboxTier === 'pro';
+    const isPremium = inboxTier === 'premium';
     
     // Free: only 1 recipient
     // Pro: up to 10 recipients + CC/BCC
@@ -896,7 +896,7 @@ export default function MiniApp() {
               autoCapitalize="none"
               autoComplete="off"
             />
-            {(inboxTier === 'pro' || inboxTier === 'pupa' || inboxTier === 'premium' || inboxTier === 'imago') && (
+            {(inboxTier === 'pro' || inboxTier === 'premium') && (
               <>
                 <button
                   onClick={() => setShowCcBcc(!showCcBcc)}
