@@ -1141,6 +1141,10 @@ export default function InboxPage() {
         {/* ── Owner action bar: Dashboard + Compose (if canSend) ── */}
         {isOwner && (
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Tier indicator for debugging */}
+            <span className="text-[10px] font-mono text-[var(--muted)] bg-black/30 px-2 py-1 rounded">
+              tier: {accountTier} → {normaliseTier(accountTier)}
+            </span>
             <Link
               href={`/dashboard?email=${encodeURIComponent(name + (isAgent ? '' : '@nftmail.box'))}`}
               className="flex items-center gap-1.5 rounded-lg border border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.12)] px-4 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] hover:bg-[rgba(0,163,255,0.20)] transition"
