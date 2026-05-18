@@ -1192,7 +1192,6 @@ export default function InboxPage() {
               label={name}
               ownerWallet={user?.wallet?.address || ''}
               tier={normaliseTier(accountTier)}
-              availableSenders={[]} // TODO: Fetch user's agents for dropdown
               onSent={() => { setTimeout(() => setActiveFolder('inbox'), 2000); }}
               onClose={() => setActiveFolder('inbox')}
             />

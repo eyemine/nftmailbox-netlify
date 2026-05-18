@@ -4,18 +4,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 type NftmailTier = 'free' | 'pro' | 'premium';
 
-interface SenderOption {
-  label: string;
-  domain: string; // 'nftmail.box' or 'ghostmail.box'
-  tier?: string;
-  agentId?: string;
-}
-
 interface ComposeEmailProps {
   label: string;            // sender label e.g. "mac.slave"
   ownerWallet: string;      // authenticated wallet for auth
   tier?: NftmailTier;       // user tier for feature gating
-  availableSenders?: SenderOption[]; // other addresses user can send from
   onSent?: (messageId: string) => void;
   onClose?: () => void;
   defaultTo?: string;
@@ -39,7 +31,6 @@ export function ComposeEmail({
   label, 
   ownerWallet, 
   tier = 'free', 
-  availableSenders = [],
   onSent, 
   onClose, 
   defaultTo = '', 
@@ -62,15 +53,12 @@ export function ComposeEmail({
   const isPro = tier === 'pro';
   const isPremium = tier === 'premium';
   
-  // Build full list of sender options (current + available)
+  // Available domains for premium users (domain switching feature)
+  const availableDomains = ['nftmail.box', 'ghostmail.box'];
   const currentDomain = label.includes('_') ? 'ghostmail.box' : 'nftmail.box';
-  const allSenders: SenderOption[] = [
-    { label, domain: currentDomain, tier },
-    ...availableSenders.filter(s => s.label !== label)
-  ];
-  const [selectedSender, setSelectedSender] = useState<SenderOption>(allSenders[0]);
+  const [selectedDomain, setSelectedDomain] = useState(currentDomain);
 
-  const fromEmail = `${label}@nftmail.box`;
+  const fromEmail = `${label}@${selectedDomain}`;
   const canSend = to.trim() && to.includes('@') && (subject.trim() || body.trim());
 
   const insertMarkdown = useCallback((prefix: string, suffix = '') => {
@@ -228,24 +216,19 @@ export function ComposeEmail({
     <div className="flex flex-col gap-3 w-full">
       {/* From / To */}
       <div className="space-y-3">
-        {/* Sender Dropdown (if multiple addresses available) */}
-        {allSenders.length > 1 ? (
+        {/* Domain Selector (Premium only) */}
+        {isPremium ? (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
             <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">FROM</span>
+            <span className="text-xs text-[rgb(160,220,255)]">{label}@</span>
             <select
-              value={`${selectedSender.label}@${selectedSender.domain}`}
-              onChange={(e) => {
-                const [l, d] = e.target.value.split('@');
-                const sender = allSenders.find(s => s.label === l && s.domain === d);
-                if (sender) setSelectedSender(sender);
-              }}
+              value={selectedDomain}
+              onChange={(e) => setSelectedDomain(e.target.value)}
               className="flex-1 bg-transparent text-xs text-[rgb(160,220,255)] outline-none cursor-pointer"
               disabled={sendState === 'sending'}
             >
-              {allSenders.map((sender) => (
-                <option key={`${sender.label}@${sender.domain}`} value={`${sender.label}@${sender.domain}`}>
-                  {sender.label}@{sender.domain} {sender.agentId ? `(${sender.agentId})` : ''}
-                </option>
+              {availableDomains.map((domain) => (
+                <option key={domain} value={domain}>{domain}</option>
               ))}
             </select>
           </div>
