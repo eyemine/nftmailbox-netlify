@@ -283,8 +283,15 @@ export default function DashboardPage() {
   };
 
   const isAgent = selectedName?.label.endsWith('_') ?? false;
-  const canSend = isAgent || inboxTier === 'premium' || inboxTier === 'ghost' || inboxTier === 'lite';
-  const isImago = inboxTier === 'premium' || inboxTier === 'ghost';
+  const normalisedTier = (() => {
+    const t = (inboxTier || '').toLowerCase();
+    if (t === 'premium' || t === 'imago' || t === 'ghost') return 'premium';
+    if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
+    return 'free';
+  })();
+  const canSend = isAgent || normalisedTier === 'pro' || normalisedTier === 'premium';
+  const isPremium = normalisedTier === 'premium';
+  const isPro = normalisedTier === 'pro';
 
   if (!ready) return null;
 
@@ -368,11 +375,11 @@ export default function DashboardPage() {
               <span className="text-[10px] text-[var(--muted)]">{selectedName?.gnoName}</span>
               {inboxTier && (
                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
-                  isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20'
-                    : canSend ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20'
+                  isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20'
+                    : isPro ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20'
                     : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'
                 }`}>
-                  {isImago ? 'IMAGO' : canSend ? 'PUPA' : 'LARVA'}
+                  {isPremium ? 'PREMIUM' : isPro ? 'PRO' : 'FREE'}
                 </span>
               )}
             </div>
@@ -399,10 +406,10 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={() => canSend && setTab('compose')}
-                title={!canSend ? 'Molt to PUPA to unlock sending' : undefined}
+                title={!canSend ? 'Upgrade to PRO to unlock sending' : undefined}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
               >
-                Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isImago ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isImago ? 'IMAGO' : 'PUPA+'}</span>
+                Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : 'PRO+'}</span>
               </button>
               <button
                 onClick={() => setTab('killswitch')}
@@ -419,7 +426,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{messages.length > 0 ? ` (${messages.length})` : ''}</span>
-                    {!isImago && messages.length > 0 && (
+                    {!isPremium && messages.length > 0 && (
                       <div className="hidden sm:flex items-center gap-3">
                         {[['bg-emerald-500','Fresh'],['bg-amber-500','Aging'],['bg-red-500','Expiring']].map(([c,l]) => (
                           <div key={l} className="flex items-center gap-1"><div className={`h-1.5 w-1.5 rounded-full ${c}`} /><span className="text-[9px] text-[var(--muted)]">{l}</span></div>
