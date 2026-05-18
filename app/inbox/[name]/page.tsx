@@ -8,6 +8,18 @@ import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 import { ComposeEmail } from '../../components/ComposeEmail';
 
+// Tier normalisation: convert various tier names to standard NftmailTier
+type NftmailTier = 'free' | 'pro' | 'premium';
+function normaliseTier(tier: string | undefined): NftmailTier {
+  if (!tier) return 'free';
+  const t = tier.toLowerCase();
+  // Map legacy/agent tiers to nftmail tiers
+  if (t === 'pupa' || t === 'lite' || t === 'pro') return 'pro';
+  if (t === 'imago' || t === 'premium' || t === 'ghost') return 'premium';
+  // Basic/free tier
+  return 'free';
+}
+
 function isAgentAddress(addr: string): boolean {
   if (!addr) return false;
   const local = addr.includes('@') ? addr.split('@')[0] : addr;
