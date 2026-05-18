@@ -149,7 +149,7 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-type Step = 'loading' | 'entry' | 'naming' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'error';
 
 interface ProvisionResult {
   status: string;
@@ -602,6 +602,16 @@ export default function MiniApp() {
             >
               {fid ? 'Claim Free Inbox →' : 'Open in Warpcast to Claim'}
             </button>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-800" /></div>
+              <div className="relative flex justify-center"><span className="bg-black px-2 text-[10px] text-gray-500 uppercase">or</span></div>
+            </div>
+            <button
+              onClick={() => setStep('signin')}
+              className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors"
+            >
+              Sign in with existing email
+            </button>
             <p className="text-gray-500 text-xs text-center">8-day free inbox · 10 free sends · Upgrade to permanent anytime</p>
           </div>
         </div>
@@ -639,6 +649,81 @@ export default function MiniApp() {
               className="w-full bg-gray-900 border border-gray-700 hover:border-[#43a574] text-white py-3 rounded-lg text-sm transition-colors"
             >
               🌐 Full Profile — Show username + avatar
+            </button>
+            <button onClick={() => setStep('entry')} className="w-full text-gray-500 text-sm py-2">
+              ← Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'signin') {
+    const [signinEmail, setSigninEmail] = useState('');
+    const [signinError, setSigninError] = useState('');
+    const [signinLoading, setSigninLoading] = useState(false);
+    
+    const handleSignin = async () => {
+      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '').replace(/[^a-z0-9-]/g, '');
+      if (!label) { setSigninError('Please enter a valid email or label'); return; }
+      setSigninLoading(true);
+      setSigninError('');
+      try {
+        // Check if account exists and get profile
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getAgentProfile', label }),
+        });
+        const data = await res.json();
+        if (data && data.label) {
+          setAgentName(data.label);
+          setHumanEmail(`${data.label}@nftmail.box`);
+          if (data.tier) setInboxTier(normaliseTier(data.tier));
+          let privKey: string | null = null;
+          try { privKey = localStorage.getItem(`ecies-priv:${data.label}`); } catch {}
+          if (privKey) setEciesPrivKey(privKey);
+          await loadInboxDirect(data.label, privKey);
+        } else {
+          setSigninError('Account not found. Check the email or claim a new inbox.');
+        }
+      } catch {
+        setSigninError('Failed to look up account. Please try again.');
+      } finally {
+        setSigninLoading(false);
+      }
+    };
+    
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="text-4xl mb-3">🔑</div>
+            <h2 className="text-white font-bold text-xl mb-1">Sign In</h2>
+            <p className="text-gray-400 text-sm">Enter your nftmail.box address</p>
+          </div>
+          <div className="space-y-3">
+            <input
+              type="text"
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white font-mono text-sm placeholder-gray-500 focus:outline-none focus:border-[#43a574]"
+              placeholder="yourname@nftmail.box"
+              value={signinEmail}
+              onChange={e => setSigninEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !signinLoading && handleSignin()}
+              autoComplete="off"
+              autoCapitalize="none"
+              disabled={signinLoading}
+            />
+            {signinError && (
+              <p className="text-red-400 text-xs text-center">{signinError}</p>
+            )}
+            <button
+              onClick={handleSignin}
+              disabled={signinLoading}
+              className="w-full bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-800 disabled:text-gray-500 text-black font-bold py-3 rounded-lg transition-colors"
+            >
+              {signinLoading ? 'Looking up...' : 'Sign In →'}
             </button>
             <button onClick={() => setStep('entry')} className="w-full text-gray-500 text-sm py-2">
               ← Back
