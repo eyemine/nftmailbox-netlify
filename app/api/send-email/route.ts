@@ -14,6 +14,98 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+
+// ─── Rate Limiting ─────────────────────────────────────────────────────────
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX = 30; // 30 emails per hour per IP per label
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string, label: string): { allowed: boolean; retryAfter?: number } {
+  const key = `${ip}:${label}`;
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (entry.count >= RATE_LIMIT_MAX) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+  
+  entry.count++;
+  return { allowed: true };
+}
+
+// ─── DFZ (Data-Free Zone) Detection ─────────────────────────────────────────
+function isDfzAddress(email: string): boolean {
+  return /^dfz[.-]\d+/i.test(email.split('@')[0] || '');
+}
+
+// ─── Tier-based HTML Sanitization ───────────────────────────────────────────
+function sanitizeHtmlForTier(html: string, tier: string): string {
+  const normalizedTier = tier.toLowerCase();
+  
+  // Premium/Pro tiers: allow full HTML (strip dangerous tags only)
+  if (normalizedTier === 'premium' || normalizedTier === 'pro' || 
+      normalizedTier === 'imago' || normalizedTier === 'pupa' ||
+      normalizedTier === 'ghost' || normalizedTier === 'lite') {
+    return html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/on\w+\s*=/gi, 'data-blocked-on=')
+      .replace(/javascript:/gi, 'blocked-js:');
+  }
+  
+  // Basic/Free tiers: strip all HTML to plain text
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// ─── Tier-based Sending Privileges (CC/BCC, Multi-send) ────────────────────
+function validateTierPrivileges(
+  tier: string, 
+  to: string, 
+  cc: string | undefined, 
+  bcc: string | undefined
+): { allowed: boolean; error?: string } {
+  const normalizedTier = tier.toLowerCase();
+  const toCount = to.split(',').filter(e => e.trim()).length;
+  const ccCount = cc ? cc.split(',').filter(e => e.trim()).length : 0;
+  const bccCount = bcc ? bcc.split(',').filter(e => e.trim()).length : 0;
+  const totalRecipients = toCount + ccCount + bccCount;
+  
+  // Free/Basic tier: no sending
+  if (normalizedTier === 'basic' || normalizedTier === 'free') {
+    return { allowed: false, error: 'Basic tier is receive-only' };
+  }
+  
+  // Lite tier: max 1 CC/BCC, max 3 total recipients
+  if (normalizedTier === 'lite') {
+    if (ccCount > 1 || bccCount > 1) {
+      return { allowed: false, error: 'Lite tier limited to 1 CC/BCC address' };
+    }
+    if (totalRecipients > 3) {
+      return { allowed: false, error: 'Lite tier limited to 3 total recipients' };
+    }
+    return { allowed: true };
+  }
+  
+  // Pro/Pupa tier: max 2 CC/BCC, max 5 total recipients
+  if (normalizedTier === 'pro' || normalizedTier === 'pupa') {
+    if (ccCount > 2 || bccCount > 2) {
+      return { allowed: false, error: 'Pro tier limited to 2 CC/BCC addresses' };
+    }
+    if (totalRecipients > 5) {
+      return { allowed: false, error: 'Pro tier limited to 5 total recipients' };
+    }
+    return { allowed: true };
+  }
+  
+  // Premium/Imago/Ghost tier: unlimited
+  return { allowed: true };
+}
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
 const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
@@ -21,6 +113,8 @@ const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
 async function sendViaMailgun(params: {
   from: string;
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   html: string;
   text: string;
@@ -31,6 +125,8 @@ async function sendViaMailgun(params: {
   const form = new URLSearchParams();
   form.set('from', params.from);
   form.set('to', params.to);
+  if (params.cc) form.set('cc', params.cc);
+  if (params.bcc) form.set('bcc', params.bcc);
   form.set('subject', params.subject);
   form.set('html', params.html);
   form.set('text', params.text);
@@ -84,10 +180,12 @@ export async function POST(req: NextRequest) {
       to?: string;
       subject?: string;
       body?: string;
+      cc?: string;
+      bcc?: string;
       replyToMessageId?: string;
     };
 
-    const { label, ownerWallet, to, subject } = body;
+    const { label, ownerWallet, to, subject, cc, bcc } = body;
     const mailBody = body.body || '';
 
     if (!label || typeof label !== 'string') {
@@ -130,8 +228,30 @@ export async function POST(req: NextRequest) {
     }
 
     const fromEmail = `${label}@nftmail.box`;
-    const htmlBody = markdownToHtml(mailBody);
-    const textBody = mailBody;
+    
+    // DFZ address restriction check
+    if (isDfzAddress(fromEmail)) {
+      return NextResponse.json(
+        { error: 'DFZ addresses are restricted from sending emails' },
+        { status: 403 }
+      );
+    }
+    
+    // Validate tier-based CC/BCC and multi-send privileges
+    const tierValidation = validateTierPrivileges(accountTier, to, cc, bcc);
+    if (!tierValidation.allowed) {
+      return NextResponse.json(
+        { error: tierValidation.error, tier: accountTier },
+        { status: 403 }
+      );
+    }
+    
+    // Tier-based HTML processing
+    const rawHtmlBody = markdownToHtml(mailBody);
+    const htmlBody = sanitizeHtmlForTier(rawHtmlBody, accountTier);
+    const textBody = accountTier === 'basic' || accountTier === 'free' 
+      ? htmlBody // Already stripped to text for basic tier
+      : mailBody;
 
     // ── Imago path: dedicated Zoho seat (opt-in, calendar/webmail users) ────
     const hasZohoSeat = (resolved.zohoSeat as boolean | undefined) ?? false;
@@ -184,6 +304,8 @@ export async function POST(req: NextRequest) {
     const { messageId } = await sendViaMailgun({
       from: `${label} <${fromEmail}>`,
       to,
+      cc,
+      bcc,
       subject: subject || '(no subject)',
       html: htmlBody,
       text: textBody,

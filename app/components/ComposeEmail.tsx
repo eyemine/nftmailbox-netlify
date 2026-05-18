@@ -4,10 +4,18 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 type NftmailTier = 'free' | 'pro' | 'premium';
 
+interface SenderOption {
+  label: string;
+  domain: string; // 'nftmail.box' or 'ghostmail.box'
+  tier?: string;
+  agentId?: string;
+}
+
 interface ComposeEmailProps {
   label: string;            // sender label e.g. "mac.slave"
   ownerWallet: string;      // authenticated wallet for auth
   tier?: NftmailTier;       // user tier for feature gating
+  availableSenders?: SenderOption[]; // other addresses user can send from
   onSent?: (messageId: string) => void;
   onClose?: () => void;
   defaultTo?: string;
@@ -27,7 +35,17 @@ const MARKDOWN_TIPS = [
   ['[text](url)', 'Link'],
 ];
 
-export function ComposeEmail({ label, ownerWallet, tier = 'free', onSent, onClose, defaultTo = '', defaultSubject = '', defaultBody = '' }: ComposeEmailProps) {
+export function ComposeEmail({ 
+  label, 
+  ownerWallet, 
+  tier = 'free', 
+  availableSenders = [],
+  onSent, 
+  onClose, 
+  defaultTo = '', 
+  defaultSubject = '', 
+  defaultBody = '' 
+}: ComposeEmailProps) {
   const [to, setTo] = useState(defaultTo);
   const [cc, setCc] = useState('');
   const [bcc, setBcc] = useState('');
@@ -43,6 +61,14 @@ export function ComposeEmail({ label, ownerWallet, tier = 'free', onSent, onClos
 
   const isPro = tier === 'pro';
   const isPremium = tier === 'premium';
+  
+  // Build full list of sender options (current + available)
+  const currentDomain = label.includes('_') ? 'ghostmail.box' : 'nftmail.box';
+  const allSenders: SenderOption[] = [
+    { label, domain: currentDomain, tier },
+    ...availableSenders.filter(s => s.label !== label)
+  ];
+  const [selectedSender, setSelectedSender] = useState<SenderOption>(allSenders[0]);
 
   const fromEmail = `${label}@nftmail.box`;
   const canSend = to.trim() && to.includes('@') && (subject.trim() || body.trim());
@@ -200,23 +226,48 @@ export function ComposeEmail({ label, ownerWallet, tier = 'free', onSent, onClos
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* From (read-only) */}
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
-        <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">FROM</span>
-        <span className="text-xs text-[rgb(160,220,255)]">{fromEmail}</span>
-      </div>
+      {/* From / To */}
+      <div className="space-y-3">
+        {/* Sender Dropdown (if multiple addresses available) */}
+        {allSenders.length > 1 ? (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
+            <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">FROM</span>
+            <select
+              value={`${selectedSender.label}@${selectedSender.domain}`}
+              onChange={(e) => {
+                const [l, d] = e.target.value.split('@');
+                const sender = allSenders.find(s => s.label === l && s.domain === d);
+                if (sender) setSelectedSender(sender);
+              }}
+              className="flex-1 bg-transparent text-xs text-[rgb(160,220,255)] outline-none cursor-pointer"
+              disabled={sendState === 'sending'}
+            >
+              {allSenders.map((sender) => (
+                <option key={`${sender.label}@${sender.domain}`} value={`${sender.label}@${sender.domain}`}>
+                  {sender.label}@{sender.domain} {sender.agentId ? `(${sender.agentId})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2">
+            <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">FROM</span>
+            <span className="text-xs text-[rgb(160,220,255)]">{fromEmail}</span>
+          </div>
+        )}
 
-      {/* To */}
-      <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 focus-within:border-[rgba(0,163,255,0.4)]">
-        <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">TO</span>
-        <input
-          type="email"
-          value={to}
-          onChange={e => setTo(e.target.value)}
-          placeholder={isPro || isPremium ? "recipient1@domain.com, recipient2@domain.com (multi-send)" : "recipient@domain.com"}
-          className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
-          disabled={sendState === 'sending'}
-        />
+        {/* To */}
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 focus-within:border-[rgba(0,163,255,0.4)]">
+          <span className="text-[10px] font-semibold text-[var(--muted)] w-12 flex-shrink-0">TO</span>
+          <input
+            type="email"
+            value={to}
+            onChange={e => setTo(e.target.value)}
+            placeholder={isPro || isPremium ? "recipient1@domain.com, recipient2@domain.com (multi-send)" : "recipient@domain.com"}
+            className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none"
+            disabled={sendState === 'sending'}
+          />
+        </div>
       </div>
 
       {/* CC/BCC Toggle (Pro/Premium only) */}

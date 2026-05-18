@@ -82,11 +82,20 @@ async function verifyPayment(
     if (txTo === TREASURY && txValue > 0n) {
       // Get ETH price for USD valuation (fallback $3000 if API fails)
       let ethUsdPrice = 3000;
+      const ETH_PRICE_MIN = 1000; // Minimum acceptable ETH price (bounds check)
+      const ETH_PRICE_MAX = 10000; // Maximum acceptable ETH price (bounds check)
+      
       if (ethPriceRes) {
         try {
           const priceData = await ethPriceRes.json() as { ethereum?: { usd?: number } };
           if (priceData?.ethereum?.usd) {
-            ethUsdPrice = priceData.ethereum.usd;
+            const price = priceData.ethereum.usd;
+            // Reject prices outside reasonable bounds (prevents oracle manipulation)
+            if (price >= ETH_PRICE_MIN && price <= ETH_PRICE_MAX) {
+              ethUsdPrice = price;
+            } else {
+              console.log(`[mini-upgrade] ETH price ${price} outside bounds [${ETH_PRICE_MIN}, ${ETH_PRICE_MAX}], using fallback 3000`);
+            }
           }
         } catch {}
       }
