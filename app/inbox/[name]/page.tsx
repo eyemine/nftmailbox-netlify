@@ -607,20 +607,20 @@ export default function InboxPage() {
               <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
             </div>
             <p className="text-center text-sm text-[var(--muted)] max-w-md">
-                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Upcycle to <strong className="text-amber-300">Pupa ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
+                Your <strong className="text-white">{name}@nftmail.box</strong> is permanent — free tier messages clear after 8 days. Upgrade to <strong className="text-amber-300">PRO ($10)</strong> for 30-day retention, sending, and a <strong className="text-white">Gnosis Safe body</strong>.
             </p>
             <div className="flex flex-col gap-3 w-full max-w-xs">
               <Link
                 href={`/nftmail?upgrade=lite&label=${name}`}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-6 py-3 text-sm font-semibold text-amber-300 transition hover:bg-amber-500/20 text-center"
               >
-                Upcycle to Pupa — $10
+                Upcycle to PRO — $10
               </Link>
               <Link
                 href={`/nftmail?upgrade=premium&label=${name}`}
                 className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-6 py-2.5 text-sm font-semibold text-violet-300 transition hover:bg-violet-500/20 text-center"
               >
-                Go Imago — $24
+                Go Premium — $24
               </Link>
             </div>
           </div>
@@ -996,10 +996,10 @@ export default function InboxPage() {
   const decayPct = (expiresAt && tierDecayMs && (accountTier === 'lite' || accountTier === 'basic')) 
     ? Math.min(100, Math.max(0, Math.round((1 - (expiresAt - Date.now()) / tierDecayMs) * 100)))
     : null;
-  const isImago = accountTier === 'premium' || accountTier === 'ghost';
+  const isPremium = accountTier === 'premium' || accountTier === 'ghost';
   const showLarvaWarning = accountTier === 'basic' && daysLeft !== null && daysLeft <= 7;
 
-  const acctTierLabel = accountTier === 'ghost' ? 'AGENT' : accountTier === 'premium' ? 'IMAGO' : accountTier === 'lite' ? 'PUPA' : 'LARVA';
+  const acctTierLabel = accountTier === 'ghost' ? 'AGENT' : accountTier === 'premium' ? 'PREMIUM' : accountTier === 'lite' ? 'PRO' : 'FREE';
   const acctTierColor = accountTier === 'ghost'
     ? 'text-violet-300 bg-violet-500/10 ring-violet-500/20'
     : accountTier === 'premium'
@@ -1090,7 +1090,7 @@ export default function InboxPage() {
           </div>
 
           {/* Safe body address + decay bar + Larva warning */}
-          {(safeAddress || decayPct !== null || showLarvaWarning || isImago) && (
+          {(safeAddress || decayPct !== null || showLarvaWarning || isPremium) && (
             <div className="flex flex-col gap-2 px-1">
               {safeAddress && (
                 <div className="flex items-center gap-2">
@@ -1106,12 +1106,12 @@ export default function InboxPage() {
                   </a>
                 </div>
               )}
-              {isImago && (
+              {isPremium && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-cyan-300/80">✦ Sovereign — Persistent History</span>
                 </div>
               )}
-              {decayPct !== null && !isImago && daysLeft !== null && (
+              {decayPct !== null && !isPremium && daysLeft !== null && (
                 <div className="flex items-center gap-2">
                   <div className="h-1.5 w-24 rounded-full bg-white/5 overflow-hidden">
                     <div
@@ -1130,7 +1130,7 @@ export default function InboxPage() {
               )}
               {showLarvaWarning && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-1.5">
-                  <span className="text-[10px] text-amber-300">⚠ Your history window ends in {daysLeft}d. Cycle to Pupa to extend to 30 days and deploy your Mirror Body.</span>
+                  <span className="text-[10px] text-amber-300">⚠ Your history window ends in {daysLeft}d. Upgrade to PRO to extend to 30 days and deploy your Mirror Body.</span>
                   <Link href={`/nftmail?upgrade=lite&label=${name}`} className="ml-auto flex-shrink-0 text-[9px] font-semibold text-amber-300 hover:underline">Upcycle →</Link>
                 </div>
               )}
@@ -1217,7 +1217,7 @@ export default function InboxPage() {
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-center text-[11px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
               >
                 <span className="block text-sm font-bold">10 xDAI</span>
-                Upcycle to Pupa
+                Upcycle to PRO
               </Link>
             </div>
             {daysLeft !== null && daysLeft <= 7 && (
@@ -1286,7 +1286,7 @@ export default function InboxPage() {
               </span>
             </div>
             <span className="text-[9px] text-[var(--muted)]">
-              {isImago ? '✦ Sovereign — Persistent History' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
+              {normaliseTier(accountTier) === 'premium' ? '✦ Sovereign — Persistent History' : `Messages auto-delete after ${tierDecayDays ?? 8} days`}
             </span>
           </div>
         )}
