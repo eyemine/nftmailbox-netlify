@@ -411,6 +411,25 @@ export default function MiniApp() {
         }).catch(() => null), // non-fatal if quota check fails
       ]);
       const data: InboxResult = await inboxRes.json();
+      
+      // Also check sovereign account tier (may be different from FID-provisioned)
+      let sovereignTier = accountTier;
+      try {
+        const sovereignRes = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getAgentProfile', label: name }),
+        });
+        const sovereignData = await sovereignRes.json();
+        if (sovereignData?.tier && sovereignData.tier !== 'basic' && sovereignData.tier !== 'free') {
+          sovereignTier = sovereignData.tier;
+        }
+      } catch {
+        // Ignore errors, use FID tier
+      }
+      
+      const effectiveTier = (data.tier && data.tier !== 'basic' && data.tier !== 'free') ? data.tier : sovereignTier;
+      
       const decrypted = await Promise.all((data.messages || []).map(async (msg) => {
         if ((msg as any).encrypted && (msg as any).envelope && privKey) {
           try {
@@ -423,9 +442,8 @@ export default function MiniApp() {
       }));
       setMessages(decrypted);
       // Set tier from response or default to larva
-      if (data.tier) {
-        setInboxTier(normaliseTier(data.tier));
-      }
+      // Use effectiveTier (combines FID-provisioned and sovereign account tiers)
+      setInboxTier(normaliseTier(effectiveTier));
       // Load sentbox from worker if available
       if (sentboxRes) {
         try {

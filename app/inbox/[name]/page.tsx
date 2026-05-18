@@ -1152,6 +1152,16 @@ export default function InboxPage() {
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
               Dashboard
             </Link>
+            {/* View Public Inbox link */}
+            <a
+              href={`/inbox/${name}${isAgent ? '' : '@nftmail.box'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-black/20 px-4 py-2 text-[11px] font-semibold text-[var(--muted)] hover:text-white hover:bg-black/30 transition"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+              View Public Inbox
+            </a>
             {/* Folder tabs */}
             <div className="flex items-center rounded-lg border border-[var(--border)] bg-black/20 p-0.5">
               <button
