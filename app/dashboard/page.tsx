@@ -56,7 +56,7 @@ interface InboxMessage {
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'compose' | 'killswitch';
+type Tab = 'inbox' | 'sentbox' | 'compose' | 'killswitch';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
 
 const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -78,8 +78,16 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('text');
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
+  // Sentbox state
+  const [sentMessages, setSentMessages] = useState<any[]>([]);
+  const [loadingSent, setLoadingSent] = useState(false);
+  const [selectedSent, setSelectedSent] = useState<any | null>(null);
+
   // Compose state
   const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeBcc, setComposeBcc] = useState('');
+  const [showCcBcc, setShowCcBcc] = useState(false);
   const [composeSubject, setComposeSubject] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [sending, setSending] = useState(false);
@@ -195,33 +203,66 @@ export default function DashboardPage() {
     }
   }, [selectedName, fetchInbox]);
 
-  // Send email
+  // Fetch sentbox from Mailgun Events API
+  const fetchSentbox = useCallback(async () => {
+    if (!selectedName) return;
+    setLoadingSent(true);
+    try {
+      const label = selectedName.email.replace('@nftmail.box', '');
+      const res = await fetch(`/api/sentbox?label=${encodeURIComponent(label)}`);
+      const data = await res.json() as { error?: string; messages?: any[] };
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch sentbox');
+      setSentMessages(data.messages || []);
+    } catch {
+      // Silent — sentbox is non-critical
+    } finally {
+      setLoadingSent(false);
+    }
+  }, [selectedName]);
+
+  useEffect(() => {
+    if (selectedName && tab === 'sentbox') {
+      fetchSentbox();
+    }
+  }, [selectedName, tab, fetchSentbox]);
+
+  // Send email — uses /api/send-email with ownerWallet auth + CC/BCC + multisend
   const handleSend = async () => {
-    if (!selectedName || !composeTo) return;
+    if (!selectedName || !composeTo || !preferredWallet) return;
     setSending(true);
     setSendResult(null);
-    try {
-      const res = await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fromEmail: selectedName.email,
-          toAddress: composeTo,
-          subject: composeSubject,
-          content: composeBody,
-        }),
-      });
-      const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Failed to send');
-      setSendResult(`Sent to ${composeTo}`);
-      setComposeTo('');
-      setComposeSubject('');
-      setComposeBody('');
-    } catch (err: any) {
-      setSendResult(err?.message || 'Send failed');
-    } finally {
-      setSending(false);
+    const recipients = composeTo.split(',').map(r => r.trim()).filter(Boolean);
+    for (const recipient of recipients) {
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label: selectedName.email.replace('@nftmail.box', ''),
+            ownerWallet: preferredWallet.address,
+            to: recipient,
+            cc: composeCc || undefined,
+            bcc: composeBcc || undefined,
+            subject: composeSubject,
+            body: composeBody,
+          }),
+        });
+        const data = await res.json() as { error?: string; success?: boolean };
+        if (!res.ok) throw new Error(data.error || 'Failed to send');
+      } catch (err: any) {
+        setSendResult(err?.message || 'Send failed');
+        setSending(false);
+        return;
+      }
     }
+    setSendResult(`Sent to ${composeTo}`);
+    setComposeTo('');
+    setComposeCc('');
+    setComposeBcc('');
+    setShowCcBcc(false);
+    setComposeSubject('');
+    setComposeBody('');
+    setSending(false);
   };
 
   // Sovereign Kill-Switch: burn all encrypted history
@@ -307,6 +348,9 @@ export default function DashboardPage() {
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
           </Link>
           <div className="flex items-center gap-3">
+            {authenticated && selectedName && (
+              <a href={`/inbox/${encodeURIComponent(selectedName.email.replace('@nftmail.box', ''))}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[rgba(0,163,255,0.25)] bg-[rgba(0,163,255,0.06)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.14)]">View Public Inbox ↗</a>
+            )}
             {authenticated && preferredWallet && (
               <span className="text-xs text-[var(--muted)]">{preferredWallet.address.slice(0, 6)}...{preferredWallet.address.slice(-4)}</span>
             )}
@@ -403,6 +447,12 @@ export default function DashboardPage() {
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
               >
                 Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
+              </button>
+              <button
+                onClick={() => setTab('sentbox')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sentbox' ? 'bg-amber-500/12 text-amber-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
               </button>
               <button
                 onClick={() => canSend && setTab('compose')}
@@ -623,6 +673,66 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* ── SENTBOX TAB ── */}
+            {tab === 'sentbox' && (
+              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
+                  <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SENT{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}</span>
+                  <button onClick={fetchSentbox} disabled={loadingSent} className="flex items-center gap-1.5 text-[10px] text-[rgb(160,220,255)] hover:text-white transition disabled:opacity-40">
+                    <svg className={`h-3 w-3 ${loadingSent ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
+                    {loadingSent ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="flex" style={{ minHeight: '460px' }}>
+                  <div className={`flex flex-col border-r border-[var(--border)] ${selectedSent ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
+                    {loadingSent && sentMessages.length === 0 ? (
+                      <div className="flex flex-1 items-center justify-center py-12"><div className="flex items-center gap-3"><div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" /><span className="text-sm text-[var(--muted)]">Loading sent messages...</span></div></div>
+                    ) : sentMessages.length === 0 ? (
+                      <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
+                        <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                        <p className="text-sm text-[var(--muted)]">No sent messages found</p>
+                        <p className="text-[10px] text-[var(--muted)]">Messages sent via this address will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
+                        {sentMessages.map((msg: any) => (
+                          <button key={msg.id} onClick={() => setSelectedSent(msg)} className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${selectedSent?.id === msg.id ? 'bg-amber-500/8 border-l-2 border-amber-500' : 'border-l-2 border-transparent'}`}>
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate text-xs font-medium text-white">{msg.subject || '(no subject)'}</p>
+                              <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">To: {msg.to}</p>
+                              <p className="text-[9px] text-[var(--muted)] mt-1">{new Date(msg.timestamp * 1000).toLocaleDateString()}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className={`flex-1 flex flex-col ${selectedSent ? 'flex' : 'hidden md:flex'}`}>
+                    {selectedSent ? (
+                      <>
+                        <button onClick={() => setSelectedSent(null)} className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2 text-[10px] text-[var(--muted)] hover:text-white transition md:hidden">← Back to list</button>
+                        <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
+                          <p className="text-sm font-semibold text-white">{selectedSent.subject || '(no subject)'}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedName?.email}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedSent.to}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Date</span> {new Date(selectedSent.timestamp * 1000).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-1 border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
+                          <button onClick={() => { setComposeTo(selectedSent.to); setComposeSubject(`Re: ${selectedSent.subject}`); setTab('compose'); }} className="rounded p-1.5 text-[var(--muted)] transition hover:text-white" title="Reply"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" /></svg></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-4"><p className="text-xs text-[var(--muted)]">Message sent via Mailgun. Full body content is not stored in the events log.</p></div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col flex-1 items-center justify-center gap-2 text-center py-12 px-6">
+                        <svg className="h-8 w-8 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                        <p className="text-sm text-[var(--muted)]">Select a sent message to view details</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── COMPOSE TAB ── */}
             {tab === 'compose' && (
               <div className="space-y-4">
@@ -641,9 +751,24 @@ export default function DashboardPage() {
                     <div className="mt-1 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 text-sm text-emerald-300">{selectedName?.email}</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>
-                    <input type="email" value={composeTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeTo(e.target.value)} placeholder="recipient@example.com" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>
+                      <button onClick={() => setShowCcBcc(v => !v)} className="text-[10px] text-[var(--muted)] hover:text-white transition">{showCcBcc ? 'Hide CC/BCC' : 'CC/BCC'}</button>
+                    </div>
+                    <input type="email" value={composeTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeTo(e.target.value)} placeholder="recipient@example.com (comma-separated for multiple)" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
                   </div>
+                  {showCcBcc && (
+                    <>
+                      <div>
+                        <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">CC</label>
+                        <input type="email" value={composeCc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeCc(e.target.value)} placeholder="cc@example.com" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">BCC</label>
+                        <input type="email" value={composeBcc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeBcc(e.target.value)} placeholder="bcc@example.com" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SUBJECT</label>
                     <input type="text" value={composeSubject} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeSubject(e.target.value)} placeholder="Subject" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
