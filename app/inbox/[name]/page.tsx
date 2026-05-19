@@ -1162,21 +1162,6 @@ export default function InboxPage() {
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
               View Public Inbox
             </a>
-            {/* Folder tabs */}
-            <div className="flex items-center rounded-lg border border-[var(--border)] bg-black/20 p-0.5">
-              <button
-                onClick={() => setActiveFolder('inbox')}
-                className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${activeFolder === 'inbox' ? 'bg-[rgba(0,163,255,0.2)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white'}`}
-              >
-                Inbox {messages.length > 0 && `(${messages.length})`}
-              </button>
-              <button
-                onClick={() => setActiveFolder('sent')}
-                className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition ${activeFolder === 'sent' ? 'bg-[rgba(0,163,255,0.2)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white'}`}
-              >
-                Sent {sentMessages.length > 0 && `(${sentMessages.length})`}
-              </button>
-            </div>
             {canSend && (
               <button
                 onClick={() => setActiveFolder(activeFolder === 'compose' ? 'inbox' : 'compose')}

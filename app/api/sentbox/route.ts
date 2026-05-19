@@ -48,22 +48,32 @@ export async function GET(req: NextRequest) {
     const data = (await res.json()) as { items?: Array<Record<string, unknown>> };
     const items = data.items || [];
 
-    const messages = items.map((item: Record<string, unknown>) => {
-      const message = (item.message as Record<string, unknown>) || {};
-      const headers = (message.headers as Record<string, unknown>) || {};
-      const recipients = (message.recipients as string[]) || [];
-      const envelope = (item.envelope as Record<string, unknown>) || {};
-      return {
-        id: String(item.id || ''),
-        timestamp: Number(item.timestamp || 0),
-        event: String(item.event || 'accepted'),
-        from: String(envelope.sender || from),
-        to: recipients.join(', ') || String(envelope.targets || ''),
-        subject: String(headers.subject || '(no subject)'),
-        messageId: String(headers['message-id'] || ''),
-        recipient: String(item.recipient || ''),
-      };
-    });
+    // Deduplicate by message-id to prevent CC/BCC duplicates
+    const seenMessageIds = new Set<string>();
+    const messages = items
+      .map((item: Record<string, unknown>) => {
+        const message = (item.message as Record<string, unknown>) || {};
+        const headers = (message.headers as Record<string, unknown>) || {};
+        const recipients = (message.recipients as string[]) || [];
+        const envelope = (item.envelope as Record<string, unknown>) || {};
+        const msgId = String(headers['message-id'] || item.id || '');
+        return {
+          id: String(item.id || ''),
+          timestamp: Number(item.timestamp || 0),
+          event: String(item.event || 'accepted'),
+          from: String(envelope.sender || from),
+          to: recipients.join(', ') || String(envelope.targets || ''),
+          subject: String(headers.subject || '(no subject)'),
+          messageId: msgId,
+          recipient: String(item.recipient || ''),
+        };
+      })
+      .filter((msg) => {
+        if (!msg.messageId) return true; // Keep items without message-id
+        if (seenMessageIds.has(msg.messageId)) return false; // Skip duplicate
+        seenMessageIds.add(msg.messageId);
+        return true;
+      });
 
     return NextResponse.json({ label, messages });
   } catch (err: unknown) {

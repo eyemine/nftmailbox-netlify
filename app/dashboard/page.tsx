@@ -200,6 +200,9 @@ export default function DashboardPage() {
     if (selectedName) {
       fetchInbox();
       setSelectedMessage(null);
+      // Clear sentbox when switching accounts
+      setSentMessages([]);
+      setSelectedSent(null);
     }
   }, [selectedName, fetchInbox]);
 
