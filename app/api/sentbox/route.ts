@@ -52,15 +52,16 @@ export async function GET(req: NextRequest) {
       const message = (item.message as Record<string, unknown>) || {};
       const headers = (message.headers as Record<string, unknown>) || {};
       const recipients = (message.recipients as string[]) || [];
+      const envelope = (item.envelope as Record<string, unknown>) || {};
       return {
-        id: item.id || '',
-        timestamp: item.timestamp || 0,
-        event: item.event || 'accepted',
-        from: item.envelope?.sender || from,
-        to: recipients.join(', ') || (item.envelope?.targets as string) || '',
-        subject: headers.subject || '(no subject)',
-        messageId: headers['message-id'] || '',
-        recipient: item.recipient || '',
+        id: String(item.id || ''),
+        timestamp: Number(item.timestamp || 0),
+        event: String(item.event || 'accepted'),
+        from: String(envelope.sender || from),
+        to: recipients.join(', ') || String(envelope.targets || ''),
+        subject: String(headers.subject || '(no subject)'),
+        messageId: String(headers['message-id'] || ''),
+        recipient: String(item.recipient || ''),
       };
     });
 
