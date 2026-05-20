@@ -49,29 +49,39 @@ export async function GET(req: NextRequest) {
     const items = data.items || [];
 
     // Deduplicate by message-id to prevent CC/BCC duplicates
-    const seenMessageIds = new Set<string>();
+    // Mailgun creates separate events for each recipient, but they share the same message-id
+    const seenMessageIds = new Map<string, any>();
     const messages = items
       .map((item: Record<string, unknown>) => {
         const message = (item.message as Record<string, unknown>) || {};
         const headers = (message.headers as Record<string, unknown>) || {};
         const recipients = (message.recipients as string[]) || [];
         const envelope = (item.envelope as Record<string, unknown>) || {};
-        const msgId = String(headers['message-id'] || item.id || '');
+        const storage = (item.storage as Record<string, unknown>) || {};
+        // Use message-id from headers, or storage.key, or event id as fallback
+        const msgId = String(headers['message-id'] || storage['key'] || item.id || '');
         return {
           id: String(item.id || ''),
           timestamp: Number(item.timestamp || 0),
           event: String(item.event || 'accepted'),
           from: String(envelope.sender || from),
-          to: recipients.join(', ') || String(envelope.targets || ''),
+          to: recipients.join(', ') || String(envelope.targets || item.recipient || ''),
           subject: String(headers.subject || '(no subject)'),
           messageId: msgId,
           recipient: String(item.recipient || ''),
         };
       })
       .filter((msg) => {
-        if (!msg.messageId) return true; // Keep items without message-id
-        if (seenMessageIds.has(msg.messageId)) return false; // Skip duplicate
-        seenMessageIds.add(msg.messageId);
+        if (!msg.messageId || msg.messageId === 'undefined') return true; // Keep items without message-id
+        if (seenMessageIds.has(msg.messageId)) {
+          // Merge recipients for the same message
+          const existing = seenMessageIds.get(msg.messageId);
+          if (msg.recipient && !existing.to.includes(msg.recipient)) {
+            existing.to = existing.to ? `${existing.to}, ${msg.recipient}` : msg.recipient;
+          }
+          return false; // Skip duplicate
+        }
+        seenMessageIds.set(msg.messageId, msg);
         return true;
       });
 
