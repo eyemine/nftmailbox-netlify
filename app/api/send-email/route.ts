@@ -176,6 +176,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as {
       label?: string;
+      domain?: string;
       ownerWallet?: string;
       to?: string;
       subject?: string;
@@ -185,8 +186,9 @@ export async function POST(req: NextRequest) {
       replyToMessageId?: string;
     };
 
-    const { label, ownerWallet, to, subject, cc, bcc } = body;
+    const { label, domain, ownerWallet, to, subject, cc, bcc } = body;
     const mailBody = body.body || '';
+    const fromDomain = domain || 'nftmail.box';
 
     if (!label || typeof label !== 'string') {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
@@ -205,7 +207,7 @@ export async function POST(req: NextRequest) {
     const resolveRes = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'resolveAddress', name: label }),
+      body: JSON.stringify({ action: 'resolveAddress', name: label, domain: fromDomain }),
     });
     const resolved = (await resolveRes.json()) as Record<string, unknown>;
 
@@ -227,7 +229,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 });
     }
 
-    const fromEmail = `${label}@nftmail.box`;
+    const fromEmail = `${label}@${fromDomain}`;
     
     // DFZ address restriction check
     if (isDfzAddress(fromEmail)) {
