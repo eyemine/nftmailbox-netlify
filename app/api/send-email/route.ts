@@ -288,9 +288,35 @@ export async function POST(req: NextRequest) {
             });
             if (sendRes.ok) {
               const sendData = (await sendRes.json()) as Record<string, unknown>;
+              const zohoMessageId = (sendData.data as Record<string, unknown>)?.messageId || 'sent';
+              
+              // Store sent message in KV for sentbox display
+              try {
+                await fetch(WORKER_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'storeSentMessage',
+                    localPart: label,
+                    payload: {
+                      messageId: zohoMessageId,
+                      from: fromEmail,
+                      to,
+                      cc: cc || undefined,
+                      bcc: bcc || undefined,
+                      subject: subject || '(no subject)',
+                      body: htmlBody,
+                      timestamp: Date.now(),
+                    },
+                  }),
+                });
+              } catch (e) {
+                console.error('[send-email] Failed to store sent message:', e);
+              }
+              
               return NextResponse.json({
                 success: true,
-                messageId: (sendData.data as Record<string, unknown>)?.messageId || 'sent',
+                messageId: zohoMessageId,
                 from: fromEmail,
                 to,
                 via: 'zoho',
@@ -312,6 +338,30 @@ export async function POST(req: NextRequest) {
       html: htmlBody,
       text: textBody,
     });
+
+    // Store sent message in KV for sentbox display
+    try {
+      await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'storeSentMessage',
+          localPart: label,
+          payload: {
+            messageId,
+            from: fromEmail,
+            to,
+            cc: cc || undefined,
+            bcc: bcc || undefined,
+            subject: subject || '(no subject)',
+            body: htmlBody,
+            timestamp: Date.now(),
+          },
+        }),
+      });
+    } catch (e) {
+      console.error('[send-email] Failed to store sent message:', e);
+    }
 
     return NextResponse.json({
       success: true,
