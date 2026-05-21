@@ -112,20 +112,36 @@ export async function POST(req: NextRequest) {
     walletAddress?: string;
     txHash?: string;
     currentTier?: string;
+    targetTier?: string;
   };
 
-  const { fid, agentName, txHash, currentTier = 'basic' } = body;
+  const { fid, agentName, txHash, currentTier = 'basic', targetTier } = body;
 
   if (!fid || !agentName || !txHash) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const newTier = (currentTier === 'basic' || currentTier === 'free' || currentTier === 'pro') ? 'professional'
-    : currentTier === 'premium' ? 'vault'
-    : null;
-  if (!newTier) return NextResponse.json({ error: 'Already at max tier' }, { status: 400 });
-
-  const expectedFee = TIER_FEES_USDC[currentTier] ?? 10;
+  // Determine new tier based on current tier and target tier
+  let newTier: string;
+  if (targetTier === 'premium') {
+    newTier = 'vault';
+  } else if (targetTier === 'pro' || currentTier === 'basic' || currentTier === 'free') {
+    newTier = 'professional';
+  } else if (currentTier === 'premium' || currentTier === 'pro') {
+    newTier = 'vault';
+  } else {
+    return NextResponse.json({ error: 'Already at max tier' }, { status: 400 });
+  }
+  
+  // Calculate expected fee: FREE → PRO = $10, FREE → PREMIUM = $24, PRO → PREMIUM = $14
+  let expectedFee: number;
+  if (currentTier === 'free' && targetTier === 'premium') {
+    expectedFee = 24; // Direct to Premium from Free
+  } else if (currentTier === 'pro' || currentTier === 'premium') {
+    expectedFee = TIER_FEES_USDC.premium; // PRO → PREMIUM = $14
+  } else {
+    expectedFee = TIER_FEES_USDC[currentTier] ?? 10; // FREE → PRO = $10
+  }
 
   // Verify payment (USDC or ETH) and derive the sender's wallet from the tx receipt
   const payment = await verifyPayment(txHash, expectedFee);
