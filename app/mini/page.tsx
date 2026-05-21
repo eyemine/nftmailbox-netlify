@@ -16,13 +16,13 @@ const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: stri
     label: 'FREE', emoji: '👻', color: 'text-green-400', border: 'border-green-800',
     description: 'Free inbox secured by your Farcaster identity. 8-day history, 10 sends.',
     features: [['Inbox history','8 days'],['Outbound sends','10'],['Account expiry','Never'],['Identity','Farcaster FID']],
-    upgradeCta: 'Upgrade to Pro — 10 USDC', upgradeFee: 10,
+    upgradeCta: 'Upgrade to PRO 10 USDC one-time', upgradeFee: 10,
   },
   pro: {
     label: 'PRO', emoji: '⚡', color: 'text-yellow-400', border: 'border-yellow-800',
     description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 50 sends.',
     features: [['Inbox history','30 days'],['Outbound sends','50'],['Account expiry','Never'],['Beacon NFT','Base chain']],
-    upgradeCta: 'Upgrade to Premium — 14 USDC', upgradeFee: 14,
+    upgradeCta: 'Upgrade to PREMIUM 24 USDC annual', upgradeFee: 24,
   },
   premium: {
     label: 'PREMIUM', emoji: '👑', color: 'text-purple-400', border: 'border-purple-800',
@@ -1101,9 +1101,15 @@ export default function MiniApp() {
             <button onClick={() => loadInbox(agentName)} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
               Back to Inbox →
             </button>
-            <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-sm">
-              Upgrade to Pro →
-            </button>
+            {inboxTier === 'free' ? (
+              <button onClick={openUpgrade} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg text-sm transition-colors">
+                Upgrade to PRO 10 USDC one-time →
+              </button>
+            ) : inboxTier === 'pro' ? (
+              <button onClick={openUpgrade} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg text-sm transition-colors">
+                Upgrade to PREMIUM 24 USDC annual →
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1132,7 +1138,11 @@ export default function MiniApp() {
           <button
             onClick={handlePayAndUpgrade}
             disabled={upgrading}
-            className="w-full py-3 px-4 bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold text-sm rounded-lg transition-colors"
+            className={`w-full py-3 px-4 font-bold text-sm rounded-lg transition-colors ${
+              inboxTier === 'pro' 
+                ? 'bg-purple-600 hover:bg-purple-500 text-white disabled:bg-gray-700 disabled:text-gray-500'
+                : 'bg-[#43a574] hover:bg-[#3d8f65] text-black disabled:bg-gray-700 disabled:text-gray-500'
+            }`}
           >
             {upgrading ? 'Processing…' : `${tierMeta.upgradeCta} →`}
           </button>
