@@ -1,38 +1,28 @@
-/// POST /api/mini-upgrade
-/// Called by the Farcaster mini-app after sdk.actions.sendToken completes.
-/// Verifies the Base USDC payment, upgrades KV tier, mints Base beacon NFT.
-///
-/// Body: { fid, agentName, txHash, currentTier }
-/// Returns: { status: 'upgraded', newTier, beaconTokenId }
-
 import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || '';
 
+// Payment: USDC on Base (6 decimals)
 const BASE_RPC = 'https://mainnet.base.org';
-const BASE_USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
-const TREASURY  = '0xed0b0694953158dd54d0c36d320b391f44cd67f3';
+const BASE_USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'; // Base USDC
+const TREASURY = '0xed0b0694953158dd54d0c36d320b391f44cd67f3';
+
+// ERC-20 Transfer topic: Transfer(address,address,uint256)
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
-// Beacon NFT on Base (deploy NFTmailBeacon.sol, then set env var)
+// Beacon NFT contract on Base (deploy NFTmailBeacon.sol, then set this env var)
 const NFTMAIL_BEACON_BASE = process.env.NFTMAIL_BEACON_CONTRACT ?? '';
 
-// Fees in USDC (6 decimals): free→pro $10, pro→premium $14
-const TIER_FEES: Record<string, number> = { free: 10, basic: 10, larva: 10, pro: 14, pupa: 14 };
-
-function normaliseTier(raw: string): 'free' | 'pro' | 'premium' {
-  const t = raw.toLowerCase();
-  if (t === 'premium' || t === 'imago') return 'premium';
-  if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
-  return 'free';
-}
+// Fees: free/basic → pro = $10,  pro → premium = $14 (upgrade delta)
+const TIER_FEES_USDC: Record<string, number> = { basic: 10, free: 10, pro: 14 };
 
 async function verifyPayment(
   txHash: string,
   expectedUsdc: number,
 ): Promise<{ ok: boolean; fromWallet?: string; error?: string; ethValue?: string }> {
   try {
+    // Fetch both tx (for sender) and receipt (for logs) in parallel
     const [txRes, rcptRes, ethPriceRes] = await Promise.all([
       fetch(BASE_RPC, {
         method: 'POST',
@@ -49,53 +39,47 @@ async function verifyPayment(
         cache: 'no-store',
       }).catch(() => null), // Non-fatal: fallback to $3000/ETH
     ]);
-    const txData  = await txRes.json()   as { result?: any };
+    const txData = await txRes.json() as { result?: any };
     const rcptData = await rcptRes.json() as { result?: any };
-    const tx      = txData.result;
+    const tx = txData.result;
     const receipt = rcptData.result;
-    if (!tx)      return { ok: false, error: 'Transaction not found' };
+    if (!tx) return { ok: false, error: 'Transaction not found' };
     if (!receipt) return { ok: false, error: 'Transaction not yet confirmed' };
     if (receipt.status !== '0x1') return { ok: false, error: 'Transaction reverted' };
 
-    const fromWallet: string = (tx.from as string)?.toLowerCase() ?? '';
-    
-    // 1. First check: USDC transfer (preferred)
-    const expectedWei = BigInt(Math.floor(expectedUsdc * 1e6));
-    const logs: any[] = receipt.logs ?? [];
+    const fromWallet: string = tx.from?.toLowerCase() ?? '';
 
+    // 1. First check: USDC transfer (preferred)
+    const expectedUsdcWei = BigInt(Math.floor(expectedUsdc * 1e6));
+    const logs: any[] = receipt.logs ?? [];
     const usdcMatch = logs.find((log: any) => {
-      if ((log.address as string)?.toLowerCase() !== BASE_USDC) return false;
+      if (log.address?.toLowerCase() !== BASE_USDC) return false;
       if (log.topics?.[0] !== TRANSFER_TOPIC) return false;
       const from = ('0x' + (log.topics[1] ?? '').slice(26)).toLowerCase();
       const to   = ('0x' + (log.topics[2] ?? '').slice(26)).toLowerCase();
       if (from !== fromWallet) return false;
-      if (to   !== TREASURY)   return false;
-      return BigInt(log.data || '0x0') >= expectedWei;
+      if (to !== TREASURY) return false;
+      const value = BigInt(log.data || '0x0');
+      return value >= expectedUsdcWei;
     });
 
-    if (usdcMatch) return { ok: true, fromWallet };
+    if (usdcMatch) {
+      return { ok: true, fromWallet };
+    }
 
     // 2. Fallback: Native ETH transfer to treasury
+    // Check if this is a simple ETH transfer (no contract interaction, value > 0)
     const txValue = BigInt(tx.value || '0x0');
     const txTo = (tx.to || '').toLowerCase();
     
     if (txTo === TREASURY && txValue > 0n) {
       // Get ETH price for USD valuation (fallback $3000 if API fails)
       let ethUsdPrice = 3000;
-      const ETH_PRICE_MIN = 1000; // Minimum acceptable ETH price (bounds check)
-      const ETH_PRICE_MAX = 10000; // Maximum acceptable ETH price (bounds check)
-      
       if (ethPriceRes) {
         try {
           const priceData = await ethPriceRes.json() as { ethereum?: { usd?: number } };
           if (priceData?.ethereum?.usd) {
-            const price = priceData.ethereum.usd;
-            // Reject prices outside reasonable bounds (prevents oracle manipulation)
-            if (price >= ETH_PRICE_MIN && price <= ETH_PRICE_MAX) {
-              ethUsdPrice = price;
-            } else {
-              console.log(`[mini-upgrade] ETH price ${price} outside bounds [${ETH_PRICE_MIN}, ${ETH_PRICE_MAX}], using fallback 3000`);
-            }
+            ethUsdPrice = priceData.ethereum.usd;
           }
         } catch {}
       }
@@ -115,7 +99,7 @@ async function verifyPayment(
       }
     }
 
-    return { ok: false, error: `No USDC transfer of ≥${expectedUsdc} USDC or equivalent ETH payment to treasury in tx` };
+    return { ok: false, error: `No USDC transfer of ≥${expectedUsdc} USDC or equivalent ETH payment to treasury found in tx` };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? 'Payment verification failed' };
   }
@@ -125,44 +109,52 @@ export async function POST(req: NextRequest) {
   const body = await req.json() as {
     fid?: number;
     agentName?: string;
+    walletAddress?: string;
     txHash?: string;
     currentTier?: string;
   };
 
-  const { fid, agentName, txHash, currentTier = 'free' } = body;
+  const { fid, agentName, txHash, currentTier = 'basic' } = body;
+
   if (!fid || !agentName || !txHash) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const normCurrent = normaliseTier(currentTier);
-  const newTier = normCurrent === 'free' ? 'pro' : normCurrent === 'pro' ? 'premium' : null;
+  const newTier = (currentTier === 'basic' || currentTier === 'free') ? 'pro'
+    : currentTier === 'pro' ? 'premium'
+    : null;
   if (!newTier) return NextResponse.json({ error: 'Already at max tier' }, { status: 400 });
 
-  const expectedFee = TIER_FEES[currentTier.toLowerCase()] ?? 10;
+  const expectedFee = TIER_FEES_USDC[currentTier] ?? 10;
+
+  // Verify payment (USDC or ETH) and derive the sender's wallet from the tx receipt
   const payment = await verifyPayment(txHash, expectedFee);
   if (!payment.ok) return NextResponse.json({ error: payment.error }, { status: 402 });
-
   const walletAddress = payment.fromWallet!;
 
-  // Link wallet in KV
-  await fetch(WORKER_URL, {
+  // Link wallet
+  const linkRes = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'linkWallet', fid, agentName, walletAddress }),
-  }).catch(() => {});
+    body: JSON.stringify({ action: 'linkWallet', fid, name: agentName, walletAddress }),
+  });
+  const linkData = await linkRes.json() as { status?: string; error?: string };
+  if (linkData.status !== 'linked') {
+    return NextResponse.json({ error: linkData.error || 'Wallet link failed' }, { status: 500 });
+  }
 
   // Upgrade tier in KV
   const upgradeRes = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'upgradeTier', label: agentName, newTier, secret: WEBHOOK_SECRET }),
+    body: JSON.stringify({ action: 'upgradeTier', name: agentName, tier: newTier, walletAddress: payment.fromWallet, secret: WEBHOOK_SECRET }),
   });
   const upgradeData = await upgradeRes.json() as { status?: string; newTier?: string; error?: string };
   if (upgradeData.status !== 'upgraded') {
-    return NextResponse.json({ error: upgradeData.error || 'KV upgrade failed' }, { status: 500 });
+    return NextResponse.json({ error: upgradeData.error || 'Upgrade failed' }, { status: 500 });
   }
 
-  // Mint Base beacon NFT (non-fatal — KV is source of truth)
+  // Mint Base beacon NFT to payer's wallet (non-fatal — KV is source of truth if mint fails)
   let beaconTokenId: number | null = null;
   if (NFTMAIL_BEACON_BASE && process.env.TREASURY_PRIVATE_KEY) {
     try {
@@ -187,13 +179,14 @@ export async function POST(req: NextRequest) {
         args: [walletAddress as `0x${string}`],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      // Parse tokenId from Transfer event log (topic[3] = tokenId for ERC721)
       const transferLog = receipt.logs.find(l =>
-        l.topics[0] === TRANSFER_TOPIC
+        l.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
       );
       if (transferLog?.topics[3]) {
         beaconTokenId = Number(BigInt(transferLog.topics[3]));
       }
-      // Store beacon details in KV
+      // Update KV with beacon details
       await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,7 +198,7 @@ export async function POST(req: NextRequest) {
           beaconTokenId,
           secret: WEBHOOK_SECRET,
         }),
-      }).catch(() => {});
+      });
       console.log(`Beacon minted: ${mintFn} tokenId=${beaconTokenId} to ${walletAddress}`);
     } catch (err) {
       console.error('Beacon mint failed (non-fatal):', err);
@@ -213,12 +206,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { 
-      status: 'upgraded', 
-      newTier: upgradeData.newTier ?? newTier, 
-      beaconTokenId,
-      ...(payment.ethValue ? { ethValue: payment.ethValue } : {}),
-    },
+    { status: 'upgraded', newTier: upgradeData.newTier ?? newTier, beaconTokenId },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }
