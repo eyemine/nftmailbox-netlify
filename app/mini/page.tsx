@@ -25,7 +25,7 @@ const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: stri
     upgradeCta: 'Upgrade to PREMIUM 14 USDC annual', upgradeFee: 14,
   },
   premium: {
-    label: 'PREMIUM', emoji: '�', color: 'text-purple-400', border: 'border-purple-800',
+    label: 'PREMIUM', emoji: '💼', color: 'text-purple-400', border: 'border-purple-800',
     description: 'Sovereign inbox with auto-forwarding. 365-day history, unlimited sends.',
     features: [['Inbox history','365 days'],['Outbound sends','Unlimited'],['Auto-Forward','Any email'],['Beacon NFT','Base chain']],
     upgradeCta: null, upgradeFee: 0,
@@ -1011,43 +1011,35 @@ export default function MiniApp() {
                   </div>
                 )}
                 {inboxTier === 'free' ? (
-                  <div className="space-y-2">
-                    {/* PRIMARY: PRO */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* PRO — green-tinted dark card */}
                     <button
                       onClick={() => openUpgrade('pro')}
-                      className="w-full flex items-center gap-3 py-3 px-4 bg-[#43a574] text-black text-sm font-semibold rounded-lg hover:bg-[#3d8f65] transition-colors opacity-[0.88]"
+                      className="flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-green-950/40 border border-green-800/40 hover:border-green-600/60 hover:bg-green-950/60 transition-colors text-center"
                     >
-                      <span className="text-lg">🗄️</span>
-                      <div className="text-left">
-                        <div className="font-bold">PRO <span className="font-normal">— 10 USDC one-time</span></div>
-                        <div className="text-xs opacity-70 mt-0.5">100 daily sends · 30-day history</div>
-                      </div>
+                      <span className="text-[#43a574] text-xs font-bold tracking-wide">PRO</span>
+                      <span className="text-[10px] text-gray-500 mt-0.5">10 USDC one-time</span>
+                      <span className="mt-2 text-xs text-green-400 font-semibold">Upgrade</span>
                     </button>
-                    {/* SECONDARY: PREMIUM — text-link row */}
-                    <div
+                    {/* PREMIUM — purple-tinted dark card */}
+                    <button
                       onClick={() => openUpgrade('premium')}
-                      className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
+                      className="flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-purple-950/40 border border-purple-800/40 hover:border-purple-600/60 hover:bg-purple-950/60 transition-colors text-center"
                     >
-                      <span className="text-base mt-0.5">�</span>
-                      <div className="flex-1 min-w-0">
-                        <div><span className="text-purple-500 text-xs font-semibold">PREMIUM</span><span className="text-gray-500 text-xs"> — 24 USDC annual</span></div>
-                        <div className="text-gray-600 text-[11px] mt-0.5">AutoForwarding · 365-day history</div>
-                      </div>
-                      <span className="text-gray-600 text-xs mt-0.5">→</span>
-                    </div>
+                      <span className="text-purple-400 text-xs font-bold tracking-wide">PREMIUM</span>
+                      <span className="text-[10px] text-gray-500 mt-0.5">24 USDC annual</span>
+                      <span className="mt-2 text-xs text-purple-400 font-semibold">Upgrade</span>
+                    </button>
                   </div>
                 ) : inboxTier === 'pro' ? (
-                  <div
+                  <button
                     onClick={() => openUpgrade('premium')}
-                    className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
+                    className="w-full flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-purple-950/40 border border-purple-800/40 hover:border-purple-600/60 hover:bg-purple-950/60 transition-colors text-center"
                   >
-                    <span className="text-base mt-0.5">�</span>
-                    <div className="flex-1 min-w-0">
-                      <div><span className="text-purple-500 text-xs font-semibold">PREMIUM</span><span className="text-gray-500 text-xs"> — 14 USDC annual</span></div>
-                      <div className="text-gray-600 text-[11px] mt-0.5">AutoForwarding · 365-day history · CC/BCC</div>
-                    </div>
-                    <span className="text-gray-600 text-xs mt-0.5">→</span>
-                  </div>
+                    <span className="text-purple-400 text-xs font-bold tracking-wide">PREMIUM</span>
+                    <span className="text-[10px] text-gray-500 mt-0.5">14 USDC annual · AutoForwarding · 365-day history</span>
+                    <span className="mt-2 text-xs text-purple-400 font-semibold">Upgrade</span>
+                  </button>
                 ) : null}
               </div>
             )}
