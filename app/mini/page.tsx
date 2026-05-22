@@ -15,19 +15,19 @@ const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: stri
   free: {
     label: 'FREE', emoji: '👻', color: 'text-green-400', border: 'border-green-800',
     description: 'Free inbox secured by your Farcaster identity. 8-day history, 10 sends.',
-    features: [['Inbox history','8 days'],['Outbound sends','10'],['Account expiry','Never'],['Identity','Farcaster FID']],
+    features: [['Inbox history','8 days'],['Outbound sends','10 lifetime'],['Account expiry','Never'],['Identity','Farcaster FID']],
     upgradeCta: 'Upgrade to PRO 10 USDC one-time', upgradeFee: 10,
   },
   pro: {
-    label: 'PRO', emoji: '⚡', color: 'text-yellow-400', border: 'border-yellow-800',
-    description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 50 sends.',
-    features: [['Inbox history','30 days'],['Outbound sends','50'],['Account expiry','Never'],['Beacon NFT','Base chain']],
+    label: 'PRO', emoji: '🗄️', color: 'text-yellow-400', border: 'border-yellow-800',
+    description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 100 sends daily.',
+    features: [['Inbox history','30 days'],['Outbound sends','100 daily'],['Account expiry','Never'],['Beacon NFT','Base chain']],
     upgradeCta: 'Upgrade to PREMIUM 14 USDC annual', upgradeFee: 14,
   },
   premium: {
-    label: 'PREMIUM', emoji: '👑', color: 'text-purple-400', border: 'border-purple-800',
-    description: 'Sovereign agent inbox. Unlimited retention, 200 sends, full agent stack.',
-    features: [['Inbox history','Unlimited'],['Outbound sends','200'],['Account expiry','Never'],['Agent stack','ghostagent.ninja']],
+    label: 'PREMIUM', emoji: '�', color: 'text-purple-400', border: 'border-purple-800',
+    description: 'Sovereign inbox with auto-forwarding. 365-day history, unlimited sends.',
+    features: [['Inbox history','365 days'],['Outbound sends','Unlimited'],['Auto-Forward','Any email'],['Beacon NFT','Base chain']],
     upgradeCta: null, upgradeFee: 0,
   },
 };
@@ -202,6 +202,7 @@ export default function MiniApp() {
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const otpRequestedRef = useRef(false);
   // Forwarding (premium only)
   const [forwardEnabled, setForwardEnabled] = useState(false);
@@ -500,7 +501,9 @@ export default function MiniApp() {
   const loadInbox = useCallback(async (name: string) => {
     let privKey = eciesPrivKey;
     if (!privKey) { try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {} }
+    setRefreshing(true);
     await loadInboxDirect(name, privKey);
+    setRefreshing(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eciesPrivKey]);
 
@@ -853,7 +856,15 @@ export default function MiniApp() {
           
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">Inbox</h2>
-            <button onClick={() => loadInbox(agentName)} className="text-[#43a574] text-sm hover:text-[#5ab883]">Refresh</button>
+            <button
+              onClick={() => loadInbox(agentName)}
+              disabled={refreshing}
+              className="text-[#43a574] text-sm hover:text-[#5ab883] disabled:opacity-50 flex items-center gap-1"
+            >
+              {refreshing ? (
+                <><span className="inline-block w-3 h-3 border border-[#43a574] border-t-transparent rounded-full animate-spin" /> Refreshing</>
+              ) : 'Refresh'}
+            </button>
           </div>
           <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
           
@@ -1004,38 +1015,38 @@ export default function MiniApp() {
                     {/* PRIMARY: PRO */}
                     <button
                       onClick={() => openUpgrade('pro')}
-                      className="w-full flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-[#15803d] to-[#166534] text-white text-sm font-semibold rounded-lg hover:from-[#166534] hover:to-[#14532d] transition-colors"
+                      className="w-full flex items-center gap-3 py-3 px-4 bg-[#43a574] text-black text-sm font-semibold rounded-lg hover:bg-[#3d8f65] transition-colors opacity-[0.88]"
                     >
-                      <span className="text-lg">⚡</span>
+                      <span className="text-lg">🗄️</span>
                       <div className="text-left">
-                        <div className="font-bold">PRO <span className="font-normal opacity-90">— 10 USDC one-time</span></div>
-                        <div className="text-xs opacity-75 mt-0.5">Unlimited sends · 30-day history</div>
+                        <div className="font-bold">PRO <span className="font-normal">— 10 USDC one-time</span></div>
+                        <div className="text-xs opacity-70 mt-0.5">100 daily sends · 30-day history</div>
                       </div>
                     </button>
                     {/* SECONDARY: PREMIUM — text-link row */}
                     <div
                       onClick={() => openUpgrade('premium')}
-                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
+                      className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
                     >
-                      <span className="text-base">👑</span>
+                      <span className="text-base mt-0.5">�</span>
                       <div className="flex-1 min-w-0">
-                        <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
-                        <span className="text-gray-500 text-xs"> — 24 USDC annual · Auto-Forward to Farcaster</span>
+                        <div><span className="text-purple-500 text-xs font-semibold">PREMIUM</span><span className="text-gray-500 text-xs"> — 24 USDC annual</span></div>
+                        <div className="text-gray-600 text-[11px] mt-0.5">AutoForwarding · 365-day history</div>
                       </div>
-                      <span className="text-gray-600 text-xs">→</span>
+                      <span className="text-gray-600 text-xs mt-0.5">→</span>
                     </div>
                   </div>
                 ) : inboxTier === 'pro' ? (
                   <div
                     onClick={() => openUpgrade('premium')}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
+                    className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
                   >
-                    <span className="text-base">👑</span>
+                    <span className="text-base mt-0.5">�</span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
-                      <span className="text-gray-500 text-xs"> — 14 USDC annual · Auto-Forward · Multi-send · CC/BCC</span>
+                      <div><span className="text-purple-500 text-xs font-semibold">PREMIUM</span><span className="text-gray-500 text-xs"> — 14 USDC annual</span></div>
+                      <div className="text-gray-600 text-[11px] mt-0.5">AutoForwarding · 365-day history · CC/BCC</div>
                     </div>
-                    <span className="text-gray-600 text-xs">→</span>
+                    <span className="text-gray-600 text-xs mt-0.5">→</span>
                   </div>
                 ) : null}
               </div>
