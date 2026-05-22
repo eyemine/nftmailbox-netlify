@@ -1199,7 +1199,7 @@ export default function MiniApp() {
   if (step === 'upgrade') {
     const tierMeta = TIER_META[targetUpgradeTier === 'premium' ? 'pro' : inboxTier];
     const nextTier = TIER_META[targetUpgradeTier];
-    const upgradeFee = targetUpgradeTier === 'premium' ? 24 : tierMeta.upgradeFee;
+    const upgradeFee = targetUpgradeTier === 'premium' ? (inboxTier === 'pro' ? 14 : 24) : tierMeta.upgradeFee;
     const isPremiumUpgrade = targetUpgradeTier === 'premium';
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
