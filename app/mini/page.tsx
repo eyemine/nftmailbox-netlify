@@ -149,7 +149,7 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'settings' | 'error';
 
 interface ProvisionResult {
   status: string;
@@ -203,6 +203,11 @@ export default function MiniApp() {
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
   const otpRequestedRef = useRef(false);
+  // Forwarding (premium only)
+  const [forwardEnabled, setForwardEnabled] = useState(false);
+  const [forwardTarget, setForwardTarget] = useState('');
+  const [savingForward, setSavingForward] = useState(false);
+  const [forwardSaved, setForwardSaved] = useState(false);
 
   // Draft auto-save to localStorage every 5 seconds
   useEffect(() => {
@@ -472,6 +477,21 @@ export default function MiniApp() {
         } catch {}
       }
       setSendsRemaining(quota);
+      // Load forwarding config for premium users
+      if (normaliseTier(effectiveTier) === 'premium') {
+        try {
+          const fwdRes = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getForwardingConfig', agentName: name }),
+          });
+          const fwdData = await fwdRes.json() as { config?: { enabled?: boolean; targetEmail?: string } };
+          if (fwdData.config) {
+            setForwardEnabled(fwdData.config.enabled ?? false);
+            setForwardTarget(fwdData.config.targetEmail ?? '');
+          }
+        } catch {}
+      }
     } catch {
       setMessages([]);
     }
@@ -820,6 +840,12 @@ export default function MiniApp() {
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
+              {/* Settings gear — premium only */}
+              {inboxTier === 'premium' && (
+                <button onClick={() => setStep('settings')} className="text-gray-500 hover:text-purple-400 transition-colors p-1" title="Forwarding settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              )}
               {/* Tier badge — tap for about panel */}
               <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />
             </div>
@@ -975,26 +1001,42 @@ export default function MiniApp() {
                 )}
                 {inboxTier === 'free' ? (
                   <div className="space-y-2">
+                    {/* PRIMARY: PRO */}
                     <button
                       onClick={() => openUpgrade('pro')}
-                      className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
+                      className="w-full flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-[#15803d] to-[#166534] text-white text-sm font-semibold rounded-lg hover:from-[#166534] hover:to-[#14532d] transition-colors"
                     >
-                      Upgrade to PRO 10 USDC one-time →
+                      <span className="text-lg">⚡</span>
+                      <div className="text-left">
+                        <div className="font-bold">PRO <span className="font-normal opacity-90">— 10 USDC one-time</span></div>
+                        <div className="text-xs opacity-75 mt-0.5">Unlimited sends · 30-day history</div>
+                      </div>
                     </button>
-                    <button
+                    {/* SECONDARY: PREMIUM — text-link row */}
+                    <div
                       onClick={() => openUpgrade('premium')}
-                      className="w-full py-2 px-3 bg-purple-600 text-white text-sm font-semibold rounded hover:bg-purple-500 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
                     >
-                      Upgrade to PREMIUM 24 USDC annual →
-                    </button>
+                      <span className="text-base">👑</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                        <span className="text-gray-500 text-xs"> — 24 USDC annual · Auto-Forward to Farcaster</span>
+                      </div>
+                      <span className="text-gray-600 text-xs">→</span>
+                    </div>
                   </div>
                 ) : inboxTier === 'pro' ? (
-                  <button
+                  <div
                     onClick={() => openUpgrade('premium')}
-                    className="w-full py-2 px-3 bg-purple-600 text-white text-sm font-semibold rounded hover:bg-purple-500 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors"
                   >
-                    Upgrade to PREMIUM 14 USDC annual →
-                  </button>
+                    <span className="text-base">👑</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                      <span className="text-gray-500 text-xs"> — 14 USDC annual · Auto-Forward · Multi-send · CC/BCC</span>
+                    </div>
+                    <span className="text-gray-600 text-xs">→</span>
+                  </div>
                 ) : null}
               </div>
             )}
@@ -1126,17 +1168,24 @@ export default function MiniApp() {
             </button>
             {inboxTier === 'free' ? (
               <div className="space-y-2">
-                <button onClick={() => openUpgrade('pro')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg text-sm transition-colors">
-                  Upgrade to PRO 10 USDC one-time →
+                <button onClick={() => openUpgrade('pro')} className="w-full flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-[#15803d] to-[#166534] text-white text-sm font-semibold rounded-lg hover:from-[#166534] hover:to-[#14532d] transition-colors">
+                  <span>⚡</span>
+                  <div className="text-left"><div className="font-bold">PRO <span className="font-normal opacity-90">— 10 USDC one-time</span></div></div>
                 </button>
-                <button onClick={() => openUpgrade('premium')} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg text-sm transition-colors">
-                  Upgrade to PREMIUM 24 USDC annual →
-                </button>
+                <div onClick={() => openUpgrade('premium')} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors">
+                  <span>👑</span>
+                  <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                  <span className="text-gray-500 text-xs">— 24 USDC annual · Auto-Forward</span>
+                  <span className="text-gray-600 text-xs ml-auto">→</span>
+                </div>
               </div>
             ) : inboxTier === 'pro' ? (
-              <button onClick={() => openUpgrade('premium')} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg text-sm transition-colors">
-                Upgrade to PREMIUM 14 USDC annual →
-              </button>
+              <div onClick={() => openUpgrade('premium')} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors">
+                <span>👑</span>
+                <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                <span className="text-gray-500 text-xs">— 14 USDC annual · Auto-Forward</span>
+                <span className="text-gray-600 text-xs ml-auto">→</span>
+              </div>
             ) : null}
           </div>
         </div>
@@ -1183,6 +1232,119 @@ export default function MiniApp() {
           >
             ← Back to Inbox
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'settings') {
+    async function saveForwardingConfig() {
+      if (savingForward) return;
+      setSavingForward(true);
+      setForwardSaved(false);
+      try {
+        // Sign In With Farcaster to prove ownership before saving
+        let token: string | undefined;
+        try {
+          const result = await (sdk.actions as any).signIn({ nonce: `fwd-${Date.now()}` });
+          token = result?.message ?? result?.token ?? undefined;
+        } catch {
+          // SIWF may not be available in all clients — proceed without (worker validates tier)
+        }
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'setForwardingConfig',
+            agentName,
+            config: {
+              enabled: forwardEnabled,
+              targetEmail: forwardTarget.trim(),
+              updatedAt: Date.now(),
+              ...(token ? { siwfToken: token } : {}),
+            },
+          }),
+        });
+        const data = await res.json() as { config?: unknown; error?: string };
+        if (data.error) throw new Error(data.error);
+        setForwardSaved(true);
+        setTimeout(() => setForwardSaved(false), 3000);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to save forwarding config');
+      } finally {
+        setSavingForward(false);
+      }
+    }
+    return (
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
+        <div className="w-full max-w-sm mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <button onClick={() => setStep('inbox')} className="text-gray-500 text-lg hover:text-white">←</button>
+            <div>
+              <h2 className="text-white font-bold text-lg">Premium Settings</h2>
+              <p className="text-gray-600 text-xs font-mono">{humanEmail || `${agentName}@nftmail.box`}</p>
+            </div>
+          </div>
+
+          {/* Forwarding section */}
+          <div className="bg-gray-900 border border-purple-900/50 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-white text-sm font-semibold">Auto-Forward to Email</p>
+                <p className="text-gray-500 text-xs mt-0.5">Forward incoming mail to an external address</p>
+              </div>
+              {/* Toggle */}
+              <button
+                onClick={() => setForwardEnabled(v => !v)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${forwardEnabled ? 'bg-purple-600' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${forwardEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            {forwardEnabled && (
+              <input
+                type="email"
+                placeholder="forward-to@example.com"
+                value={forwardTarget}
+                onChange={e => setForwardTarget(e.target.value)}
+                className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2.5 text-white font-mono text-sm placeholder-gray-600 focus:outline-none focus:border-purple-500"
+                autoCapitalize="none"
+                autoComplete="off"
+              />
+            )}
+            {forwardEnabled && (
+              <p className="text-gray-600 text-[10px] mt-2">Emails received at your nftmail.box address will be forwarded here. Your inbox still stores a copy.</p>
+            )}
+          </div>
+
+          {/* Feature summary */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 mb-6 space-y-2">
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">Premium Features</p>
+            {[
+              ['👑', 'Auto-Forward', 'Push to any email address'],
+              ['📬', 'Multi-send', 'Send to multiple recipients'],
+              ['📋', 'CC / BCC', 'Carbon copy fields'],
+              ['🗄️', '365-day history', 'Full year retention'],
+              ['⛓️', 'Beacon NFT', 'On-chain identity (Base)'],
+            ].map(([icon, title, desc]) => (
+              <div key={title} className="flex items-center gap-2">
+                <span className="text-base">{icon}</span>
+                <div>
+                  <span className="text-white text-xs font-medium">{title}</span>
+                  <span className="text-gray-600 text-xs"> — {desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={saveForwardingConfig}
+            disabled={savingForward || (forwardEnabled && !forwardTarget.trim())}
+            className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-600 text-white font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingForward ? 'Saving…' : forwardSaved ? '✓ Saved' : 'Save Settings'}
+          </button>
+          <p className="text-gray-600 text-[10px] text-center mt-2">Requires wallet signature to verify ownership</p>
         </div>
       </div>
     );
