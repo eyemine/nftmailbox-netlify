@@ -33,8 +33,8 @@ const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: stri
 };
 function normaliseTier(raw: string | undefined): NftmailTier {
   const t = (raw ?? '').toLowerCase();
-  if (t === 'premium' || t === 'imago') return 'premium';
-  if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
+  if (t === 'premium' || t === 'imago' || t === 'vault') return 'premium';
+  if (t === 'pro' || t === 'pupa' || t === 'lite' || t === 'professional') return 'pro';
   return 'free';
 }
 function TierBadge({ tier, onClick }: { tier: NftmailTier; onClick: () => void }) {
@@ -431,7 +431,7 @@ export default function MiniApp() {
         const sovereignRes = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getAgentProfile', label: name }),
+          body: JSON.stringify({ action: 'getAgentProfile', agentName: name }),
         });
         const sovereignData = await sovereignRes.json();
         if (sovereignData?.tier && sovereignData.tier !== 'basic' && sovereignData.tier !== 'free') {
@@ -723,7 +723,7 @@ export default function MiniApp() {
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getAgentProfile', label }),
+          body: JSON.stringify({ action: 'getAgentProfile', agentName: label }),
         });
         const data = await res.json();
         if (data && data.label) {
