@@ -435,9 +435,11 @@ export default function DashboardPage() {
                     }}
                     className="bg-transparent text-sm font-medium text-emerald-300 outline-none"
                   >
-                    {names.map((n: NftMailName) => (
-                      <option key={n.tokenId} value={n.label} className="bg-black text-white">{n.email}</option>
-                    ))}
+                    {[...names]
+                      .sort((a, b) => a.email.localeCompare(b.email))
+                      .map((n: NftMailName) => (
+                        <option key={n.tokenId} value={n.label} className="bg-black text-white">{n.email}</option>
+                      ))}
                   </select>
                 )}
               </div>
