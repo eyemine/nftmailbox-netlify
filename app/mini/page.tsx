@@ -434,8 +434,9 @@ export default function MiniApp() {
           body: JSON.stringify({ action: 'getAgentProfile', agentName: name }),
         });
         const sovereignData = await sovereignRes.json();
-        if (sovereignData?.tier && sovereignData.tier !== 'basic' && sovereignData.tier !== 'free') {
-          sovereignTier = sovereignData.tier;
+        // Worker now returns tier in profile.tier (merged from acct-tier)
+        if (sovereignData?.profile?.tier && sovereignData.profile.tier !== 'basic' && sovereignData.profile.tier !== 'free') {
+          sovereignTier = sovereignData.profile.tier;
         }
       } catch {
         // Ignore errors, use FID tier
