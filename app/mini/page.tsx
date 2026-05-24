@@ -186,6 +186,7 @@ export default function MiniApp() {
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [inboxTier, setInboxTier] = useState<NftmailTier>('free');
+  const [tierLoaded, setTierLoaded] = useState(false);
   const [showTierAbout, setShowTierAbout] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [targetUpgradeTier, setTargetUpgradeTier] = useState<NftmailTier>('pro');
@@ -459,6 +460,7 @@ export default function MiniApp() {
       // Set tier from response or default to larva
       // Use effectiveTier (combines FID-provisioned and sovereign account tiers)
       setInboxTier(normaliseTier(effectiveTier));
+      setTierLoaded(true);
       // Load sentbox from worker if available
       if (sentboxRes) {
         try {
@@ -853,7 +855,7 @@ export default function MiniApp() {
                 </button>
               )}
               {/* Tier badge — tap for about panel */}
-              <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />
+              {tierLoaded && <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />}
             </div>
           </div>
           
