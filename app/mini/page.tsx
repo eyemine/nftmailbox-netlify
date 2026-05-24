@@ -472,9 +472,11 @@ export default function MiniApp() {
       let quota = data.sendsRemaining ?? 10;
       if (quotaRes) {
         try {
-          const quotaData = await quotaRes.json() as { sendsRemaining?: number };
+          const quotaData = await quotaRes.json() as { sendsRemaining?: number | string };
           if (typeof quotaData.sendsRemaining === 'number') {
             quota = quotaData.sendsRemaining;
+          } else if (quotaData.sendsRemaining === 'unlimited') {
+            quota = 'unlimited';
           }
         } catch {}
       }
@@ -997,7 +999,9 @@ export default function MiniApp() {
             <button onClick={() => setStep('compose')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
               <span>✉️</span> Compose
             </button>
-            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
+            <p className="text-gray-600 text-xs text-center">
+              {sendsRemaining === 'unlimited' ? 'Unlimited sends' : `${sendsRemaining} sends remaining`}
+            </p>
             
             {/* Tier upgrade CTA */}
             {TIER_META[inboxTier].upgradeCta && (
@@ -1133,7 +1137,9 @@ export default function MiniApp() {
               </button>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">{sendsRemaining} sends remaining</span>
+              <span className="text-gray-600">
+                {sendsRemaining === 'unlimited' ? 'Unlimited sends' : `${sendsRemaining} sends remaining`}
+              </span>
               {draftSavedAt && (
                 <span className="text-gray-500">Draft saved {draftSavedAt}</span>
               )}
