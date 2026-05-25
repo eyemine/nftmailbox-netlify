@@ -200,13 +200,19 @@ export default function DashboardPage() {
     }
   }, [authenticated, preferredWallet?.address, resolveNames]);
 
-  // Extract unique domains from user's names for domain selection
+  // Extract unique domains from user's names for domain selection.
+  // PREMIUM mailboxes can also send from ghostmail.box.
   useEffect(() => {
     if (names.length > 0) {
       const domains = [...new Set(names.map(n => {
         const parts = n.email.split('@');
         return parts.length === 2 ? parts[1] : 'nftmail.box';
       }))];
+      const t = (inboxTier || '').toLowerCase();
+      const isPremiumTier = t === 'premium' || t === 'imago' || t === 'ghost';
+      if (isPremiumTier && !domains.includes('ghostmail.box')) {
+        domains.push('ghostmail.box');
+      }
       setAvailableDomains(domains);
       // Set default domain from selected name if available
       if (selectedName) {
@@ -214,7 +220,7 @@ export default function DashboardPage() {
         setSelectedFromDomain(selectedDomain);
       }
     }
-  }, [names, selectedName]);
+  }, [names, selectedName, inboxTier]);
 
   useEffect(() => {
     if (selectedName) {
@@ -367,14 +373,14 @@ export default function DashboardPage() {
         <WarrantCanary />
 
         {/* Header */}
-        <header className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+        <header className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition shrink-0">
             <Image src="/nftmail-logo.png" alt="NFTMail" width={40} height={40} className="opacity-95" />
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-end">
             {authenticated && selectedName && (
-              <a href={`/inbox/${encodeURIComponent(selectedName.email.replace('@nftmail.box', ''))}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[rgba(0,163,255,0.25)] bg-[rgba(0,163,255,0.06)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.14)]">View Public Inbox ↗</a>
+              <a href={`/inbox/${encodeURIComponent(selectedName.email.replace('@nftmail.box', ''))}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[rgba(0,163,255,0.25)] bg-[rgba(0,163,255,0.06)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.14)] whitespace-nowrap">View Public Inbox ↗</a>
             )}
             {authenticated && preferredWallet && (
               <span className="text-xs text-[var(--muted)]">{preferredWallet.address.slice(0, 6)}...{preferredWallet.address.slice(-4)}</span>

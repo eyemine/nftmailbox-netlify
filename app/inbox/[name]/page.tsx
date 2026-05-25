@@ -1245,29 +1245,12 @@ export default function InboxPage() {
           </div>
         )}
 
-        {/* ── Private inbox: blurred placeholder (account exists + blurred for non-owner) ── */}
+        {/* ── Private inbox: simple notice (no blurred placeholder) ── */}
         {!loading && !error && isBlurred && messages.length === 0 && (
-          <div className="space-y-2 select-none" aria-hidden="true">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2 blur-sm opacity-60">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    <div className={`h-3 rounded bg-white/20 ${i === 0 ? 'w-48' : i === 1 ? 'w-36' : 'w-56'}`} />
-                    <div className="h-2.5 w-32 rounded bg-white/10" />
-                  </div>
-                  <div className="h-2.5 w-12 rounded bg-white/10" />
-                </div>
-                <div className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2 space-y-1">
-                  <div className={`h-2 rounded bg-white/10 ${i === 0 ? 'w-full' : i === 1 ? 'w-4/5' : 'w-3/4'}`} />
-                  <div className="h-2 w-2/3 rounded bg-white/10" />
-                </div>
-              </div>
-            ))}
-            <div className="flex flex-col items-center justify-center py-6 gap-2">
-              <svg className="h-8 w-8 text-emerald-400 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
-              <p className="text-xs font-medium text-emerald-300">This inbox is private</p>
-              <p className="text-[10px] text-[var(--muted)]">Connect the owner wallet to view messages</p>
-            </div>
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <svg className="h-10 w-10 text-emerald-400 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
+            <p className="text-sm font-semibold text-emerald-300">This inbox is private and encrypted</p>
+            <p className="text-[11px] text-[var(--muted)]">Connect the owner wallet to view messages</p>
           </div>
         )}
 
@@ -1282,8 +1265,17 @@ export default function InboxPage() {
           </div>
         )}
 
+        {/* ── Blurred private inbox: show notice instead of messages ── */}
+        {!loading && !error && isBlurred && messages.length > 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <svg className="h-10 w-10 text-emerald-400 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
+            <p className="text-sm font-semibold text-emerald-300">This inbox is private and encrypted</p>
+            <p className="text-[11px] text-[var(--muted)]">Connect the owner wallet to view messages</p>
+          </div>
+        )}
+
         {/* ── Message count ── */}
-        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && messages.length > 0 && (
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && !isBlurred && messages.length > 0 && (
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
@@ -1297,7 +1289,7 @@ export default function InboxPage() {
         )}
 
         {/* ── Message list (inbox) ── */}
-        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && messages.length > 0 && (
+        {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && !isBlurred && messages.length > 0 && (
           <div className="space-y-2">
             {messages.map((msg) => {
               const isExpanded = expandedId === msg.id;

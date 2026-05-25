@@ -365,44 +365,6 @@ export default function NftmailPage() {
           </p>
         </section>
 
-        <div className="flex items-center justify-center gap-3">
-          {[
-            { key: 'free', label: 'Mint', icon: '1' },
-            { key: 'pro', label: 'Evolve', icon: '2' },
-          ].map((s, i) => {
-            const tierOrder: Tier[] = ['none', 'free', 'pro'];
-            const currentIdx = tierOrder.indexOf(tier);
-            const stepIdx = tierOrder.indexOf(s.key as Tier);
-            const isDone = currentIdx >= stepIdx;
-            const isCurrent = currentIdx === stepIdx - 1;
-            return (
-              <div key={s.key} className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
-                      isDone
-                        ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30'
-                        : isCurrent
-                        ? 'bg-[rgba(0,163,255,0.15)] text-[rgb(160,220,255)] ring-1 ring-[rgba(0,163,255,0.4)] animate-pulse'
-                        : 'bg-white/5 text-[var(--muted)] ring-1 ring-[var(--border)]'
-                    }`}
-                  >
-                    {isDone ? '✓' : s.icon}
-                  </div>
-                  <span
-                    className={`text-xs font-medium ${
-                      isDone ? 'text-emerald-400' : isCurrent ? 'text-[rgb(160,220,255)]' : 'text-[var(--muted)]'
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </div>
-                {i < 1 && <div className={`h-px w-8 ${isDone ? 'bg-emerald-500/40' : 'bg-[var(--border)]'}`} />}
-              </div>
-            );
-          })}
-        </div>
-
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
           <div className="mb-4">
             <div className="flex items-center gap-2">
@@ -427,7 +389,7 @@ export default function NftmailPage() {
                     tier !== 'none' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]'
                   }`}
                 >
-                  {tier !== 'none' ? '✓' : '2'}
+                  {tier !== 'none' ? '✓' : ''}
                 </div>
                 <h2 className="text-lg font-semibold text-white">Mint NFTmail</h2>
                 <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300 ring-1 ring-emerald-500/20">FREE</span>
@@ -516,7 +478,7 @@ export default function NftmailPage() {
           </section>
         )}
 
-        <footer className="text-center text-xs text-[var(--muted)]">nftmail.box — self-contained minting — no creation.ip required — zero dependency.</footer>
+        <footer className="text-center text-xs text-[var(--muted)]">nftmail.box — self-contained minting — zero dependency.</footer>
       </div>
     </div>
   );
@@ -560,17 +522,7 @@ function MintNFTMailWithCallback({ onMinted, initialName }: { onMinted: (name: s
         </button>
       </div>
 
-      {nameType === 'human' ? (
-        <div className="rounded-xl border border-[var(--border)] bg-black/20 px-5 py-6 text-center space-y-2">
-          <p className="text-sm font-semibold text-white">Minting paused</p>
-          <p className="text-xs text-[var(--muted)]">
-            Human NFTmail minting opens at official launch — April 2026.
-          </p>
-          <p className="text-[10px] text-[var(--muted)]">
-            Agent minting via GhostAgent.ninja remains open.
-          </p>
-        </div>
-      ) : (
+      {(
         <>
           <MintNFTMail initialName={initialName} />
           {!showManual ? (
