@@ -35,7 +35,7 @@ const PUPA_FEATURES = [
 ];
 
 const IMAGO_FEATURES = [
-  'Everything in PUPA',
+  'Everything in PRO',
   'Auto-forwarding',
   'Disposable email',
   'ghostmail.box',
@@ -63,6 +63,7 @@ function MintPageContent() {
   const rawName = agentParam.replace(/\.cast$/i, '');
   const sldLabel = rawName.replace(/\./g, '-');
   const displayName = sldLabel || 'your-farcaster-name';
+  const emailName = rawName || 'your.name';
 
   const [selectedTier, setSelectedTier] = useState<'PUPA' | 'IMAGO'>('PUPA');
   const [step, setStep] = useState<'select' | 'minting' | 'success' | 'error'>('select');
@@ -258,7 +259,7 @@ function MintPageContent() {
         {/* Agent Name Display */}
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800 mb-6">
           <p className="text-gray-400 text-xs mb-1">Your NFTmail address:</p>
-          <p className="text-[#43a574] font-mono text-sm font-bold">{displayName}.nftmail.gno</p>
+          <p className="text-[#43a574] font-mono text-sm font-bold">{emailName}@nftmail.box</p>
         </div>
 
         {/* OTP Input (if from mini app) */}
@@ -290,8 +291,8 @@ function MintPageContent() {
           >
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-white font-bold text-xl">PUPA</h3>
-                <p className="text-gray-400 font-mono text-sm">{sldLabel || 'your-agent'}.nftmail.gno</p>
+                <h3 className="text-white font-bold text-xl">PRO</h3>
+                <p className="text-gray-400 font-mono text-sm">{emailName}@nftmail.box</p>
               </div>
               <div className="text-right">
                 <p className="text-white font-bold text-xl">10 xDAI</p>
@@ -322,8 +323,8 @@ function MintPageContent() {
             </span>
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-white font-bold text-xl">IMAGO</h3>
-                <p className="text-[#a78bfa] font-mono text-sm">{sldLabel || 'your-agent'}.nftmail.gno</p>
+                <h3 className="text-white font-bold text-xl">PREMIUM</h3>
+                <p className="text-[#a78bfa] font-mono text-sm">{emailName}@nftmail.box</p>
               </div>
               <div className="text-right">
                 <p className="text-white font-bold text-xl">24 xDAI</p>
