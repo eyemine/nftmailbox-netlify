@@ -592,7 +592,7 @@ export default function InboxPage() {
   // (auth via FID context). On the regular nftmail.box site, redirect users
   // to open Farcaster instead of attempting wallet connect.
   if (resolved && isCast) {
-    const farcasterUrl = 'https://farcaster.xyz/';
+    const farcasterUrl = 'https://farcaster.xyz/miniapps/_VSykMem93Kb/nftmail-mini';
     const exists = resolved.exists;
     return (
       <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
