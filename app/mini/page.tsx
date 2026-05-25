@@ -187,6 +187,7 @@ export default function MiniApp() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [inboxTier, setInboxTier] = useState<NftmailTier>('free');
   const [tierLoaded, setTierLoaded] = useState(false);
+  const [beaconInfo, setBeaconInfo] = useState<{ chain: string; contract: string; tokenId: number } | null>(null);
   const [showTierAbout, setShowTierAbout] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [targetUpgradeTier, setTargetUpgradeTier] = useState<NftmailTier>('pro');
@@ -439,6 +440,15 @@ export default function MiniApp() {
         if (sovereignData?.profile?.tier && sovereignData.profile.tier !== 'basic' && sovereignData.profile.tier !== 'free') {
           sovereignTier = sovereignData.profile.tier;
         }
+        // Capture beacon NFT details (set during PRO/PREMIUM upgrade)
+        const p = sovereignData?.profile;
+        if (p?.beaconContract && p?.beaconTokenId !== undefined && p?.beaconTokenId !== null) {
+          setBeaconInfo({
+            chain: p.beaconChain || 'base',
+            contract: String(p.beaconContract),
+            tokenId: Number(p.beaconTokenId),
+          });
+        }
       } catch {
         // Ignore errors, use FID tier
       }
@@ -462,11 +472,13 @@ export default function MiniApp() {
       setInboxTier(normaliseTier(effectiveTier));
       setTierLoaded(true);
       // Load sentbox from worker if available
+      // Cap stored sentbox at 10 for free/pro, unlimited for premium
       if (sentboxRes) {
         try {
           const sentData = await sentboxRes.json() as { messages?: InboxMessage[] };
           if (sentData.messages) {
-            setSentMessages(sentData.messages.slice(0, 10));
+            const isPremiumTier = normaliseTier(effectiveTier) === 'premium';
+            setSentMessages(isPremiumTier ? sentData.messages : sentData.messages.slice(0, 10));
           }
         } catch {}
       }
@@ -597,7 +609,11 @@ export default function MiniApp() {
         receivedAt: now,
         type: 'sent',
       };
-      setSentMessages(prev => [newSent, ...prev].slice(0, 10));
+      // Premium = unlimited sentbox; pro/free capped at 10
+      setSentMessages(prev => {
+        const next = [newSent, ...prev];
+        return inboxTier === 'premium' ? next : next.slice(0, 10);
+      });
       // Persist to worker (non-blocking)
       fetch(WORKER_URL, {
         method: 'POST',
@@ -882,8 +898,8 @@ export default function MiniApp() {
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
           ) : (
-            <div className="space-y-2 mb-4">
-              {messages.slice(0, 10).map(msg => {
+            <div className="space-y-2 mb-4 max-h-[22rem] overflow-y-auto pr-1">
+              {messages.map(msg => {
                 const isOpen = openMsgId === msg.id;
                 const body = msg.content || msg.body || '';
                 return (
@@ -943,12 +959,14 @@ export default function MiniApp() {
               onClick={() => setOpenMsgId(openMsgId === 'sentbox-header' ? null : 'sentbox-header')}
             >
               <span className="text-gray-400 text-sm">Sentbox</span>
-              <span className="text-gray-500 text-xs">{sentMessages.length}/10</span>
+              <span className="text-gray-500 text-xs">
+                {inboxTier === 'premium' ? sentMessages.length : `${sentMessages.length}/10`}
+              </span>
             </button>
             {sentMessages.length === 0 ? (
               <p className="text-gray-600 text-xs">No sent emails yet</p>
             ) : (
-              <div className="space-y-2 mt-2">
+              <div className="space-y-2 mt-2 max-h-[12rem] overflow-y-auto pr-1">
                 {sentMessages.map(msg => {
                   const isOpen = openMsgId === msg.id;
                   const body = msg.content || msg.body || '';
@@ -1004,7 +1022,39 @@ export default function MiniApp() {
             <p className="text-gray-600 text-xs text-center">
               {sendsRemaining === 'unlimited' ? 'Unlimited sends' : `${sendsRemaining} sends remaining`}
             </p>
-            
+
+            {/* Beacon NFT panel (PRO/PREMIUM) — proof of ownership on Base */}
+            {beaconInfo && (inboxTier === 'pro' || inboxTier === 'premium') && (
+              <div className="p-3 bg-gradient-to-br from-blue-950/40 to-purple-950/40 rounded-lg border border-blue-800/40">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-mono text-blue-300">⛓️ Beacon NFT · Base</span>
+                  <span className="text-[10px] text-gray-500">#{beaconInfo.tokenId}</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-2 font-mono break-all">{beaconInfo.contract.slice(0, 6)}…{beaconInfo.contract.slice(-4)}</p>
+                <div className="flex gap-2">
+                  <a
+                    href={`https://basescan.org/token/${beaconInfo.contract}?a=${beaconInfo.tokenId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center text-[11px] py-1.5 px-2 bg-gray-900 hover:bg-gray-800 text-gray-300 rounded border border-gray-700 transition-colors"
+                  >
+                    Basescan
+                  </a>
+                  <a
+                    href={`https://opensea.io/assets/base/${beaconInfo.contract}/${beaconInfo.tokenId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center text-[11px] py-1.5 px-2 bg-gray-900 hover:bg-gray-800 text-gray-300 rounded border border-gray-700 transition-colors"
+                  >
+                    OpenSea
+                  </a>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-2 leading-snug">
+                  If your Farcaster wallet doesn&apos;t show the NFT, add the contract manually or check on Basescan/OpenSea.
+                </p>
+              </div>
+            )}
+
             {/* Tier upgrade CTA */}
             {TIER_META[inboxTier].upgradeCta && (
               <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
@@ -1171,7 +1221,11 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
           <div className="bg-gray-900 border border-[#43a574] rounded-lg p-4 my-6">
             <p className="text-[#43a574] font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
-            <p className="text-gray-500 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
+            <p className="text-gray-500 text-xs mt-1">
+              {sendsRemaining === 'unlimited'
+                ? 'Unlimited sends'
+                : `${10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · ${sendsRemaining} remaining`}
+            </p>
           </div>
           <p className="text-gray-400 text-xs mb-6">Your email is on its way to the recipient.</p>
           <div className="space-y-3">
