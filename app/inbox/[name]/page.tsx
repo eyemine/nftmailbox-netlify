@@ -202,14 +202,19 @@ export default function InboxPage() {
   const name = params.name as string;
   const isAgent = name?.endsWith('_');
 
+  // .cast accounts are Farcaster mini-app inboxes (e.g. ghostagent-og.cast)
+  // Hyphens are valid in Farcaster handles, so skip the hyphen→dot redirect for .cast.
+  const isCast = !!name && /\.cast$/i.test(name);
+
   // Redirect: hyphenated sovereign names → dot-separated (mac-slave → mac.slave)
-  // Hyphens are not valid sovereign email separators — dots are canonical
+  // Hyphens are not valid sovereign email separators — dots are canonical.
+  // Skipped for .cast accounts and agent (`_`) inboxes.
   useEffect(() => {
-    if (!name || isAgent) return;
+    if (!name || isAgent || isCast) return;
     if (name.includes('-')) {
       router.replace(`/inbox/${name.replace(/-/g, '.')}`);
     }
-  }, [name, isAgent, router]);
+  }, [name, isAgent, isCast, router]);
 
   // Auth state
   const { authenticated, user, login, logout } = usePrivy();
@@ -577,6 +582,63 @@ export default function InboxPage() {
         <div className="flex items-center gap-3">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
           <span className="text-sm text-[var(--muted)]">Resolving {name}@nftmail.box...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── .CAST FARCASTER MINI-APP INBOX ───
+  // .cast accounts are exclusively managed via the Farcaster mini app
+  // (auth via FID context). On the regular nftmail.box site, redirect users
+  // to open Farcaster instead of attempting wallet connect.
+  if (resolved && isCast) {
+    const farcasterUrl = 'https://farcaster.xyz/';
+    const exists = resolved.exists;
+    return (
+      <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
+        <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-4 py-8 md:px-6">
+          <header className="flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+              <Image src="/nftmail-logo.png" alt="NFTMail" width={36} height={36} className="opacity-95" />
+              <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
+            </Link>
+          </header>
+
+          <div className="flex flex-col items-center justify-center flex-1 gap-6 py-12">
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-black/30 px-5 py-3">
+              <span className="text-lg font-medium text-white">{name}@nftmail.box</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className={`h-3 w-3 rounded-full ${exists ? 'bg-violet-400' : 'bg-emerald-400 animate-pulse'}`} />
+              <span className={`text-sm font-medium ${exists ? 'text-violet-300' : 'text-emerald-300'}`}>
+                {exists ? 'is an NFTmail mini inbox' : 'is an available NFTmail mini inbox'}
+              </span>
+            </div>
+
+            <p className="text-center text-sm text-[var(--muted)] max-w-md">
+              Connect with <strong className="text-white">Farcaster app wallet</strong> to {exists ? 'access' : 'claim'}
+              {' '}<strong className="text-white">{name}@nftmail.box</strong>
+              {!exists && <span className="text-emerald-400"> (free)</span>}
+            </p>
+
+            <a
+              href={farcasterUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-6 py-2.5 text-sm font-semibold text-violet-300 transition hover:bg-violet-500/20"
+            >
+              Open Farcaster
+            </a>
+
+            <p className="text-center text-[10px] text-[var(--muted)] max-w-md">
+              .cast inboxes are provisioned inside the NFTmail Farcaster mini app — search &ldquo;NFTmail&rdquo; in Farcaster.
+            </p>
+          </div>
+
+          <footer className="text-center text-[10px] text-[var(--muted)] pb-2">
+            nftmail.box — Privacy is a Right, Sovereignty is an Upgrade
+          </footer>
         </div>
       </div>
     );
