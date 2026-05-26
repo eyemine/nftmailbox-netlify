@@ -379,7 +379,7 @@ export default function DashboardPage() {
             <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
           </Link>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-end">
-            {authenticated && selectedName && (
+            {authenticated && selectedName && isAgent && (
               <a href={`/inbox/${encodeURIComponent(selectedName.email.replace('@nftmail.box', ''))}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[rgba(0,163,255,0.25)] bg-[rgba(0,163,255,0.06)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.14)] whitespace-nowrap">View Public Inbox ↗</a>
             )}
             {authenticated && preferredWallet && (

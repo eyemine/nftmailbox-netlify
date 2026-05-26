@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
                   body: JSON.stringify({
                     action: 'storeSentMessage',
                     localPart: label,
-                    payload: {
+                    message: {
                       messageId: zohoMessageId,
                       from: fromEmail,
                       to,
@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           action: 'storeSentMessage',
           localPart: label,
-          payload: {
+          message: {
             messageId,
             from: fromEmail,
             to,
