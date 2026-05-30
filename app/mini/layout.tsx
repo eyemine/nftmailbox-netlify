@@ -4,6 +4,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 // Cache-busted local images for Farcaster (must be 1024x1024 PNG, no alpha)
 const ICON_URL = `${APP_URL}/icon-v2.png`;
 const SPLASH_URL = `${APP_URL}/splash-200.png`;
+// Trigger redeploy for miniapp 500 fix
 
 const miniAppEmbed = JSON.stringify({
   version: '1',
