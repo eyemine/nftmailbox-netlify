@@ -40,7 +40,47 @@ export function NFTLogin() {
   const [scanningNfts, setScanningNfts] = useState(false);
   const [showNftPicker, setShowNftPicker] = useState(false);
 
+  // Delegate / cold-wallet vault state
+  const [showVaultInput, setShowVaultInput] = useState(false);
+  const [vaultAddress, setVaultAddress] = useState('');
+  const [vaultError, setVaultError] = useState<string | null>(null);
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [viaDelegate, setViaDelegate] = useState(false);
+
   const preferredWallet = wallets.find((w: any) => w?.walletClientType === 'injected') || wallets[0];
+
+  // Resolve names for a cold vault wallet via hot wallet delegation
+  const resolveVaultNames = useCallback(async (hotAddr: string, vault: string) => {
+    setVaultLoading(true);
+    setVaultError(null);
+    try {
+      const res = await fetch(`/api/resolve-nftmail?address=${hotAddr}&vault=${vault}`);
+      const data = await res.json() as { error?: string; names?: { label: string; email: string; gnoName: string; tokenId: number | null }[]; viaDelegate?: boolean };
+      if (!res.ok) throw new Error(data.error || 'Delegation check failed');
+      const resolved = data.names ?? [];
+      setViaDelegate(true);
+      const newRows: NftRow[] = resolved.map(n => ({
+        type: 'collection' as const,
+        name: n.label,
+        displayName: n.label,
+        email: n.email,
+        exists: true,
+      }));
+      setRows(prev => {
+        const merged = [...prev];
+        for (const r of newRows) {
+          if (!merged.find(x => x.email === r.email)) merged.push(r);
+        }
+        return merged;
+      });
+      if (resolved.length === 0) setVaultError('No nftmail.box inboxes found for this vault address.');
+      setShowNftPicker(true);
+    } catch (err: any) {
+      setVaultError(err?.message || 'Failed to verify delegation');
+    } finally {
+      setVaultLoading(false);
+    }
+  }, []);
 
   // Resolve existence for a single row and update state
   const checkRowExists = useCallback(async (email: string) => {
@@ -182,6 +222,54 @@ export function NFTLogin() {
             </p>
           </div>
         )}
+
+        {/* Vault / cold-wallet delegate input */}
+        <div className="rounded-xl border border-[var(--border)] bg-black/20 p-3">
+          <button
+            onClick={() => setShowVaultInput(v => !v)}
+            className="flex w-full items-center justify-between text-xs text-[var(--muted)] hover:text-white transition-colors"
+          >
+            <span className="flex items-center gap-1.5">
+              <span>🔐</span>
+              <span>Access cold-storage vault</span>
+              {viaDelegate && <span className="ml-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">Delegated</span>}
+            </span>
+            <span>{showVaultInput ? '▲' : '▼'}</span>
+          </button>
+
+          {showVaultInput && (
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-[10px] text-[var(--muted)]">
+                If your NFTs are in a hardware wallet or Safe, enter that address below.
+                Your hot wallet must be set as a delegate on{' '}
+                <a href="https://delegate.xyz" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] underline">delegate.xyz</a> first.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="0xColdWallet…"
+                  value={vaultAddress}
+                  onChange={e => { setVaultAddress(e.target.value); setVaultError(null); }}
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-black/30 px-3 py-2 font-mono text-[11px] text-[#f2eee4] placeholder:text-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[rgba(0,163,255,0.4)]"
+                />
+                <button
+                  onClick={() => {
+                    if (!/^0x[a-fA-F0-9]{40}$/.test(vaultAddress)) {
+                      setVaultError('Enter a valid 0x address');
+                      return;
+                    }
+                    resolveVaultNames(addr, vaultAddress);
+                  }}
+                  disabled={vaultLoading}
+                  className="rounded-lg border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.12)] px-3 py-2 text-[11px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.18)] disabled:opacity-40"
+                >
+                  {vaultLoading ? '…' : 'Verify'}
+                </button>
+              </div>
+              {vaultError && <p className="text-[10px] text-amber-400">{vaultError}</p>}
+            </div>
+          )}
+        </div>
 
         {/* NFT Picker toggle button */}
         <button

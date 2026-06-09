@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, http, parseAbiItem, decodeAbiParameters } from 'viem';
 import { gnosis } from 'viem/chains';
 
+// Delegate V2 registry — same address on all EVM chains
+const DELEGATE_REGISTRY_V2 = '0x00000000000076A84feF008CDAEE9090904FC7cd';
+// checkDelegateForAll(address delegate, address vault, bytes32 rights) → bool
+// selector keccak256("checkDelegateForAll(address,address,bytes32)")[0:4] = 0xe839bd53
+const CHECK_ALL_SELECTOR = '0xe839bd53';
+const ETH_RPC = process.env.ETH_RPC_URL ?? 'https://cloudflare-eth.com';
+
+async function isDelegateForAll(hotWallet: string, vaultWallet: string): Promise<boolean> {
+  try {
+    const calldata =
+      CHECK_ALL_SELECTOR +
+      hotWallet.toLowerCase().replace('0x', '').padStart(64, '0') +
+      vaultWallet.toLowerCase().replace('0x', '').padStart(64, '0') +
+      '0000000000000000000000000000000000000000000000000000000000000000';
+    const res = await fetch(ETH_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: DELEGATE_REGISTRY_V2, data: calldata }, 'latest'] }),
+    });
+    const data = await res.json() as { result?: string };
+    return !!data.result && BigInt(data.result) !== 0n;
+  } catch { return false; }
+}
+
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -63,10 +87,38 @@ async function resolveLabelFromTx(txHash: `0x${string}`): Promise<string | null>
 export async function GET(req: NextRequest) {
   try {
     const address = req.nextUrl.searchParams.get('address');
+    const vaultParam = req.nextUrl.searchParams.get('vault'); // optional cold wallet
     if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
       return NextResponse.json({ error: 'Invalid address' }, { status: 400 });
     }
 
+    // ── Delegate vault path ────────────────────────────────────────────────────
+    // If ?vault= is provided, verify hot wallet is a delegate for vault, then
+    // resolve names registered to the vault wallet instead.
+    if (vaultParam && /^0x[a-fA-F0-9]{40}$/.test(vaultParam)) {
+      const delegated = await isDelegateForAll(address, vaultParam);
+      if (!delegated) {
+        return NextResponse.json({ error: 'Hot wallet is not an authorised delegate for this vault', viaDelegate: false }, { status: 403 });
+      }
+      try {
+        const kvRes = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'listNftmailByController', controller: vaultParam }),
+        });
+        if (kvRes.ok) {
+          const kvData = await kvRes.json() as { names?: { name: string; email: string; gnoName: string; tokenId: number | null }[] };
+          return NextResponse.json({
+            names: (kvData.names ?? []).map(n => ({ tokenId: n.tokenId, label: n.name, email: n.email, gnoName: n.gnoName })),
+            viaDelegate: true,
+            vaultWallet: vaultParam,
+          });
+        }
+      } catch { /* fall through */ }
+      return NextResponse.json({ names: [], viaDelegate: true, vaultWallet: vaultParam });
+    }
+
+    // ── Standard path: resolve by connected wallet ─────────────────────────────
     // Primary: KV controller lookup — works for EOA, TBA-held, and Safe-held NFTs
     try {
       const kvRes = await fetch(WORKER_URL, {
