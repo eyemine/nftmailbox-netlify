@@ -4,6 +4,9 @@ import { mainnet } from 'viem/chains';
 
 const ETH_RPC = process.env.ETH_RPC_URL || 'https://eth.llamarpc.com';
 const BASE_RPC = 'https://mainnet.base.org';
+const GNOSIS_RPC = 'https://rpc.gnosischain.com';
+// Set after deploying FakeNormie.sol — remove after hackathon
+const FAKE_NORMIE_CONTRACT = process.env.FAKE_NORMIE_CONTRACT ?? '';
 
 // ENS Name Wrapper — holds .eth names as ERC-721 tokens
 const ENS_NAME_WRAPPER = '0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401' as const;
@@ -90,6 +93,14 @@ const VERIFIED_COLLECTIONS: VerifiedCollection[] = [
     chainId: 1,
     rpcUrl: ETH_RPC,
   },
+  // Hackathon demo NFT — remove FAKE_NORMIE_CONTRACT env var after judging to disable
+  ...(FAKE_NORMIE_CONTRACT ? [{
+    name: 'fakenormie',
+    displayName: 'FakeNormie',
+    contractAddress: FAKE_NORMIE_CONTRACT,
+    chainId: 100,
+    rpcUrl: GNOSIS_RPC,
+  }] : []),
 ];
 
 const erc721Abi = [
@@ -167,9 +178,10 @@ export async function GET(req: NextRequest) {
     const collectionPromises = VERIFIED_COLLECTIONS.map(async (coll) => {
       try {
         const { createPublicClient: mkClient, http: mkHttp } = await import('viem');
-        const chain = coll.chainId === 8453
-          ? (await import('viem/chains')).base
-          : (await import('viem/chains')).mainnet;
+        const chains = await import('viem/chains');
+        const chain = coll.chainId === 8453 ? chains.base
+          : coll.chainId === 100 ? chains.gnosis
+          : chains.mainnet;
         const client = mkClient({ chain, transport: mkHttp(coll.rpcUrl) });
 
         const balance = await withTimeout(
