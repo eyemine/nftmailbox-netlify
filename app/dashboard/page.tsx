@@ -6,6 +6,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
+import { ChatView } from '../components/ChatView';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 
@@ -72,6 +73,7 @@ export default function DashboardPage() {
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('inbox');
+  const [chatMode, setChatMode] = useState(false);
 
   // Reading pane state
   const [selectedMessage, setSelectedMessage] = useState<InboxMessage | null>(null);
@@ -517,6 +519,13 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
+                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setChatMode(v => !v)}
+                    className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)] transition"
+                  >
+                    {chatMode ? '📧 Email' : '💬 Chat'}
+                  </button>
                   <button
                     onClick={fetchInbox}
                     disabled={loadingInbox}
@@ -528,6 +537,7 @@ export default function DashboardPage() {
                     </svg>
                     {loadingInbox ? 'Loading...' : 'Refresh'}
                   </button>
+                  </div>
                 </div>
 
                 {inboxNote && (
@@ -536,8 +546,26 @@ export default function DashboardPage() {
                   </div>
                 )}
 
+                {/* Chat view */}
+                {chatMode && selectedName && (
+                  <div className="p-4">
+                    <ChatView
+                      myEmail={selectedName.email}
+                      messages={messages.map(m => ({ id: m.messageId, fromAddress: m.fromAddress, sender: m.sender, body: m.body, summary: m.summary, receivedTime: m.receivedTime, encrypted: m.encrypted }))}
+                      isOwner={true}
+                      onSendMessage={async (to, body) => {
+                        await fetch('/api/send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ from: selectedName.email, to, subject: `Chat from ${selectedName.label}`, body }),
+                        });
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* Split pane */}
-                <div className="flex" style={{ minHeight: '460px' }}>
+                {!chatMode && <div className="flex" style={{ minHeight: '460px' }}>
                   {/* Left: message list */}
                   <div className={`flex flex-col border-r border-[var(--border)] ${selectedMessage ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
                     {loadingInbox && messages.length === 0 ? (
@@ -702,7 +730,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                </div>
+                </div>}
               </div>
             )}
 

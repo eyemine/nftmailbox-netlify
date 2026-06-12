@@ -7,7 +7,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 import { ComposeEmail } from '../../components/ComposeEmail';
-import { ChatView } from '../../components/ChatView';
 
 // Tier normalisation: convert various tier names to standard NftmailTier
 type NftmailTier = 'free' | 'pro' | 'premium';
@@ -298,7 +297,6 @@ export default function InboxPage() {
   type Folder = 'inbox' | 'sent' | 'compose';
   const [activeFolder, setActiveFolder] = useState<Folder>('inbox');
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
-  const [chatMode, setChatMode] = useState(false);
 
   // Step 1: Resolve the address (+ agent classification if agent route)
   useEffect(() => {
@@ -998,75 +996,12 @@ export default function InboxPage() {
             </div>
           )}
 
-          {/* Blackbox: standard inbox */}
-          {!loading && !isGlassbox && !isOwner && (
+          {/* Blackbox: encrypted notice for all visitors */}
+          {!loading && !isGlassbox && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <svg className="h-10 w-10 text-amber-400/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
               <p className="text-sm text-[var(--muted)]">All messages are encrypted</p>
-              <p className="text-xs text-[var(--muted)] opacity-60">Connect the NFT owner wallet to read</p>
-            </div>
-          )}
-          {!loading && !isGlassbox && isOwner && messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <svg className="h-12 w-12 text-slate-400 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
-              <p className="text-sm text-[var(--muted)]">No messages yet</p>
-            </div>
-          )}
-          {!loading && !isGlassbox && isOwner && messages.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX ({messages.length})</span>
-                <button
-                  onClick={() => setChatMode(v => !v)}
-                  className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)] transition"
-                  title={chatMode ? 'Switch to email view' : 'Switch to chat view'}
-                >
-                  {chatMode ? '📧 Email' : '💬 Chat'}
-                </button>
-              </div>
-              {chatMode && (
-                <ChatView
-                  myEmail={`${name}@nftmail.box`}
-                  messages={messages}
-                  isOwner={isOwner}
-                  onSendMessage={async (to, body) => {
-                    await fetch('/api/send', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ from: `${name}@nftmail.box`, to, subject: `Chat from ${name}`, body }),
-                    });
-                  }}
-                />
-              )}
-              {!chatMode && messages.map((msg) => (
-                <div key={msg.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-white">{msg.subject}</span>
-                      <p className="mt-0.5 text-xs text-[var(--muted)]">From: <BlurFrom from={msg.sender} /></p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {msg.encrypted && (
-                        <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[8px] text-amber-300 ring-1 ring-amber-500/20">ENCRYPTED</span>
-                      )}
-                      {msg.type && (
-                        <span className="rounded-full bg-slate-500/10 px-1.5 py-0.5 text-[8px] text-slate-300 ring-1 ring-slate-500/20">{msg.type}</span>
-                      )}
-                      <span className="text-[10px] text-[var(--muted)]">{msg.receivedTime ? formatTimeAgo(msg.receivedTime) : ''}</span>
-                    </div>
-                  </div>
-                  {msg.summary && !msg.encrypted && (
-                    <div className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2">
-                      <p className="text-xs text-[var(--muted)] leading-relaxed whitespace-pre-line">{stripHtml(msg.summary)}</p>
-                    </div>
-                  )}
-                  {msg.encrypted && (
-                    <div className="rounded-lg border border-amber-500/15 bg-amber-500/5 px-3 py-2">
-                      <p className="text-xs text-amber-300/70">Content encrypted — connect NFT owner wallet to decrypt</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+              <p className="text-xs text-[var(--muted)] opacity-60">Owner reads mail in the dashboard</p>
             </div>
           )}
           <footer className="text-center text-[10px] text-[var(--muted)]">
