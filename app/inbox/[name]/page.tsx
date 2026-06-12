@@ -999,13 +999,20 @@ export default function InboxPage() {
           )}
 
           {/* Blackbox: standard inbox */}
-          {!loading && !isGlassbox && messages.length === 0 && (
+          {!loading && !isGlassbox && !isOwner && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <svg className="h-10 w-10 text-amber-400/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+              <p className="text-sm text-[var(--muted)]">All messages are encrypted</p>
+              <p className="text-xs text-[var(--muted)] opacity-60">Connect the NFT owner wallet to read</p>
+            </div>
+          )}
+          {!loading && !isGlassbox && isOwner && messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <svg className="h-12 w-12 text-slate-400 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" /></svg>
               <p className="text-sm text-[var(--muted)]">No messages yet</p>
             </div>
           )}
-          {!loading && !isGlassbox && messages.length > 0 && (
+          {!loading && !isGlassbox && isOwner && messages.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX ({messages.length})</span>
