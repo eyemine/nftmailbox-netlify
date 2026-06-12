@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 import { ComposeEmail } from '../../components/ComposeEmail';
+import { ChatView } from '../../components/ChatView';
 
 // Tier normalisation: convert various tier names to standard NftmailTier
 type NftmailTier = 'free' | 'pro' | 'premium';
@@ -297,6 +298,7 @@ export default function InboxPage() {
   type Folder = 'inbox' | 'sent' | 'compose';
   const [activeFolder, setActiveFolder] = useState<Folder>('inbox');
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
+  const [chatMode, setChatMode] = useState(false);
 
   // Step 1: Resolve the address (+ agent classification if agent route)
   useEffect(() => {
@@ -1005,8 +1007,31 @@ export default function InboxPage() {
           )}
           {!loading && !isGlassbox && messages.length > 0 && (
             <div className="space-y-3">
-              <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX ({messages.length})</span>
-              {messages.map((msg) => (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX ({messages.length})</span>
+                <button
+                  onClick={() => setChatMode(v => !v)}
+                  className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)] transition"
+                  title={chatMode ? 'Switch to email view' : 'Switch to chat view'}
+                >
+                  {chatMode ? '📧 Email' : '💬 Chat'}
+                </button>
+              </div>
+              {chatMode && (
+                <ChatView
+                  myEmail={`${name}@nftmail.box`}
+                  messages={messages}
+                  isOwner={isOwner}
+                  onSendMessage={async (to, body) => {
+                    await fetch('/api/send', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ from: `${name}@nftmail.box`, to, subject: `Chat from ${name}`, body }),
+                    });
+                  }}
+                />
+              )}
+              {!chatMode && messages.map((msg) => (
                 <div key={msg.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
