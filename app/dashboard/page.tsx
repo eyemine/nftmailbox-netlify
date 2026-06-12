@@ -557,7 +557,7 @@ export default function DashboardPage() {
                         await fetch('/api/send', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ from: selectedName.email, to, subject: `Chat from ${selectedName.label}`, body }),
+                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Chat from ${selectedName.label}`, content: body }),
                         });
                       }}
                     />
