@@ -6,6 +6,24 @@ export interface ChatMessage {
   isMe: boolean;
 }
 
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .split('\n').map(l => l.trim()).filter(Boolean).join('\n')
+    .trim();
+}
+
 export function emailToChat(
   msg: {
     id: string;
@@ -17,7 +35,10 @@ export function emailToChat(
   },
   myEmail: string
 ): ChatMessage {
-  let raw = msg.body || msg.summary || '';
+  const rawBody = msg.body || msg.summary || '';
+  const isHtml = /<[a-z][\s\S]*>/i.test(rawBody);
+  let raw = isHtml ? stripHtmlToText(rawBody) : rawBody;
+
   raw = raw.replace(/(On\s.+?\s(?:wrote|written):[\s\S]*$)/i, '');
   raw = raw.split(/[-]{3,}\s*Forwarded message\s*[-]{3,}/i)[0];
   raw = raw.split('\n').filter(l => !/^>+/.test(l.trimStart())).join('\n');
