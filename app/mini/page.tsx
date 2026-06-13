@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
+import { ChatView } from '../components/ChatView';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
@@ -203,6 +204,7 @@ export default function MiniApp() {
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
+  const [chatMode, setChatMode] = useState(false);
   const [composeTo, setComposeTo] = useState('');
   const [composeCc, setComposeCc] = useState('');
   const [composeBcc, setComposeBcc] = useState('');
@@ -1000,20 +1002,87 @@ export default function MiniApp() {
           
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">Inbox</h2>
-            <button
-              onClick={() => loadInbox(agentName)}
-              disabled={refreshing}
-              className="text-[#43a574] text-sm hover:text-[#5ab883] disabled:opacity-50 flex items-center gap-1"
-            >
-              {refreshing ? (
-                <><span className="inline-block w-3 h-3 border border-[#43a574] border-t-transparent rounded-full animate-spin" /> Refreshing</>
-              ) : 'Refresh'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setChatMode(v => { if (!v) loadInbox(agentName); return !v; }); }}
+                className="rounded-full border border-gray-700 px-2.5 py-0.5 text-[10px] text-gray-400 hover:text-white hover:border-[#43a574] transition"
+              >
+                {chatMode ? '📧 Email' : '💬 Chat'}
+              </button>
+              <button
+                onClick={() => loadInbox(agentName)}
+                disabled={refreshing}
+                className="text-[#43a574] text-sm hover:text-[#5ab883] disabled:opacity-50 flex items-center gap-1"
+              >
+                {refreshing ? (
+                  <><span className="inline-block w-3 h-3 border border-[#43a574] border-t-transparent rounded-full animate-spin" /> Refreshing</>
+                ) : 'Refresh'}
+              </button>
+            </div>
           </div>
           <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
           
           {showTierAbout && <TierAboutPanel tier={inboxTier} onClose={() => setShowTierAbout(false)} onUpgrade={() => { setShowTierAbout(false); setStep('upgrade'); }} />}
-          
+
+          {/* Chat view */}
+          {chatMode ? (
+            <div className="h-[500px]">
+              <ChatView
+                myEmail={humanEmail || `${agentName}@nftmail.box`}
+                messages={messages.map(m => ({ id: m.id, fromAddress: m.from, sender: m.from, body: m.body || m.content || '', receivedTime: new Date(m.receivedAt).toISOString(), encrypted: m.encrypted }))}
+                sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || humanEmail, to: m.to, body: m.body || m.content || '', timestamp: m.receivedAt || Date.now() }))}
+                isOwner={true}
+                onSendMessage={async (to, body) => {
+                  const res = await fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fromEmail: humanEmail || `${agentName}@nftmail.box`, toAddress: to, subject: `Re: chat`, content: body }),
+                  });
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => ({})) as { error?: string };
+                    throw new Error(d.error || `Send failed (${res.status})`);
+                  }
+                  const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
+                  fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'storeSentMessage',
+                      localPart: label,
+                      payload: {
+                        messageId: `chat-${Date.now()}`,
+                        from: humanEmail || `${agentName}@nftmail.box`,
+                        to,
+                        subject: 'Re: chat',
+                        body,
+                        timestamp: Date.now(),
+                      },
+                    }),
+                  }).catch(() => {});
+                  setTimeout(() => loadInbox(agentName), 1500);
+                }}
+                onDeleteThread={async (_contact, inboxIds, sentIds) => {
+                  const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
+                  await Promise.all(inboxIds.map(id =>
+                    fetch(WORKER_URL, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
+                    }).catch(() => {})
+                  ));
+                  await Promise.all(sentIds.map(id =>
+                    fetch(WORKER_URL, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),
+                    }).catch(() => {})
+                  ));
+                  loadInbox(agentName);
+                }}
+              />
+            </div>
+          ) : (
+            <>
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <Image src={EMPTY_INBOX_URL} alt="" width={80} height={80} className="mx-auto mb-3 opacity-70" />
@@ -1137,6 +1206,7 @@ export default function MiniApp() {
               </div>
             )}
           </div>
+          </>)}
 
           <div className="space-y-2 mt-6">
             <button onClick={() => setStep('compose')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
