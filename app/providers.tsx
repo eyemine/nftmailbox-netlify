@@ -2,6 +2,7 @@
 
 import { PrivyProvider } from '@privy-io/react-auth';
 import { PropsWithChildren, useEffect, useState } from 'react';
+import { IdentityProvider } from './context/IdentityContext';
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 
@@ -87,7 +88,9 @@ export function Providers({ children }: PropsWithChildren) {
         supportedChains: [ETHEREUM_MAINNET, GNOSIS_CHAIN],
       }}
     >
-      {children}
+      <IdentityProvider>
+        {children}
+      </IdentityProvider>
     </PrivyProvider>
   );
 }

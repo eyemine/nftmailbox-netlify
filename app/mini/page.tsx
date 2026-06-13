@@ -149,7 +149,14 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'settings' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'settings' | 'account-select' | 'error';
+
+interface NftAccount {
+  name: string;
+  email: string;
+  gnoName?: string;
+  tld?: string;
+}
 
 interface ProvisionResult {
   status: string;
@@ -182,6 +189,8 @@ export default function MiniApp() {
   const [step, setStep] = useState<Step>('loading');
   const [fid, setFid] = useState<number | null>(null);
   const [customName, setCustomName] = useState('');
+  const [nftAccounts, setNftAccounts] = useState<NftAccount[]>([]);
+  const [fidAgentName, setFidAgentName] = useState<string | null>(null);
   const [agentName, setAgentName] = useState('');
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
@@ -316,40 +325,92 @@ export default function MiniApp() {
   useEffect(() => {
     const init = async () => {
       let userFid: number | null = null;
+      let verifiedAddrs: string[] = [];
       try {
         const context = await sdk.context;
         userFid = context?.user?.fid ?? null;
         setFid(userFid);
+        verifiedAddrs = ((context?.user as unknown as Record<string, unknown>)?.verifiedAddresses as Record<string, string[]> | undefined)?.ethAddresses ?? [];
       } catch {
         // running outside Warpcast — continue without FID
       }
       // Signal ready immediately after getting context - critical for Farcaster Mini Apps
-      // This must be called before any long-running operations
       try {
         await sdk.actions.ready();
       } catch {
         // ready() may fail outside Warpcast - that's ok
       }
-      // Auto-check: if this FID already has an account, skip straight to inbox
-      if (userFid) {
-        try {
-          const res = await fetch(WORKER_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
-          });
-          const data = await res.json() as ProvisionResult & { eciesPrivateKey?: string };
-          if (data.status === 'already_provisioned' && data.agentName) {
-            setAgentName(data.agentName);
-            setHumanEmail(`${data.agentName}@nftmail.box`);
-            let privKey: string | null = null;
-            try { privKey = localStorage.getItem(`ecies-priv:${data.agentName}`); } catch {}
-            if (privKey) setEciesPrivKey(privKey);
-            await loadInboxDirect(data.agentName, privKey);
-            return;
-          }
-        } catch { /* non-fatal — fall through to entry */ }
+
+      // Run FID check and NFT controller check in parallel
+      const [fidResult, nftResults] = await Promise.allSettled([
+        // FID check — idempotent, returns already_provisioned if account exists
+        userFid
+          ? fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
+            }).then(r => r.json() as Promise<ProvisionResult & { eciesPrivateKey?: string }>)
+          : Promise.resolve(null),
+        // NFT controller check — look up any nftmailgno: records owned by verified wallets
+        verifiedAddrs.length > 0
+          ? Promise.all(
+              verifiedAddrs.map(addr =>
+                fetch(WORKER_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'listNftmailByController', controller: addr }),
+                }).then(r => r.json() as Promise<{ results?: NftAccount[] }>).catch(() => ({ results: [] as NftAccount[] }))
+              )
+            )
+          : Promise.resolve([]),
+      ]);
+
+      // Parse FID result
+      let fidAccount: (ProvisionResult & { eciesPrivateKey?: string }) | null = null;
+      if (fidResult.status === 'fulfilled' && fidResult.value?.status === 'already_provisioned' && fidResult.value.agentName) {
+        fidAccount = fidResult.value;
+        setFidAgentName(fidResult.value.agentName);
       }
+
+      // Parse NFT results — flatten across all verified addresses, deduplicate by name
+      const nftMap = new Map<string, NftAccount>();
+      if (nftResults.status === 'fulfilled' && Array.isArray(nftResults.value)) {
+        for (const addrResult of nftResults.value as { results?: NftAccount[] }[]) {
+          for (const acct of addrResult?.results ?? []) {
+            if (acct.name && !nftMap.has(acct.name)) nftMap.set(acct.name, acct);
+          }
+        }
+      }
+      const nftList = Array.from(nftMap.values());
+
+      // Routing logic
+      if (fidAccount && nftList.length === 0) {
+        // FID account only — current fast path
+        setAgentName(fidAccount.agentName!);
+        setHumanEmail(`${fidAccount.agentName}@nftmail.box`);
+        let privKey: string | null = null;
+        try { privKey = localStorage.getItem(`ecies-priv:${fidAccount.agentName}`); } catch {}
+        if (privKey) setEciesPrivKey(privKey);
+        await loadInboxDirect(fidAccount.agentName!, privKey);
+        return;
+      }
+
+      if (!fidAccount && nftList.length === 1) {
+        // Single NFT-backed account, no FID account — auto-login
+        const nft = nftList[0];
+        setAgentName(nft.name);
+        setHumanEmail(nft.email || `${nft.name}@nftmail.box`);
+        await loadInboxDirect(nft.name, null);
+        return;
+      }
+
+      if (nftList.length > 0) {
+        // Multiple accounts or NFT + FID — show account switcher
+        setNftAccounts(nftList);
+        setStep('account-select');
+        return;
+      }
+
       setStep('entry');
     };
     init();
@@ -634,6 +695,68 @@ export default function MiniApp() {
         <div className="text-center">
           <Image src={LOADING_LOGO_URL} alt="" width={80} height={80} className="mx-auto mb-4 opacity-80" />
           <p className="text-[#43a574] font-mono text-sm">Initialising...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'account-select') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-sm flex flex-col gap-4">
+          <div className="text-center mb-2">
+            <Image src={MAILBOX_ICON_URL} alt="" width={48} height={48} className="mx-auto mb-3 opacity-90" />
+            <h2 className="text-white font-bold text-lg">Choose Inbox</h2>
+            <p className="text-gray-500 text-xs mt-1">Multiple accounts found. Which would you like to open?</p>
+          </div>
+
+          {/* NFT-backed accounts */}
+          {nftAccounts.map(acct => (
+            <button
+              key={acct.name}
+              onClick={async () => {
+                setAgentName(acct.name);
+                setHumanEmail(acct.email || `${acct.name}@nftmail.box`);
+                await loadInboxDirect(acct.name, null);
+              }}
+              className="w-full flex items-center gap-3 bg-gray-900 border border-gray-700 hover:border-[#43a574] rounded-xl px-4 py-3.5 text-left transition-colors"
+            >
+              <span className="text-2xl">🗂️</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-mono text-sm truncate">{acct.email || `${acct.name}@nftmail.box`}</p>
+                {acct.gnoName && <p className="text-gray-500 text-[10px] mt-0.5">{acct.gnoName}</p>}
+                <p className="text-[#43a574] text-[9px] mt-0.5 font-semibold uppercase tracking-wider">NFT-backed</p>
+              </div>
+              <span className="text-gray-600 text-sm">→</span>
+            </button>
+          ))}
+
+          {/* FID account (if exists alongside NFT accounts) */}
+          {fidAgentName && (
+            <button
+              onClick={async () => {
+                setAgentName(fidAgentName);
+                setHumanEmail(`${fidAgentName}@nftmail.box`);
+                let privKey: string | null = null;
+                try { privKey = localStorage.getItem(`ecies-priv:${fidAgentName}`); } catch {}
+                if (privKey) setEciesPrivKey(privKey);
+                await loadInboxDirect(fidAgentName, privKey);
+              }}
+              className="w-full flex items-center gap-3 bg-gray-900 border border-gray-700 hover:border-purple-500 rounded-xl px-4 py-3.5 text-left transition-colors"
+            >
+              <span className="text-2xl">👻</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-mono text-sm truncate">{fidAgentName}@nftmail.box</p>
+                {fid && <p className="text-gray-500 text-[10px] mt-0.5">FID #{fid}</p>}
+                <p className="text-purple-400 text-[9px] mt-0.5 font-semibold uppercase tracking-wider">Farcaster identity</p>
+              </div>
+              <span className="text-gray-600 text-sm">→</span>
+            </button>
+          )}
+
+          <p className="text-gray-600 text-[10px] text-center">
+            NFT-backed accounts are owned by the wallet that holds the beacon NFT
+          </p>
         </div>
       </div>
     );

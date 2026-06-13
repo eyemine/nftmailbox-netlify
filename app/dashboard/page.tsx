@@ -521,7 +521,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setChatMode(v => !v)}
+                    onClick={() => { setChatMode(v => { if (!v) fetchSentbox(); return !v; }); }}
                     className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)] transition"
                   >
                     {chatMode ? '📧 Email' : '💬 Chat'}
@@ -552,6 +552,7 @@ export default function DashboardPage() {
                     <ChatView
                       myEmail={selectedName.email}
                       messages={messages.map(m => ({ id: m.messageId, fromAddress: m.fromAddress, sender: m.sender, body: m.body, summary: m.summary, receivedTime: m.receivedTime, encrypted: m.encrypted }))}
+                      sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || selectedName.email, to: m.to, body: m.body, timestamp: m.timestamp }))}
                       isOwner={true}
                       onSendMessage={async (to, body) => {
                         const res = await fetch('/api/send', {
@@ -581,6 +582,30 @@ export default function DashboardPage() {
                             },
                           }),
                         }).catch(() => {});
+                        // Refresh sentbox so the thread shows the new message
+                        setTimeout(fetchSentbox, 1500);
+                      }}
+                      onDeleteThread={async (_contact, inboxIds, sentIds) => {
+                        const label = selectedName.email.replace('@nftmail.box', '');
+                        // Delete inbox messages
+                        await Promise.all(inboxIds.map(id =>
+                          fetch(WORKER_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
+                          }).catch(() => {})
+                        ));
+                        // Delete sent messages
+                        await Promise.all(sentIds.map(id =>
+                          fetch(WORKER_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),
+                          }).catch(() => {})
+                        ));
+                        // Refresh both after delete
+                        fetchInbox();
+                        fetchSentbox();
                       }}
                     />
                   </div>

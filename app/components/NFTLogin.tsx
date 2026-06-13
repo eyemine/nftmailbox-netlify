@@ -65,6 +65,7 @@ export function NFTLogin() {
         displayName: n.label,
         email: n.email,
         exists: true,
+        source: 'vault' as const,
       }));
       setRows(prev => {
         const merged = [...prev];
@@ -118,6 +119,7 @@ export function NFTLogin() {
           email: `${data.ensLabel}@nftmail.box`,
           sovereign: true,
           exists: null,
+          source: 'hot' as const,
         };
         setRows(prev => {
           const already = prev.find(r => r.email === ensRow.email);
@@ -151,6 +153,7 @@ export function NFTLogin() {
             collection: n.collection,
             sovereign: true, // Path B: all collection NFTs use TBA-owned Safe
             exists: null,
+            source: 'hot' as const,
           }));
         setRows(prev => {
           const merged = [...prev];
@@ -316,26 +319,31 @@ export function NFTLogin() {
               </p>
             )}
 
-            {rows.length > 0 && (
-              <div className="flex flex-col gap-2 overflow-y-auto pr-1" style={{ maxHeight: '272px' }}>
-                {rows.map((row, i) => (
-                  <div
-                    key={`${row.email}-${i}`}
-                    className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-black/10 px-3 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white truncate">{row.displayName}</p>
-                        <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
-                          row.type === 'ens'
-                            ? 'text-[rgb(160,220,255)] bg-[rgba(0,163,255,0.08)] ring-[rgba(0,163,255,0.2)]'
-                            : 'text-violet-300 bg-violet-500/8 ring-violet-500/20'
-                        }`}>
-                          {row.type === 'ens' ? 'ENS' : row.collection || 'NFT'}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-[var(--muted)] mt-0.5">{row.email}</p>
+            {rows.length > 0 && (() => {
+              const vaultRows = rows.filter(r => r.source === 'vault');
+              const hotRows   = rows.filter(r => r.source !== 'vault');
+              const renderRow = (row: NftRow, i: number, dimmed?: boolean) => (
+                <div
+                  key={`${row.email}-${i}`}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2.5 ${
+                    dimmed
+                      ? 'border-zinc-700/30 bg-black/5 opacity-50'
+                      : 'border-[var(--border)] bg-black/10'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white truncate">{row.displayName}</p>
+                      <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
+                        row.type === 'ens'
+                          ? 'text-[rgb(160,220,255)] bg-[rgba(0,163,255,0.08)] ring-[rgba(0,163,255,0.2)]'
+                          : 'text-violet-300 bg-violet-500/8 ring-violet-500/20'
+                      }`}>
+                        {row.type === 'ens' ? 'ENS' : row.collection || 'NFT'}
+                      </span>
                     </div>
+                    <p className="text-[10px] text-[var(--muted)] mt-0.5">{row.email}</p>
+                  </div>
                     <div className="ml-3 flex-shrink-0">
                       {row.exists === null ? (
                         <div className="h-3 w-3 animate-spin rounded-full border border-[rgb(160,220,255)] border-t-transparent" />

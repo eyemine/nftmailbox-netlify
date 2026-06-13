@@ -12,10 +12,21 @@ interface InboxMsg {
   encrypted?: boolean;
 }
 
+interface SentMsg {
+  id: string;
+  from: string;
+  to: string;
+  body?: string;
+  subject?: string;
+  timestamp: number; // unix seconds
+}
+
 interface ChatViewProps {
   myEmail: string;
   messages: InboxMsg[];
+  sentMessages?: SentMsg[];
   onSendMessage: (to: string, body: string) => Promise<void>;
+  onDeleteThread?: (contact: string, inboxIds: string[], sentIds: string[]) => Promise<void>;
   isOwner?: boolean;
 }
 
@@ -33,21 +44,35 @@ function shortContact(contact: string): string {
   return local.length > 18 ? local.slice(0, 16) + '…' : local;
 }
 
-export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: ChatViewProps) {
+export function ChatView({ myEmail, messages, sentMessages = [], onSendMessage, onDeleteThread, isOwner = false }: ChatViewProps) {
   const [activeContact, setActiveContact] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [localSent, setLocalSent] = useState<ChatMessage[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const chatMsgs: ChatMessage[] = messages
+  // Received messages (inbox)
+  const inboxMsgs: ChatMessage[] = messages
     .filter(m => !m.encrypted)
     .map(m => emailToChat(m, myEmail));
 
-  // Merge optimistic sent messages — deduplicate against inbox (same id)
-  const inboxIds = new Set(chatMsgs.map(m => m.id));
-  const allMsgs = [...chatMsgs, ...localSent.filter(m => !inboxIds.has(m.id))];
+  // Sent messages — convert to ChatMessage with toAddress so they group correctly
+  const sentMsgs: ChatMessage[] = sentMessages.map(m =>
+    emailToChat(
+      { id: m.id, fromAddress: m.from, toAddress: m.to, body: m.body, receivedTime: new Date(m.timestamp * 1000).toISOString() },
+      myEmail,
+    )
+  );
+
+  // Merge inbox + sent + optimistic, deduplicating by id
+  const seenIds = new Set([...inboxMsgs.map(m => m.id), ...sentMsgs.map(m => m.id)]);
+  const allMsgs = [
+    ...inboxMsgs,
+    ...sentMsgs,
+    ...localSent.filter(m => !seenIds.has(m.id)),
+  ];
 
   const conversations = groupByContact(allMsgs);
   const contacts = Object.keys(conversations).sort((a, b) => {
@@ -58,7 +83,7 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeContact, messages.length]);
+  }, [activeContact, messages.length, sentMessages.length]);
 
   const handleSend = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,10 +92,11 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
     setSendError(null);
     try {
       await onSendMessage(activeContact, draft.trim());
-      // Optimistic bubble — appears immediately without waiting for inbox refresh
+      // Optimistic bubble — contact field ensures it merges into the right thread
       setLocalSent(prev => [...prev, {
         id: `local-${Date.now()}`,
-        sender: activeContact, // key by recipient so groupByContact merges into their thread
+        sender: myEmail,
+        contact: activeContact,
         text: draft.trim(),
         timestamp: Date.now(),
         isMe: true,
@@ -81,7 +107,22 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
     } finally {
       setSending(false);
     }
-  }, [draft, activeContact, isOwner, onSendMessage]);
+  }, [draft, activeContact, isOwner, myEmail, onSendMessage]);
+
+  const handleDeleteThread = useCallback(async () => {
+    if (!activeContact || !onDeleteThread || deleting) return;
+    setDeleting(true);
+    const thread = conversations[activeContact] ?? [];
+    const inboxIds = thread.filter(m => !m.isMe).map(m => m.id);
+    const sentIds  = thread.filter(m =>  m.isMe).map(m => m.id);
+    try {
+      await onDeleteThread(activeContact, inboxIds, sentIds);
+      setLocalSent(prev => prev.filter(m => m.contact !== activeContact));
+      setActiveContact(null);
+    } catch { /* non-fatal */ } finally {
+      setDeleting(false);
+    }
+  }, [activeContact, conversations, onDeleteThread, deleting]);
 
   const thread = activeContact ? (conversations[activeContact] ?? []) : [];
 
@@ -122,7 +163,7 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
         <div className={`${showThread ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0 bg-[var(--background)]`}>
           {activeContact ? (
             <>
-              {/* Header with back button on mobile */}
+              {/* Header with back button on mobile + delete thread */}
               <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--card)]/40">
                 <button
                   onClick={() => setActiveContact(null)}
@@ -134,6 +175,20 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
                   </svg>
                 </button>
                 <span className="flex-1 font-mono text-xs text-[rgb(160,220,255)] truncate">{activeContact}</span>
+                {onDeleteThread && (
+                  <button
+                    onClick={handleDeleteThread}
+                    disabled={deleting}
+                    className="flex-shrink-0 rounded p-1.5 text-[var(--muted)] hover:text-red-400 hover:bg-red-500/10 transition disabled:opacity-40"
+                    title="Delete thread"
+                  >
+                    {deleting ? (
+                      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    ) : (
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Bubbles */}

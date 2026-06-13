@@ -1,6 +1,7 @@
 export interface ChatMessage {
   id: string;
   sender: string;
+  contact: string; // the "other party" in the conversation — used for thread grouping
   text: string;
   timestamp: number;
   isMe: boolean;
@@ -29,6 +30,7 @@ export function emailToChat(
     id: string;
     fromAddress?: string;
     sender?: string;
+    toAddress?: string; // recipient — required to correctly group sent messages
     body?: string;
     summary?: string;
     receivedTime?: string;
@@ -46,20 +48,25 @@ export function emailToChat(
   if (sigIdx !== -1) raw = raw.slice(0, sigIdx);
 
   const from = (msg.fromAddress || msg.sender || '').toLowerCase();
+  const isMe = from === myEmail.toLowerCase();
+  // For received messages: contact = sender. For sent messages: contact = recipient.
+  const contact = isMe ? (msg.toAddress || '').toLowerCase() : from;
   return {
     id: msg.id,
     sender: from,
+    contact,
     text: raw.trim() || '(no content)',
     timestamp: msg.receivedTime ? new Date(msg.receivedTime).getTime() : 0,
-    isMe: from === myEmail.toLowerCase(),
+    isMe,
   };
 }
 
 export function groupByContact(msgs: ChatMessage[]): Record<string, ChatMessage[]> {
   const groups: Record<string, ChatMessage[]> = {};
   for (const m of msgs) {
-    if (!groups[m.sender]) groups[m.sender] = [];
-    groups[m.sender].push(m);
+    const key = m.contact || m.sender;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(m);
   }
   for (const k of Object.keys(groups)) {
     groups[k].sort((a, b) => a.timestamp - b.timestamp);
