@@ -58,10 +58,11 @@ export function ChatView({ myEmail, messages, sentMessages = [], onSendMessage, 
     .filter(m => !m.encrypted)
     .map(m => emailToChat(m, myEmail));
 
-  // Sent messages — convert to ChatMessage with toAddress so they group correctly
+  // Sent messages — force fromAddress=myEmail so isMe is always true regardless
+  // of how the worker stores the From header (bare addr vs. "Name <addr>")
   const sentMsgs: ChatMessage[] = sentMessages.map(m =>
     emailToChat(
-      { id: m.id, fromAddress: m.from, toAddress: m.to, body: m.body, receivedTime: new Date(m.timestamp * 1000).toISOString() },
+      { id: m.id, fromAddress: myEmail, toAddress: m.to, body: m.body, receivedTime: new Date(m.timestamp * 1000).toISOString() },
       myEmail,
     )
   );
@@ -197,12 +198,12 @@ export function ChatView({ myEmail, messages, sentMessages = [], onSendMessage, 
                   <div key={msg.id} className={`flex ${msg.isMe ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap ${
                       msg.isMe
-                        ? 'bg-[rgba(0,163,255,0.18)] text-[#e8f4ff] rounded-br-sm'
-                        : 'bg-[var(--card)] border border-[var(--border)] text-[var(--muted)] rounded-bl-sm'
+                        ? 'bg-[rgba(0,163,255,0.28)] text-white rounded-br-sm'
+                        : 'bg-[var(--card)] border-l-2 border-l-[rgba(255,255,255,0.12)] border border-[var(--border)] text-[#f2eee4] rounded-bl-sm'
                     }`}>
                       {msg.text}
-                      <div className={`mt-1 text-[9px] opacity-40 ${msg.isMe ? 'text-right' : ''}`}>
-                        {timeAgo(msg.timestamp)}
+                      <div className={`mt-1 text-[9px] opacity-50 ${msg.isMe ? 'text-right text-sky-200' : 'text-[var(--muted)]'}`}>
+                        {msg.isMe ? 'You · ' : ''}{timeAgo(msg.timestamp)}
                       </div>
                     </div>
                   </div>
