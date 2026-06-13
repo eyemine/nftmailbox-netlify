@@ -37,6 +37,7 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
   const [activeContact, setActiveContact] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const chatMsgs: ChatMessage[] = messages
@@ -58,8 +59,15 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
     e.preventDefault();
     if (!draft.trim() || !activeContact || !isOwner) return;
     setSending(true);
-    try { await onSendMessage(activeContact, draft.trim()); setDraft(''); }
-    finally { setSending(false); }
+    setSendError(null);
+    try {
+      await onSendMessage(activeContact, draft.trim());
+      setDraft('');
+    } catch (err: unknown) {
+      setSendError(err instanceof Error ? err.message : 'Failed to send');
+    } finally {
+      setSending(false);
+    }
   }, [draft, activeContact, isOwner, onSendMessage]);
 
   const thread = activeContact ? (conversations[activeContact] ?? []) : [];
@@ -137,17 +145,22 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
               {/* Reply input */}
               <div className="px-3 py-2.5 border-t border-[var(--border)] bg-[var(--card)]/20">
                 {isOwner ? (
-                  <form onSubmit={handleSend} className="flex gap-2">
-                    <input
-                      className="flex-1 rounded-xl border border-[var(--border)] bg-black/30 px-3 py-2 text-xs text-[#f2eee4] placeholder-[var(--muted)] focus:border-[rgba(0,163,255,0.4)] focus:outline-none transition"
-                      placeholder="Reply…"
-                      value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                    />
-                    <button type="submit" disabled={!draft.trim() || sending}
-                      className="rounded-xl bg-[rgba(0,163,255,0.15)] border border-[rgba(0,163,255,0.3)] px-3 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.25)] disabled:opacity-40">
-                      {sending ? '…' : '↑'}
-                    </button>
+                  <form onSubmit={handleSend} className="flex flex-col gap-1">
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 rounded-xl border border-[var(--border)] bg-black/30 px-3 py-2 text-xs text-[#f2eee4] placeholder-[var(--muted)] focus:border-[rgba(0,163,255,0.4)] focus:outline-none transition"
+                        placeholder="Reply…"
+                        value={draft}
+                        onChange={e => { setDraft(e.target.value); setSendError(null); }}
+                      />
+                      <button type="submit" disabled={!draft.trim() || sending}
+                        className="rounded-xl bg-[rgba(0,163,255,0.15)] border border-[rgba(0,163,255,0.3)] px-3 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.25)] disabled:opacity-40">
+                        {sending ? '…' : '↑'}
+                      </button>
+                    </div>
+                    {sendError && (
+                      <p className="text-[10px] text-red-400 px-1">{sendError}</p>
+                    )}
                   </form>
                 ) : (
                   <p className="text-center text-[10px] text-[var(--muted)] italic">Connect wallet to reply</p>

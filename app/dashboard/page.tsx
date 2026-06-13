@@ -554,11 +554,15 @@ export default function DashboardPage() {
                       messages={messages.map(m => ({ id: m.messageId, fromAddress: m.fromAddress, sender: m.sender, body: m.body, summary: m.summary, receivedTime: m.receivedTime, encrypted: m.encrypted }))}
                       isOwner={true}
                       onSendMessage={async (to, body) => {
-                        await fetch('/api/send', {
+                        const res = await fetch('/api/send', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Chat from ${selectedName.label}`, content: body }),
+                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Re: chat`, content: body }),
                         });
+                        if (!res.ok) {
+                          const d = await res.json().catch(() => ({})) as { error?: string };
+                          throw new Error(d.error || `Send failed (${res.status})`);
+                        }
                       }}
                     />
                   </div>
