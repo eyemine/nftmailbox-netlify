@@ -70,7 +70,7 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
       // Optimistic bubble — appears immediately without waiting for inbox refresh
       setLocalSent(prev => [...prev, {
         id: `local-${Date.now()}`,
-        sender: myEmail.toLowerCase(),
+        sender: activeContact, // key by recipient so groupByContact merges into their thread
         text: draft.trim(),
         timestamp: Date.now(),
         isMe: true,
