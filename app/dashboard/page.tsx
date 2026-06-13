@@ -563,6 +563,24 @@ export default function DashboardPage() {
                           const d = await res.json().catch(() => ({})) as { error?: string };
                           throw new Error(d.error || `Send failed (${res.status})`);
                         }
+                        // Store to KV so it appears in the Sent tab (non-fatal)
+                        const label = selectedName.email.replace('@nftmail.box', '');
+                        fetch(WORKER_URL, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action: 'storeSentMessage',
+                            localPart: label,
+                            payload: {
+                              messageId: `chat-${Date.now()}`,
+                              from: selectedName.email,
+                              to,
+                              subject: 'Re: chat',
+                              body,
+                              timestamp: Date.now(),
+                            },
+                          }),
+                        }).catch(() => {});
                       }}
                     />
                   </div>

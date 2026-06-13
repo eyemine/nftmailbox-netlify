@@ -38,13 +38,18 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [localSent, setLocalSent] = useState<ChatMessage[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   const chatMsgs: ChatMessage[] = messages
     .filter(m => !m.encrypted)
     .map(m => emailToChat(m, myEmail));
 
-  const conversations = groupByContact(chatMsgs);
+  // Merge optimistic sent messages — deduplicate against inbox (same id)
+  const inboxIds = new Set(chatMsgs.map(m => m.id));
+  const allMsgs = [...chatMsgs, ...localSent.filter(m => !inboxIds.has(m.id))];
+
+  const conversations = groupByContact(allMsgs);
   const contacts = Object.keys(conversations).sort((a, b) => {
     const la = conversations[a].at(-1)?.timestamp ?? 0;
     const lb = conversations[b].at(-1)?.timestamp ?? 0;
@@ -62,6 +67,14 @@ export function ChatView({ myEmail, messages, onSendMessage, isOwner = false }: 
     setSendError(null);
     try {
       await onSendMessage(activeContact, draft.trim());
+      // Optimistic bubble — appears immediately without waiting for inbox refresh
+      setLocalSent(prev => [...prev, {
+        id: `local-${Date.now()}`,
+        sender: myEmail.toLowerCase(),
+        text: draft.trim(),
+        timestamp: Date.now(),
+        isMe: true,
+      }]);
       setDraft('');
     } catch (err: unknown) {
       setSendError(err instanceof Error ? err.message : 'Failed to send');
