@@ -6,6 +6,7 @@ import { getCachedNftmailCount } from '../../../utils/getNftmailCount';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export async function GET(request: NextRequest) {
   try {
     // Optional auth check - if ADMIN_SECRET is set, require it
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     try {
       const workerResponse = await fetch(WORKER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({ action: 'getStats' })
       });
       if (workerResponse.ok) {

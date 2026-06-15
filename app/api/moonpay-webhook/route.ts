@@ -4,6 +4,7 @@ import { createHmac } from 'crypto';
 // MoonPay signs webhooks with HMAC-SHA256 using your webhook secret key
 const MOONPAY_WEBHOOK_SECRET = process.env.MOONPAY_WEBHOOK_SECRET || '';
 const WORKER_URL = process.env.NEXT_PUBLIC_NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
 function verifyMoonPaySignature(payload: string, signature: string): boolean {
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET,
           'Authorization': `Bearer ${WEBHOOK_SECRET}`,
         },
         body: JSON.stringify({

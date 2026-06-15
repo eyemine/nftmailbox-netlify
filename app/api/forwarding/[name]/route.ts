@@ -7,6 +7,7 @@ import { cookies } from 'next/headers';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 interface ForwardingConfig {
   enabled: boolean;
   targetEmail: string;
@@ -23,7 +24,7 @@ export async function GET(
     const workerResponse = await fetch(`${WORKER_URL}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET,
         'Authorization': `Bearer ${process.env.WEBHOOK_SECRET || ''}`
       },
       body: JSON.stringify({
@@ -67,7 +68,7 @@ export async function POST(
     const workerResponse = await fetch(`${WORKER_URL}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET,
         'Authorization': `Bearer ${process.env.WEBHOOK_SECRET || ''}`
       },
       body: JSON.stringify({

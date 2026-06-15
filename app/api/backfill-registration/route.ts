@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     const kvRes = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         action: 'registerSovereign',
         secret: webhookSecret,

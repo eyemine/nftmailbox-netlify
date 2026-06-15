@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL ?? 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // MCP Tool Definitions
 const MCP_TOOLS = [
   {
@@ -96,7 +97,7 @@ const MCP_TOOLS = [
 async function callWorker(action: string, params: Record<string, unknown>) {
   const res = await fetch(WORKER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
     body: JSON.stringify({ action, ...params })
   });
   return res.json();

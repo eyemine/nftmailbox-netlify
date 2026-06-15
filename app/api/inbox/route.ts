@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
 
 async function getZohoAccessToken(): Promise<string | null> {
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
     try {
       const workerRes = await fetch(workerUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({
           action: 'getBlindInbox',
           localPart: agentName

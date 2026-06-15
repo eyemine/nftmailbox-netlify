@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export async function POST(request: NextRequest) {
   try {
     const { claimCode, walletAddress } = await request.json();
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     // First verify the claim
     const verifyRes = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'verifyClaim', claimCode })
     });
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Call gasless-mint to create the NFT
     const mintRes = await fetch('/api/gasless-mint', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         name: inboxName,
         owner: walletAddress,
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Mark claim as used in worker
     const claimRes = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ 
         action: 'markClaimUsed',
         claimCode,

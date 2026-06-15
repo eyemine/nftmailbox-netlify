@@ -5,6 +5,7 @@ import { gnosis } from 'viem/chains';
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ERC721 balanceOf + ownerOf
 const erc721Abi = [
   {
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     try {
       const kvRes = await fetch(WORKER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({ action: 'listNftmailByController', controller: address }),
       });
       if (kvRes.ok) {

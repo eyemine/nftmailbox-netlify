@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ─── Rate Limiting ─────────────────────────────────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX = 30; // 30 emails per hour per IP per label
@@ -206,7 +207,7 @@ export async function POST(req: NextRequest) {
     // ── Resolve address + verify ownership ──────────────────────────────────
     const resolveRes = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: label, domain: fromDomain }),
     });
     const resolved = (await resolveRes.json()) as Record<string, unknown>;
@@ -277,7 +278,7 @@ export async function POST(req: NextRequest) {
             const accountId = (seat.accountId || seat.zuid) as string;
             const sendRes = await fetch(`${ZOHO_MAIL_API}/accounts/${accountId}/messages`, {
               method: 'POST',
-              headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+              headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
               body: JSON.stringify({
                 fromAddress: fromEmail,
                 toAddress: to,
@@ -294,7 +295,7 @@ export async function POST(req: NextRequest) {
               try {
                 await fetch(WORKER_URL, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
                   body: JSON.stringify({
                     action: 'storeSentMessage',
                     localPart: label,
@@ -343,7 +344,7 @@ export async function POST(req: NextRequest) {
     try {
       await fetch(WORKER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({
           action: 'storeSentMessage',
           localPart: label,

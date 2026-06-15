@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || '';
 
 // Payment: USDC on Base (6 decimals)
@@ -26,12 +27,12 @@ async function verifyPayment(
     const [txRes, rcptRes, ethPriceRes] = await Promise.all([
       fetch(BASE_RPC, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionByHash', params: [txHash] }),
       }),
       fetch(BASE_RPC, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'eth_getTransactionReceipt', params: [txHash] }),
       }),
       // Get ETH price for USD valuation fallback
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
   // Link wallet
   const linkRes = await fetch(WORKER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
     body: JSON.stringify({ action: 'linkWallet', fid, agentName, walletAddress }),
   });
   const linkData = await linkRes.json() as { status?: string; error?: string };
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
   // Upgrade tier in KV
   const upgradeRes = await fetch(WORKER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
     body: JSON.stringify({ action: 'upgradeTier', name: agentName, tier: newTier, walletAddress: payment.fromWallet, txHash, secret: WEBHOOK_SECRET }),
   });
   const upgradeData = await upgradeRes.json() as { status?: string; newTier?: string; error?: string };
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest) {
       // Update KV with beacon details
       await fetch(WORKER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({
           action: 'setBeaconNft',
           label: agentName,

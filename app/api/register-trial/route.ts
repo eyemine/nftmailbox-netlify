@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateWuTangName, generateClaimCode, isValidAgentName } from '../../../lib/wutang';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ENS public client for collision checking
 const ENS_PUBLIC_CLIENT = 'https://eth.llamarpc.com';
 
@@ -8,7 +9,7 @@ async function checkEnsName(name: string): Promise<boolean> {
   try {
     const response = await fetch(ENS_PUBLIC_CLIENT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'eth_call',
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
     const checkRes = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: agentName.replace(/_$/, '') })
     });
     
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest) {
     // Store trial in KV via worker
     const registerRes = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         action: 'registerTrial',
         name: agentName,

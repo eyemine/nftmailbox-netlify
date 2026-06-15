@@ -12,6 +12,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const REGISTRAR = '0x831ddd71e7c33e16b674099129E6E379DA407fAF' as const;
 const GNS_REGISTRY = '0xA505e447474bd1774977510e7a7C9459DA79c4b9' as const;
 const NFTMAIL_GNO_NAMEHASH = namehash('nftmail.gno');
@@ -234,7 +235,7 @@ export async function POST(req: NextRequest) {
         try {
           const kvRes = await fetch(workerUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
             body: JSON.stringify({
               action: 'registerSovereign',
               secret: webhookSecret,

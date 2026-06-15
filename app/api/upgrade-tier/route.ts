@@ -23,6 +23,7 @@ import { verifyXDAIPayment, verifyEUREPayment, autoDetectXDAIPayment, autoDetect
 
 const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ─── Lite tier: $10 — Safe factory on Gnosis for user's body ───
 // v1.3.0 canonical Safe deployment contracts on Gnosis
 const SAFE_PROXY_FACTORY = '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2' as Address;
@@ -199,7 +200,7 @@ export async function POST(req: NextRequest) {
     // ── Call worker upgradeTier ──
     const workerRes = await fetch(NFTMAIL_WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         action: 'upgradeNinjaTier',
         secret: webhookSecret,

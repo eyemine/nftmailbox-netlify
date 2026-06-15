@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL =
   process.env.NFTMAIL_WORKER_URL ||
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
   'https://nftmail-email-worker.richard-159.workers.dev';
 
 // ── ERC-6551 TBA derivation ───────────────────────────────────────────────────
@@ -57,7 +58,7 @@ async function deriveTbaAddress(tokenId: number): Promise<string | null> {
 
     const res = await fetch(GNOSIS_RPC, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 1, method: 'eth_call',
         params: [{ to: ERC6551_REGISTRY, data }, 'latest'],
@@ -158,7 +159,7 @@ export async function GET(req: NextRequest) {
     // ── 1. resolveAddress from worker ─────────────────────────────────────
     const resolveRes = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: lookupName }),
     });
 
@@ -177,14 +178,14 @@ export async function GET(req: NextRequest) {
         // Beacon
         fetch(WORKER_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
           body: JSON.stringify({ action: 'getBeacon', name }),
         }).then(r => r.json()),
 
         // Molt path
         fetch(WORKER_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
           body: JSON.stringify({ action: 'getMoltPath', name }),
         }).then(r => r.json()),
 

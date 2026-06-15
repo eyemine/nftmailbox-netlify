@@ -30,6 +30,7 @@ const gnosis = defineChain({
 const NFTMAIL_GNO_REGISTRAR = '0x831ddd71e7c33e16b674099129e6e379da407faf' as Address;
 const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const MintSubnameABI = [
   {
     name: 'mintSubname',
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
     // ─── Register sovereign inbox in KV via worker ───
     const workerRes = await fetch(NFTMAIL_WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         action: 'registerSovereign',
         secret: webhookSecret,
