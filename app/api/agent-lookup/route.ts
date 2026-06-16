@@ -23,8 +23,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL =
   process.env.NFTMAIL_WORKER_URL ||
-const WORKER_SECRET = process.env.WORKER_SECRET || '';
   'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
 // ── ERC-6551 TBA derivation ───────────────────────────────────────────────────
 // Standard ERC-6551 registry (same address on all EVM chains)
