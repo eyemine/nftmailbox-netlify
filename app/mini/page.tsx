@@ -6,7 +6,7 @@ import { sdk } from '@farcaster/miniapp-sdk';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
 import { ChatView } from '../components/ChatView';
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = '/api/mini-worker';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 const TREASURY = '0xeD0B0694953158dd54D0c36D320b391f44cd67f3';
 const BASE_USDC_CAIP19 = 'eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -216,6 +216,9 @@ export default function MiniApp() {
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [signinEmail, setSigninEmail] = useState('');
+  const [signinError, setSigninError] = useState('');
+  const [signinLoading, setSigninLoading] = useState(false);
   const otpRequestedRef = useRef(false);
   // Forwarding (premium only)
   const [forwardEnabled, setForwardEnabled] = useState(false);
@@ -855,10 +858,6 @@ export default function MiniApp() {
   }
 
   if (step === 'signin') {
-    const [signinEmail, setSigninEmail] = useState('');
-    const [signinError, setSigninError] = useState('');
-    const [signinLoading, setSigninLoading] = useState(false);
-    
     const handleSignin = async () => {
       const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '').replace(/[^a-z0-9-]/g, '');
       if (!label) { setSigninError('Please enter a valid email or label'); return; }
