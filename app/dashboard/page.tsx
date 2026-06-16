@@ -59,8 +59,8 @@ interface InboxMessage {
 
 type Tab = 'inbox' | 'sentbox' | 'compose' | 'killswitch';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
+const WORKER_URL = '/api/mini-worker';
 
-const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
 
 export default function DashboardPage() {
   const { authenticated, login, logout, ready, user } = usePrivy();
@@ -136,7 +136,7 @@ export default function DashboardPage() {
     if (!selectedName?.email) return;
     const label = selectedName.email.replace('@nftmail.box', '');
     try {
-      await fetch(WORKER_URL, {
+      await fetch('/api/delete-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId }),
@@ -174,21 +174,12 @@ export default function DashboardPage() {
     if (!selectedName) return;
     setLoadingInbox(true);
     try {
-      const [inboxRes, resolveRes] = await Promise.all([
-        fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}`),
-        fetch(WORKER_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'resolveAddress', name: selectedName.label }),
-        }),
-      ]);
-      const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; note?: string };
+      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}`);
+      const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
       setInboxNote(data.note || '');
-      // Get account tier from resolveAddress — inbox API always returns 'free'
-      const resolveData = await resolveRes.json() as { accountTier?: string };
-      setInboxTier(resolveData.accountTier || data.tier || '');
+      setInboxTier(data.accountTier || data.tier || '');
     } catch (err: any) {
       setError(err?.message || 'Failed to fetch inbox');
     } finally {

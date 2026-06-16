@@ -57,17 +57,27 @@ export async function GET(req: NextRequest) {
     // Always fetch from Worker KV (all streams store here)
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
     let kvMessages: any[] = [];
+    let accountTier: string | null = null;
 
     let workerError = '';
     try {
-      const workerRes = await fetch(workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-        body: JSON.stringify({
-          action: 'getBlindInbox',
-          localPart: agentName
-        })
-      });
+      const [workerRes, resolveRes] = await Promise.all([
+        fetch(workerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+          body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
+        }),
+        fetch(workerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+          body: JSON.stringify({ action: 'resolveAddress', name: agentName }),
+        }),
+      ]);
+
+      if (resolveRes.ok) {
+        const rd = await resolveRes.json() as Record<string, any>;
+        accountTier = rd.accountTier || null;
+      }
 
       if (workerRes.ok) {
         const workerData = await workerRes.json() as Record<string, any>;
@@ -125,6 +135,7 @@ export async function GET(req: NextRequest) {
         messages: active,
         total: active.length,
         tier,
+        accountTier,
       });
     }
 
@@ -135,6 +146,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ 
         messages: [], 
         tier: 'free',
+        accountTier,
         ...(workerError ? { workerError } : {}),
       });
     }
@@ -167,6 +179,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         messages: [],
         tier: 'free',
+        accountTier,
         note: 'No Zoho mailbox provisioned. Emails received via Cloudflare Worker routing.',
       });
     }
@@ -224,6 +237,7 @@ export async function GET(req: NextRequest) {
       messages: activeMessages,
       total: activeMessages.length,
       tier: 'premium',
+      accountTier,
     });
   } catch (err: any) {
     console.error('Inbox error:', err);
