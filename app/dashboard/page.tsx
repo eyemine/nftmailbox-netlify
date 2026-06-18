@@ -9,6 +9,7 @@ import { WarrantCanary } from '../components/WarrantCanary';
 import { ChatView } from '../components/ChatView';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
+import ForwardingSetup from '../components/ForwardingSetup';
 
 function stripHtml(html: string): string {
   const s = html
@@ -74,6 +75,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('inbox');
   const [chatMode, setChatMode] = useState(false);
+  const [showForwarding, setShowForwarding] = useState(false);
+  const [forwardingConfig, setForwardingConfig] = useState<{ enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } | undefined>();
 
   // Reading pane state
   const [selectedMessage, setSelectedMessage] = useState<InboxMessage | null>(null);
@@ -111,8 +114,10 @@ export default function DashboardPage() {
   const emailParam = searchParams?.get('email') || null;
 
   // Derive wallet address safely from Privy session (avoids useWallets() crash)
-  const walletAddress = user?.wallet?.address ||
-    (user?.linkedAccounts as any[])?.find((a: any) => a?.address)?.address || null;
+  // Prioritize linked external wallets over embedded wallet - NFTMail names are owned by external wallets
+  const linkedWallets = (user?.linkedAccounts as any[])?.filter((a: any) => a?.type === 'wallet' && a?.address) || [];
+  const embeddedWallet = user?.wallet?.address;
+  const walletAddress = linkedWallets[0]?.address || embeddedWallet || null;
   const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
 
   // Load persisted read IDs from localStorage
@@ -174,7 +179,8 @@ export default function DashboardPage() {
     if (!selectedName) return;
     setLoadingInbox(true);
     try {
-      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}`);
+      const ownerParam = preferredWallet?.address ? `&ownerWallet=${encodeURIComponent(preferredWallet.address)}` : '';
+      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
@@ -185,7 +191,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingInbox(false);
     }
-  }, [selectedName]);
+  }, [selectedName, preferredWallet?.address]);
 
   useEffect(() => {
     if (authenticated && preferredWallet?.address) {
@@ -247,6 +253,20 @@ export default function DashboardPage() {
       fetchSentbox();
     }
   }, [selectedName, tab, fetchSentbox]);
+
+  useEffect(() => {
+    const t = (inboxTier || '').toLowerCase();
+    const isPrem = t === 'premium' || t === 'imago' || t === 'ghost';
+    const isAgt = selectedName?.label.endsWith('_') ?? false;
+    if (!selectedName || !isPrem || isAgt) { setShowForwarding(false); setForwardingConfig(undefined); return; }
+    fetch(`/api/forwarding/${selectedName.label}`)
+      .then(r => r.json())
+      .then((d: unknown) => {
+        const rd = d as { config?: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } };
+        if (rd?.config) setForwardingConfig(rd.config);
+      })
+      .catch(() => {});
+  }, [selectedName, inboxTier]);
 
   // Send email — uses /api/send-email with ownerWallet auth + CC/BCC + multisend
   const handleSend = async () => {
