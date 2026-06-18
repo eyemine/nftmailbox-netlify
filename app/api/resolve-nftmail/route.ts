@@ -65,25 +65,40 @@ export async function GET(req: NextRequest) {
   try {
     const address = req.nextUrl.searchParams.get('address');
     if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
-      return NextResponse.json({ error: 'Invalid address' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid address' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Primary: KV controller lookup — works for EOA, TBA-held, and Safe-held NFTs
     try {
+      console.log(`[resolve-nftmail] Calling worker for controller: ${address}`);
+      console.log(`[resolve-nftmail] WORKER_SECRET present: ${WORKER_SECRET ? 'yes (' + WORKER_SECRET.slice(0, 4) + '...)' : 'NO'}`);
+      
       const kvRes = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({ action: 'listNftmailByController', controller: address }),
       });
+      
+      console.log(`[resolve-nftmail] Worker response status: ${kvRes.status}`);
+      
       if (kvRes.ok) {
         const kvData = await kvRes.json() as { names?: { name: string; email: string; gnoName: string; tokenId: number | null }[]; error?: string };
+        console.log(`[resolve-nftmail] Worker data:`, JSON.stringify(kvData).slice(0, 500));
+        
+        if (kvData.error) {
+          console.error(`[resolve-nftmail] Worker returned error: ${kvData.error}`);
+        }
         if (!kvData.error && (kvData.names?.length ?? 0) > 0) {
           return NextResponse.json({
             names: kvData.names!.map(n => ({ tokenId: n.tokenId, label: n.name, email: n.email, gnoName: n.gnoName })),
-          });
+          }, { headers: { 'Cache-Control': 'no-store' } });
         }
+        console.log(`[resolve-nftmail] No names found in KV for controller ${address}`);
+      } else {
+        const errText = await kvRes.text().catch(() => '');
+        console.error(`[resolve-nftmail] Worker returned ${kvRes.status} — ${errText}`);
       }
-    } catch { /* fall through to on-chain scan */ }
+    } catch (e) { console.error('[resolve-nftmail] Worker KV error:', e); /* fall through to on-chain scan */ }
 
     const addr = address as `0x${string}`;
 
@@ -121,7 +136,7 @@ export async function GET(req: NextRequest) {
     await Promise.all(ownerCalls);
 
     if (ownedTokens.length === 0) {
-      return NextResponse.json({ names: [] });
+      return NextResponse.json({ names: [] }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Get SubnameMinted events to resolve labels
@@ -168,10 +183,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ names });
+    return NextResponse.json({ names }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to resolve NFTMail names';
     console.error('resolve-nftmail error:', err);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }
