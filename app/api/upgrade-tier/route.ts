@@ -19,7 +19,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
-import { verifyXDAIPayment, verifyEUREPayment, autoDetectXDAIPayment, autoDetectEUREPayment, burnTxHash, TIER_PRICES_USD, TIER_PRICES_EURE } from '../../lib/payments';
+import { verifyXDAIPayment, verifyEUREPayment, verifyUSDCBasePayment, autoDetectXDAIPayment, autoDetectEUREPayment, autoDetectUSDCBasePayment, burnTxHash, TIER_PRICES_USD, TIER_PRICES_EURE } from '../../lib/payments';
 
 const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       ownerWallet?: string;
       newTier?: string;
       paymentTxHash?: string;
-      paymentToken?: 'xdai' | 'eure'; // default: 'xdai'
+      paymentToken?: 'xdai' | 'eure' | 'usdc-base'; // default: 'xdai'
       legacyIdentity?: string;
       autoDetect?: boolean;
     };
@@ -109,10 +109,14 @@ export async function POST(req: NextRequest) {
 
     let payment;
     if (autoDetect) {
-      // Auto-detect mode: scan Gnosisscan for a recent payment from ownerWallet
-      payment = paymentToken === 'eure'
-        ? await autoDetectEUREPayment(ownerWallet, normalisedTier)
-        : await autoDetectXDAIPayment(ownerWallet, normalisedTier);
+      // Auto-detect mode: scan block explorer for a recent payment from ownerWallet
+      if (paymentToken === 'usdc-base') {
+        payment = await autoDetectUSDCBasePayment(ownerWallet, normalisedTier);
+      } else if (paymentToken === 'eure') {
+        payment = await autoDetectEUREPayment(ownerWallet, normalisedTier);
+      } else {
+        payment = await autoDetectXDAIPayment(ownerWallet, normalisedTier);
+      }
       if (!payment.valid) {
         // Return 404 so the poller knows to keep trying (not a fatal error)
         return NextResponse.json({ error: payment.error, polling: true }, { status: 404 });
@@ -127,9 +131,13 @@ export async function POST(req: NextRequest) {
           tier: normalisedTier,
         }, { status: 402 });
       }
-      payment = paymentToken === 'eure'
-        ? await verifyEUREPayment(paymentTxHash, normalisedTier)
-        : await verifyXDAIPayment(paymentTxHash, normalisedTier);
+      if (paymentToken === 'usdc-base') {
+        payment = await verifyUSDCBasePayment(paymentTxHash, normalisedTier);
+      } else if (paymentToken === 'eure') {
+        payment = await verifyEUREPayment(paymentTxHash, normalisedTier);
+      } else {
+        payment = await verifyXDAIPayment(paymentTxHash, normalisedTier);
+      }
       if (!payment.valid) {
         return NextResponse.json({ error: payment.error }, { status: 402 });
       }
@@ -238,8 +246,8 @@ export async function POST(req: NextRequest) {
       message: normalisedTier === 'ghost'
         ? 'Agent activated — sovereign identity, Brain module eligible, Mirror Body deployed'
         : normalisedTier === 'premium'
-        ? 'Imago activated — infinite KV retention, sovereign relay MTA, Mirror Body deployed'
-        : 'Pupa activated — Mirror Body Safe deployed, sending enabled, 30-day cycle reset',
+        ? 'PREMIUM activated — infinite KV retention, sovereign relay MTA, Mirror Body deployed'
+        : 'PRO activated — Mirror Body Safe deployed, sending enabled, 30-day cycle reset',
     });
   } catch (err: any) {
     console.error('upgrade-tier error:', err);

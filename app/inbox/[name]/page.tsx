@@ -1070,11 +1070,13 @@ export default function InboxPage() {
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
 
   // Privacy model:
-  // - Human stream: honour stored tier (exposed shows blurred headers, private/hard-privacy hide all)
+  // - Human stream: always private from public (blurred unless owner)
   // - Molt.gno agent (glassbox): exposed by default, owner can toggle
   // - Other agents: private by default, owner can toggle
   // - hard-privacy (IMAGO): always blurred from public regardless
-  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = privacyTier;
+  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = !isAgent
+    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // humans always private
+    : privacyTier;  // agents: use stored tier
   const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
 
   const tierLabel = effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';

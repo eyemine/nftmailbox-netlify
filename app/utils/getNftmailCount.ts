@@ -2,7 +2,7 @@
 /// Queries the Cloudflare Worker KV (listAgents) which is the source of truth
 /// On-chain registrars have ABI mismatches on deployed contracts; KV is reliable
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const PUBLIC_RESOLVE_URL = '/api/public-resolve';
 
 const TLD_LIST = ['molt.gno', 'nftmail.gno', 'openclaw.gno', 'picoclaw.gno', 'vault.gno', 'agent.gno'] as const;
 
@@ -35,7 +35,7 @@ export async function getNftmailCount(): Promise<NftmailStats> {
   try {
     console.log('Fetching nftmail agent counts from worker KV (getStats)');
 
-    const response = await fetch(WORKER_URL, {
+    const response = await fetch(PUBLIC_RESOLVE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'getStats' }),

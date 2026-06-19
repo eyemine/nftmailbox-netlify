@@ -8,7 +8,7 @@
 ///   5. Burns txHash in KV to prevent double-spend
 
 import { createPublicClient, http, parseEther, parseUnits, type Hex, type Log } from 'viem';
-import { gnosis } from 'viem/chains';
+import { gnosis, base } from 'viem/chains';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
 const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || '';
@@ -18,6 +18,9 @@ export const TREASURY_SAFE = (process.env.TREASURY_SAFE_ADDRESS || '0xb7e493e3d2
 
 // EURe (Monerium EUR) on Gnosis — Gnosis Pay's stablecoin. 6 decimals.
 export const EURE_CONTRACT = '0xcB444e90D8198415266c6a2724b7900fb12FC56E'.toLowerCase();
+
+// USDC on Base (native Circle USDC). 6 decimals.
+export const USDC_BASE_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'.toLowerCase();
 
 // Tier prices in xDAI (18 decimals)
 export const TIER_PRICES_XDAI: Record<string, bigint> = {
@@ -35,6 +38,15 @@ export const TIER_PRICES_EURE: Record<string, bigint> = {
   pro: parseUnits('22', 6),
   ghost: parseUnits('22', 6),
   agent: parseUnits('11', 6),   // ~11 EUR ≈ 12 xDAI
+};
+
+// Tier prices in USDC on Base (6 decimals — same $ face values as xDAI)
+export const TIER_PRICES_USDC: Record<string, bigint> = {
+  lite: parseUnits('10', 6),
+  premium: parseUnits('24', 6),
+  pro: parseUnits('24', 6),
+  ghost: parseUnits('24', 6),
+  agent: parseUnits('12', 6),
 };
 
 export const TIER_PRICES_USD: Record<string, number> = {
@@ -68,6 +80,11 @@ export interface PaymentVerificationResult {
 const publicClient = createPublicClient({
   chain: gnosis,
   transport: http(process.env.NEXT_PUBLIC_GNOSIS_RPC || 'https://rpc.gnosischain.com'),
+});
+
+const basePublicClient = createPublicClient({
+  chain: base,
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC || 'https://mainnet.base.org'),
 });
 
 /// Check if a txHash has already been used (double-spend prevention)
@@ -260,6 +277,144 @@ export async function autoDetectEUREPayment(
     };
   }
   return { valid: false, error: 'No matching EURe payment found yet.' };
+}
+
+/// Verify a USDC payment tx on Base chain.
+export async function verifyUSDCBasePayment(
+  txHash: string,
+  tier: string,
+  minConfirmations = 2
+): Promise<PaymentVerificationResult> {
+  if (!txHash || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+    return { valid: false, error: 'Invalid tx hash format (must be 0x + 64 hex chars)' };
+  }
+
+  const expectedMinValue = TIER_PRICES_USDC[tier];
+  if (!expectedMinValue) {
+    return { valid: false, error: `Unknown tier: ${tier}` };
+  }
+
+  const burned = await isTxHashBurned(txHash);
+  if (burned) {
+    return { valid: false, error: 'This transaction has already been used to activate a tier upgrade' };
+  }
+
+  let receipt: Awaited<ReturnType<typeof basePublicClient.getTransactionReceipt>>;
+  try {
+    receipt = await basePublicClient.getTransactionReceipt({ hash: txHash as Hex });
+  } catch {
+    return { valid: false, error: 'Transaction not found on Base chain. Check the hash and try again.' };
+  }
+
+  if (receipt.status === 'reverted') {
+    return { valid: false, error: 'Transaction reverted on Base chain — payment was not completed.' };
+  }
+
+  const { decodeEventLog } = await import('viem');
+  let transferFrom: string | null = null;
+  let transferValue: bigint | null = null;
+
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== USDC_BASE_CONTRACT) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: ERC20_TRANSFER_ABI,
+        data: log.data,
+        topics: log.topics as any,
+      });
+      if (
+        decoded.eventName === 'Transfer' &&
+        (decoded.args as any).to?.toLowerCase() === TREASURY_SAFE
+      ) {
+        transferFrom = (decoded.args as any).from as string;
+        transferValue = (decoded.args as any).value as bigint;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (!transferFrom || transferValue === null) {
+    return {
+      valid: false,
+      error: `No USDC Transfer to treasury found in this tx. Ensure you sent USDC on Base to ${TREASURY_SAFE}.`,
+    };
+  }
+
+  if (transferValue < expectedMinValue) {
+    const sentUsdc = Number(transferValue) / 1e6;
+    const expectedUsdc = Number(expectedMinValue) / 1e6;
+    return {
+      valid: false,
+      error: `Insufficient USDC payment: sent ${sentUsdc.toFixed(2)} USDC, expected at least ${expectedUsdc.toFixed(2)} USDC`,
+    };
+  }
+
+  if (receipt.blockNumber === null || receipt.blockNumber === undefined) {
+    return { valid: false, error: 'Transaction is still pending. Wait for confirmation on Base and try again.' };
+  }
+
+  try {
+    const currentBlock = await basePublicClient.getBlockNumber();
+    const confirmations = Number(currentBlock - receipt.blockNumber);
+    if (confirmations < minConfirmations) {
+      return {
+        valid: false,
+        error: `Transaction has ${confirmations} confirmation${confirmations === 1 ? '' : 's'}. Please wait for ${minConfirmations} (~${minConfirmations * 2}s on Base) and try again.`,
+      };
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return {
+    valid: true,
+    txHash: txHash.toLowerCase(),
+    from: transferFrom.toLowerCase(),
+    value: (Number(transferValue) / 1e6).toFixed(2) + ' USDC',
+    blockNumber: receipt.blockNumber ? Number(receipt.blockNumber) : undefined,
+  };
+}
+
+/// Auto-detect a recent USDC payment on Base from ownerWallet to treasury.
+export async function autoDetectUSDCBasePayment(
+  ownerWallet: string,
+  tier: string,
+): Promise<PaymentVerificationResult> {
+  const expectedMinValue = TIER_PRICES_USDC[tier];
+  if (!expectedMinValue) return { valid: false, error: `Unknown tier: ${tier}` };
+
+  const apiKey = process.env.BASESCAN_API_KEY || '';
+  const url = `https://api.basescan.org/api?module=account&action=tokentx&contractaddress=${USDC_BASE_CONTRACT}&address=${TREASURY_SAFE}&page=1&offset=50&sort=desc&apikey=${apiKey}`;
+
+  let txs: unknown[];
+  try {
+    const res = await fetch(url, { next: { revalidate: 0 } });
+    const data = await res.json() as { result?: unknown[] };
+    txs = Array.isArray(data.result) ? data.result : [];
+  } catch {
+    return { valid: false, error: 'Could not reach Basescan. Try again in a moment.' };
+  }
+
+  const cutoff = Math.floor(Date.now() / 1000) - 900;
+  for (const rawTx of txs) {
+    const tx = rawTx as Record<string, string>;
+    if (tx['from']?.toLowerCase() !== ownerWallet.toLowerCase()) continue;
+    if (Number(tx['timeStamp']) < cutoff) continue;
+    const value = BigInt(tx['value'] || '0');
+    if (value < expectedMinValue) continue;
+    const burned = await isTxHashBurned(tx['hash']);
+    if (burned) continue;
+    return {
+      valid: true,
+      txHash: tx['hash'],
+      from: tx['from'].toLowerCase(),
+      value: (Number(value) / 1e6).toFixed(2) + ' USDC',
+      blockNumber: Number(tx['blockNumber']),
+    };
+  }
+  return { valid: false, error: 'No matching USDC payment found on Base yet.' };
 }
 
 /// Verify an EURe (Gnosis Pay) ERC-20 payment tx on Gnosis chain.

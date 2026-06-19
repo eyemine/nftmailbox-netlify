@@ -23,7 +23,8 @@ import {
   type EncryptedEnvelope,
 } from '../lib/ecies-browser';
 
-const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
+const PUBLIC_RESOLVE_URL = '/api/public-resolve';
+const MINI_WORKER_URL = '/api/mini-worker';
 
 export interface DecryptedMessage {
   id: string;
@@ -91,11 +92,11 @@ export function useEciesDecrypt(agentName: string | null): UseEciesDecryptReturn
     }
   }, [agentName]);
 
-  // Fetch all blind envelopes from worker KV
+  // Fetch all blind envelopes from worker KV via public proxy
   const loadBlindInbox = useCallback(async () => {
     if (!agentName) return;
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await fetch(PUBLIC_RESOLVE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
@@ -202,8 +203,8 @@ export function useEciesDecrypt(agentName: string | null): UseEciesDecryptReturn
       storePrivateKey(base, kp.privateKey);
       setPrivKey(kp.privateKey);
 
-      // Register public key with the worker KV under the base identity
-      await fetch(WORKER_URL, {
+      // Register public key with the worker KV under the base identity via proxy
+      await fetch(MINI_WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

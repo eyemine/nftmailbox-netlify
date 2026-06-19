@@ -68,37 +68,65 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid address' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     }
 
-    // Primary: KV controller lookup — works for EOA, TBA-held, and Safe-held NFTs
+    // Fetch associated Safes for this owner on Gnosis Chain
+    let safes: string[] = [];
     try {
-      console.log(`[resolve-nftmail] Calling worker for controller: ${address}`);
-      console.log(`[resolve-nftmail] WORKER_SECRET present: ${WORKER_SECRET ? 'yes (' + WORKER_SECRET.slice(0, 4) + '...)' : 'NO'}`);
-      
-      const kvRes = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-        body: JSON.stringify({ action: 'listNftmailByController', controller: address }),
+      console.log(`[resolve-nftmail] Fetching safes for owner: ${address}`);
+      const safeRes = await fetch(`https://safe-transaction-gnosis-chain.safe.global/api/v1/owners/${address}/safes/`, {
+        headers: { 'Accept': 'application/json' },
+        next: { revalidate: 30 } // cache for 30s
       });
-      
-      console.log(`[resolve-nftmail] Worker response status: ${kvRes.status}`);
-      
-      if (kvRes.ok) {
-        const kvData = await kvRes.json() as { names?: { name: string; email: string; gnoName: string; tokenId: number | null }[]; error?: string };
-        console.log(`[resolve-nftmail] Worker data:`, JSON.stringify(kvData).slice(0, 500));
-        
-        if (kvData.error) {
-          console.error(`[resolve-nftmail] Worker returned error: ${kvData.error}`);
+      if (safeRes.ok) {
+        const safeData = await safeRes.json() as { safes?: string[] };
+        if (Array.isArray(safeData.safes)) {
+          safes = safeData.safes.map(s => s.toLowerCase());
+          console.log(`[resolve-nftmail] Found safes for ${address}:`, safes);
         }
-        if (!kvData.error && (kvData.names?.length ?? 0) > 0) {
-          return NextResponse.json({
-            names: kvData.names!.map(n => ({ tokenId: n.tokenId, label: n.name, email: n.email, gnoName: n.gnoName })),
-          }, { headers: { 'Cache-Control': 'no-store' } });
-        }
-        console.log(`[resolve-nftmail] No names found in KV for controller ${address}`);
-      } else {
-        const errText = await kvRes.text().catch(() => '');
-        console.error(`[resolve-nftmail] Worker returned ${kvRes.status} — ${errText}`);
       }
-    } catch (e) { console.error('[resolve-nftmail] Worker KV error:', e); /* fall through to on-chain scan */ }
+    } catch (e) {
+      console.error('[resolve-nftmail] Safe Transaction API error:', e);
+    }
+
+    const controllersToQuery = [address.toLowerCase(), ...safes];
+
+    // Primary: KV controller lookup — works for EOA, TBA-held, and Safe-held NFTs
+    const allNamesMap = new Map<string, { tokenId: number | null, label: string, email: string, gnoName: string }>();
+    try {
+      console.log(`[resolve-nftmail] Calling worker for controllers: ${controllersToQuery.join(', ')}`);
+      await Promise.all(controllersToQuery.map(async (ctrl) => {
+        const kvRes = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+          body: JSON.stringify({ action: 'listNftmailByController', controller: ctrl }),
+        });
+        if (kvRes.ok) {
+          const kvData = await kvRes.json() as { names?: { name: string; email: string; gnoName: string; tokenId: number | null }[]; error?: string };
+          if (!kvData.error && Array.isArray(kvData.names)) {
+            for (const n of kvData.names) {
+              const nameLower = n.name.toLowerCase();
+              if (!allNamesMap.has(nameLower)) {
+                allNamesMap.set(nameLower, {
+                  tokenId: n.tokenId,
+                  label: n.name,
+                  email: n.email,
+                  gnoName: n.gnoName
+                });
+              }
+            }
+          }
+        }
+      }));
+      
+      if (allNamesMap.size > 0) {
+        return NextResponse.json({
+          names: Array.from(allNamesMap.values()),
+        }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+      console.log(`[resolve-nftmail] No names found in KV for controllers ${controllersToQuery.join(', ')}`);
+    } catch (e) {
+      console.error('[resolve-nftmail] Worker KV error:', e);
+      /* fall through to on-chain scan */
+    }
 
     const addr = address as `0x${string}`;
 
@@ -127,7 +155,7 @@ export async function GET(req: NextRequest) {
           functionName: 'ownerOf',
           args: [BigInt(i)],
         }).then(owner => {
-          if (owner.toLowerCase() === addr.toLowerCase()) {
+          if (controllersToQuery.includes(owner.toLowerCase())) {
             ownedTokens.push(i);
           }
         }).catch(() => {})

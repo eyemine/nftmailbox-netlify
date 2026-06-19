@@ -52,7 +52,7 @@ function useNameAvailability(label: string, emailLocal: string, enabled: boolean
         } catch {}
         if (taken) { setStatus('taken'); return; }
         try {
-          const res = await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+          const res = await fetch('/api/public-resolve', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'resolveAddress', name: emailLocal }),
           });

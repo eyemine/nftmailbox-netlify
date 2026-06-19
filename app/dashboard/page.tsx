@@ -374,7 +374,7 @@ export default function DashboardPage() {
     if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
     return 'free';
   })();
-  const canSend = isAgent || normalisedTier === 'pro' || normalisedTier === 'premium';
+  const canSend = !isAgent && (normalisedTier === 'pro' || normalisedTier === 'premium');
   const isPremium = normalisedTier === 'premium';
   const isPro = normalisedTier === 'pro';
 

@@ -210,6 +210,11 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: label, domain: fromDomain }),
     });
+    if (!resolveRes.ok) {
+      const errText = await resolveRes.text().catch(() => '');
+      console.error(`send-email: worker resolveAddress returned ${resolveRes.status} — ${errText}`);
+      return NextResponse.json({ error: `Worker auth failed (${resolveRes.status}). Check WORKER_SECRET config.` }, { status: 502 });
+    }
     const resolved = (await resolveRes.json()) as Record<string, unknown>;
 
     if (!resolved?.exists) {
@@ -342,7 +347,7 @@ export async function POST(req: NextRequest) {
 
     // Store sent message in KV for sentbox display
     try {
-      await fetch(WORKER_URL, {
+      const storeRes = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
         body: JSON.stringify({
@@ -360,6 +365,10 @@ export async function POST(req: NextRequest) {
           },
         }),
       });
+      if (!storeRes.ok) {
+        const errText = await storeRes.text().catch(() => '');
+        console.error(`[send-email] storeSentMessage failed: ${storeRes.status} — ${errText}`);
+      }
     } catch (e) {
       console.error('[send-email] Failed to store sent message:', e);
     }

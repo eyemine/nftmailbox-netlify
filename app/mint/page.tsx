@@ -158,7 +158,7 @@ function MintPageContent() {
       // Verify OTP and migrate if from mini app
       if (fromParam === 'mini' && otpCode) {
         try {
-          await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+          await fetch('/api/mini-worker', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 

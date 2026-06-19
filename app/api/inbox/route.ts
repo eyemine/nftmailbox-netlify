@@ -46,13 +46,20 @@ export async function GET(req: NextRequest) {
   try {
     const email = req.nextUrl.searchParams.get('email');
     if (!email || !email.endsWith('@nftmail.box')) {
-      return NextResponse.json({ error: 'Invalid nftmail.box email' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid nftmail.box email' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Extract local part. Preserve trailing `_` so the agent inbox
     // (e.g. ghostagent_) stays distinct from the human inbox (ghostagent).
     const localPart = email.split('@')[0];
     const agentName = localPart;
+    const isAgentAddress = localPart.endsWith('_');
+
+    // ── Auth gate: non-agent (human) inboxes are private ──
+    // Agent addresses (trailing _) are publicly readable.
+    // All others require the caller to supply their ownerWallet, which must
+    // match the controller recorded in the worker's KV.
+    const ownerWalletParam = req.nextUrl.searchParams.get('ownerWallet')?.toLowerCase() || '';
 
     // Always fetch from Worker KV (all streams store here)
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
@@ -74,9 +81,33 @@ export async function GET(req: NextRequest) {
         }),
       ]);
 
+      let controller = '';
+      let onChainOwner = '';
+      let safe = '';
       if (resolveRes.ok) {
         const rd = await resolveRes.json() as Record<string, any>;
         accountTier = rd.accountTier || null;
+        controller = (rd.controller || '').toLowerCase();
+        onChainOwner = (rd.onChainOwner || '').toLowerCase();
+        safe = (rd.safe || '').toLowerCase();
+      }
+
+      // Enforce auth gate for human accounts (no trailing _)
+      if (!isAgentAddress) {
+        if (!ownerWalletParam) {
+          return NextResponse.json({ error: 'Authentication required to view this inbox', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+        }
+        // If owner addresses are recorded, verify the caller matches one of them
+        const hasOwnerRecord = !!(controller || onChainOwner || safe);
+        if (hasOwnerRecord) {
+          const isAuthorized = 
+            (controller && ownerWalletParam === controller) ||
+            (onChainOwner && ownerWalletParam === onChainOwner) ||
+            (safe && ownerWalletParam === safe);
+          if (!isAuthorized) {
+            return NextResponse.json({ error: 'Wallet address does not match inbox owner', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+          }
+        }
       }
 
       if (workerRes.ok) {
@@ -136,7 +167,7 @@ export async function GET(req: NextRequest) {
         total: active.length,
         tier,
         accountTier,
-      });
+      }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // For human stream (no underscore or dot), try Zoho API as fallback
@@ -148,7 +179,7 @@ export async function GET(req: NextRequest) {
         tier: 'free',
         accountTier,
         ...(workerError ? { workerError } : {}),
-      });
+      }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // 1. Find the account ID for this email
@@ -162,7 +193,7 @@ export async function GET(req: NextRequest) {
     if (!accountsRes.ok) {
       return NextResponse.json(
         { error: `Zoho accounts API returned ${accountsRes.status}` },
-        { status: 502 }
+        { status: 502, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
@@ -181,7 +212,7 @@ export async function GET(req: NextRequest) {
         tier: 'free',
         accountTier,
         note: 'No Zoho mailbox provisioned. Emails received via Cloudflare Worker routing.',
-      });
+      }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const accountId = account.accountId || account.zuid;
@@ -197,7 +228,7 @@ export async function GET(req: NextRequest) {
     if (!messagesRes.ok) {
       return NextResponse.json(
         { error: `Zoho messages API returned ${messagesRes.status}` },
-        { status: 502 }
+        { status: 502, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
@@ -238,12 +269,12 @@ export async function GET(req: NextRequest) {
       total: activeMessages.length,
       tier: 'premium',
       accountTier,
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err: any) {
     console.error('Inbox error:', err);
     return NextResponse.json(
       { error: err?.message || 'Failed to fetch inbox' },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 }

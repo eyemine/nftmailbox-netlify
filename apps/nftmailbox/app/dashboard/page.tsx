@@ -96,7 +96,8 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
 
-  // Derive wallet address safely from Privy session (avoids useWallets() crash)
+  // Derive wallet address safely from Privy session (avoids useWallets() crash from
+  // third-party extensions like ZilPay injecting null entries).
   const walletAddress = user?.wallet?.address ||
     (user?.linkedAccounts as any[])?.find((a: any) => a?.address)?.address || null;
   const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
