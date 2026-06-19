@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Link from 'next/link';
 
-const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
-
 interface NftRow {
   type: 'ens' | 'collection';
   name: string;
@@ -40,6 +38,36 @@ export function NFTLogin() {
   const [rows, setRows] = useState<NftRow[]>([]);
   const [scanningNfts, setScanningNfts] = useState(false);
   const [showNftPicker, setShowNftPicker] = useState(false);
+
+  // .nftmail.gno accounts for this wallet
+  const resolveNftmailAccounts = useCallback(async (address: string) => {
+    try {
+      const res = await fetch(`/api/resolve-nftmail?address=${address}`);
+      const data = await res.json() as { names?: { label: string; email: string; gnoName: string; tokenId: number | null }[]; error?: string };
+      if (!data.error && Array.isArray(data.names) && data.names.length > 0) {
+        const newRows: NftRow[] = data.names.map(n => ({
+          type: 'collection' as const,
+          // Use dot-separated prefix from email for routing (/inbox/<name>)
+          name: n.email.replace('@nftmail.box', ''),
+          displayName: n.gnoName || `${n.label}.nftmail.gno`,
+          email: n.email,
+          collection: 'nftmail.gno',
+          exists: true,
+          source: 'hot' as const,
+        }));
+        setRows(prev => {
+          const merged = [...prev];
+          for (const r of newRows) {
+            if (!merged.find(x => x.email === r.email)) merged.push(r);
+          }
+          return merged;
+        });
+        setShowNftPicker(true);
+      }
+    } catch {
+      // non-fatal
+    }
+  }, []);
 
   // Delegate / cold-wallet vault state
   const [showVaultInput, setShowVaultInput] = useState(false);
@@ -88,7 +116,7 @@ export function NFTLogin() {
   const checkRowExists = useCallback(async (email: string) => {
     const name = email.replace('@nftmail.box', '');
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await fetch('/api/public-resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'resolveAddress', name }),
@@ -172,12 +200,13 @@ export function NFTLogin() {
     setScanningNfts(false);
   }, [checkRowExists]);
 
-  // Auto-resolve ENS when wallet connects
+  // Auto-resolve ENS + .nftmail.gno accounts when wallet connects
   useEffect(() => {
     if (authenticated && preferredWallet?.address) {
       resolveEns(preferredWallet.address);
+      resolveNftmailAccounts(preferredWallet.address);
     }
-  }, [authenticated, preferredWallet?.address, resolveEns]);
+  }, [authenticated, preferredWallet?.address, resolveEns, resolveNftmailAccounts]);
 
   if (!ready) return null;
 

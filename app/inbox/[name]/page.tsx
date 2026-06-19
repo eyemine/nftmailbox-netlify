@@ -6,7 +6,6 @@ import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
-import { ComposeEmail } from '../../components/ComposeEmail';
 
 // Tier normalisation: convert various tier names to standard NftmailTier
 type NftmailTier = 'free' | 'pro' | 'premium';
@@ -105,6 +104,29 @@ function stripHtml(html: unknown): string {
   return lines.join('\n').trim();
 }
 
+const OTP_SUBJECT_PATTERNS = [
+  /\botp\b/i,
+  /one.?time.?pass/i,
+  /verification\s*code/i,
+  /verify\s*(your|email|account|phone)/i,
+  /\bconfirmation\s*code\b/i,
+  /\bsecurity\s*code\b/i,
+  /\baccess\s*code\b/i,
+  /\blogin\s*code\b/i,
+  /\bsign.?in\s*code\b/i,
+  /your\s*(code|pin)\s*is/i,
+  /\bpasscode\b/i,
+];
+
+function detectOtp(subject: string, body?: string): { isOtp: boolean; code: string | null } {
+  const text = (subject + ' ' + (body || '')).slice(0, 2000);
+  const isOtp = OTP_SUBJECT_PATTERNS.some(p => p.test(text));
+  if (!isOtp) return { isOtp: false, code: null };
+  // Extract first 4-8 digit standalone code
+  const match = text.match(/\b(\d{4,8})\b/);
+  return { isOtp: true, code: match?.[1] || null };
+}
+
 interface InboxMessage {
   id: string;
   subject: string;
@@ -194,7 +216,7 @@ interface ResolveResult {
   };
 }
 
-const WORKER_URL = 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = '/api/public-resolve';
 
 export default function InboxPage() {
   const params = useParams();
@@ -330,6 +352,16 @@ export default function InboxPage() {
   // Step 2: Load inbox if account exists
   const loadInbox = useCallback(async () => {
     if (!name || !resolved?.exists) return;
+    // Non-glassbox agents and private human accounts require the owner to be
+    // authenticated before we fetch any message content.
+    if (isAgent && !isGlassbox && !isOwner) {
+      setLoading(false);
+      return;
+    }
+    if (!isAgent && !isOwner && resolved.privacyTier !== 'exposed') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       if (isAgent) {
@@ -392,7 +424,7 @@ export default function InboxPage() {
         return;
       }
 
-      const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}`);
+      const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}${isOwner && user?.wallet?.address ? `&ownerWallet=${encodeURIComponent(user.wallet.address)}` : ''}`);
       const data = await res.json() as { error?: string; messages?: any[]; [key: string]: any };
       if (data.error && !data.messages) {
         setError(data.error);
@@ -418,7 +450,7 @@ export default function InboxPage() {
       setError(e?.message || 'Failed to load inbox');
     }
     setLoading(false);
-  }, [name, resolved, isAgent, isGlassbox, agentName]);
+  }, [name, resolved, isAgent, isGlassbox, isOwner, agentName, user]);
 
   useEffect(() => {
     if (resolved?.exists && classificationDone) loadInbox();
@@ -517,10 +549,10 @@ export default function InboxPage() {
     const nextTier = privacyTier === 'exposed' ? 'private' : 'exposed';
     setTogglingPrivacy(true);
     try {
-      await fetch(WORKER_URL, {
+      await fetch('/api/inbox-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'setPrivacy', localPart: agentName, tier: nextTier }),
+        body: JSON.stringify({ action: 'setPrivacy', localPart: agentName, tier: nextTier, ownerWallet: user?.wallet?.address }),
       });
       setPrivacyTier(nextTier);
     } catch {}
@@ -531,10 +563,10 @@ export default function InboxPage() {
     if (!confirm('Delete this message permanently?')) return;
     setDeletingId(messageId);
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await fetch('/api/inbox-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId }),
+        body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId, ownerWallet: user?.wallet?.address }),
       });
       if (res.ok) {
         setMessages(prev => prev.filter(m => m.id !== messageId));
@@ -947,7 +979,7 @@ export default function InboxPage() {
                         <span className={`text-sm font-medium ${item.redacted ? 'text-amber-300' : 'text-white'}`}>{item.subject}</span>
                         <p className="mt-0.5 text-xs text-[var(--muted)]">
                           {isOut ? 'To: ' : 'From: '}
-                          <BlurFrom from={isOut ? item.from : item.from} />
+                          <BlurFrom from={item.from} reveal={isOwner} />
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -958,10 +990,10 @@ export default function InboxPage() {
                           <button
                             onClick={async () => {
                               if (!confirm('Delete this message permanently?')) return;
-                              await fetch(WORKER_URL, {
+                              await fetch('/api/inbox-action', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id }),
+                                body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id, ownerWallet: user?.wallet?.address }),
                               });
                               setMessages((prev: InboxMessage[]) => prev.filter((m: InboxMessage) => m.id !== item.id));
                             }}
@@ -1038,14 +1070,11 @@ export default function InboxPage() {
     : 'text-amber-300 bg-amber-500/10 ring-amber-500/20';
 
   // Privacy model:
-  // - Human stream: always private from public (blurred unless owner)
+  // - Human stream: honour stored tier (exposed shows blurred headers, private/hard-privacy hide all)
   // - Molt.gno agent (glassbox): exposed by default, owner can toggle
   // - Other agents: private by default, owner can toggle
   // - hard-privacy (IMAGO): always blurred from public regardless
-  const isMoltAgent = isAgent && agentTld === 'molt.gno';
-  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = !isAgent
-    ? (privacyTier === 'hard-privacy' ? 'hard-privacy' : 'private')  // humans always private
-    : privacyTier;  // agents: use stored tier (molt.gno defaults exposed, others default private)
+  const effectivePrivacyTier: 'exposed' | 'private' | 'hard-privacy' = privacyTier;
   const isBlurred = effectivePrivacyTier !== 'exposed' && !isOwner;
 
   const tierLabel = effectivePrivacyTier === 'hard-privacy' ? 'HARD PRIVACY' : effectivePrivacyTier === 'private' ? 'PRIVATE' : 'EXPOSED';
@@ -1301,6 +1330,18 @@ export default function InboxPage() {
                         {!msg.encrypted && !isExpanded && msg.summary && (
                           <p className="mt-0.5 text-xs text-[var(--muted)] opacity-50 truncate">{stripHtml(msg.summary).slice(0, 120)}</p>
                         )}
+                        {!msg.encrypted && (() => {
+                          const otp = detectOtp(msg.subject, msg.summary || msg.body);
+                          if (!otp.isOtp) return null;
+                          return (
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[8px] font-semibold text-amber-300 ring-1 ring-amber-500/20">OTP</span>
+                              {otp.code && (
+                                <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-mono font-bold text-amber-200 tracking-widest">{otp.code}</code>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {msg.encrypted && (
                           <code className="mt-1 block text-[9px] font-mono text-cyan-300/60 truncate">{msg.contentHash?.slice(0, 24)}...</code>
                         )}
@@ -1625,7 +1666,7 @@ export default function InboxPage() {
                         <code className="text-[8px] font-mono text-[var(--muted)] break-all">{dm.contentHash?.slice(0, 24)}...</code>
                         <button
                           onClick={async () => {
-                            await fetch('https://nftmail-email-worker.richard-159.workers.dev', {
+                            await fetch('/api/inbox-action', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: dm.id }),
