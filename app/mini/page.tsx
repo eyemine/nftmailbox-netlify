@@ -988,8 +988,8 @@ export default function MiniApp() {
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
-              {/* Settings gear — premium only */}
-              {inboxTier === 'premium' && (
+              {/* Settings gear — PRO and PREMIUM */}
+              {(inboxTier === 'pro' || inboxTier === 'premium') && (
                 <button onClick={() => setStep('settings')} className="text-gray-500 hover:text-purple-400 transition-colors p-1" title="Forwarding settings">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                 </button>
@@ -1545,6 +1545,7 @@ export default function MiniApp() {
           </div>
 
           {/* Forwarding section */}
+          {inboxTier === 'premium' ? (
           <div className="bg-gray-900 border border-purple-900/50 rounded-xl p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -1574,6 +1575,21 @@ export default function MiniApp() {
               <p className="text-gray-600 text-[10px] mt-2">Emails received at your nftmail.box address will be forwarded here. Your inbox still stores a copy.</p>
             )}
           </div>
+          ) : (
+          <div className="bg-gray-900 border border-yellow-900/40 rounded-xl p-4 mb-4">
+            <p className="text-white text-sm font-semibold mb-1">Auto-Forward to Email</p>
+            <p className="text-gray-500 text-xs mb-3">Automatically forward incoming mail to any email address</p>
+            <div className="rounded-lg bg-purple-950/40 border border-purple-800/40 px-3 py-2.5 flex items-center justify-between gap-3">
+              <span className="text-purple-300 text-xs">🔒 Requires PREMIUM</span>
+              <button
+                onClick={() => { setStep('upgrade'); }}
+                className="text-[10px] font-bold text-purple-300 border border-purple-700/50 rounded px-2 py-1 hover:bg-purple-900/40 transition"
+              >
+                Upgrade →
+              </button>
+            </div>
+          </div>
+          )}
 
           {/* Feature summary */}
           <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 mb-6 space-y-2">

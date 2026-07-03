@@ -577,7 +577,10 @@ export default function InboxPage() {
   };
 
   const formatTimeAgo = (ts: string) => {
-    const ms = Date.now() - new Date(ts).getTime();
+    if (!ts) return '';
+    const date = new Date(ts);
+    if (isNaN(date.getTime()) || date.getFullYear() < 2020) return '';
+    const ms = Date.now() - date.getTime();
     const mins = Math.floor(ms / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
