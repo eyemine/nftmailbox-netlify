@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
@@ -35,11 +35,30 @@ function stripHtml(html: string): string {
   }).join(' ').trim();
 }
 
+// Strip remote <img> sources and CSS background-image url()s that point off-domain.
+// Tracking pixels rely on the browser fetching a remote resource the instant the HTML
+// renders — an iframe `sandbox` attribute does NOT block this, so we neutralize the
+// source at the markup level instead. Local/inline (data:) images are left untouched.
+function blockRemoteImagesInHtml(html: string): string {
+  const isRemote = (url: string) => /^(https?:)?\/\//i.test(url.trim());
+  return html
+    .replace(/<img\b([^>]*?)\ssrc=(["'])((?:https?:)?\/\/[^"']+)\2([^>]*)>/gi, (_m, pre, q, src, post) =>
+      `<img${pre} data-blocked-src=${q}${src}${q} src=${q}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==${q}${post}>`
+    )
+    .replace(/style=(["'])([^"']*)\1/gi, (m, q, css) =>
+      `style=${q}${css.replace(/url\(\s*['"]?((?:https?:)?\/\/[^'")]+)['"]?\s*\)/gi, (u: string, url: string) => isRemote(url) ? 'none' : u)}${q}`
+    )
+    .replace(/<style([^>]*)>([\s\S]*?)<\/style>/gi, (m, attrs, css) =>
+      `<style${attrs}>${css.replace(/url\(\s*['"]?((?:https?:)?\/\/[^'")]+)['"]?\s*\)/gi, (u: string, url: string) => isRemote(url) ? 'none' : u)}</style>`
+    );
+}
+
 interface NftMailName {
   tokenId: number;
   label: string;
   email: string;
   gnoName: string;
+  walletType?: 'privy' | 'web3';
 }
 
 interface InboxMessage {
@@ -62,8 +81,10 @@ type Tab = 'inbox' | 'sentbox' | 'compose' | 'killswitch';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
 const WORKER_URL = '/api/mini-worker';
 
-
-export default function DashboardPage() {
+// Wrapper component to handle useSearchParams with Suspense
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const emailParam = searchParams?.get('email') || null;
   const { authenticated, login, logout, ready, user } = usePrivy();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
@@ -75,8 +96,12 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('inbox');
   const [chatMode, setChatMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showForwarding, setShowForwarding] = useState(false);
   const [forwardingConfig, setForwardingConfig] = useState<{ enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } | undefined>();
+  const [savingForwarding, setSavingForwarding] = useState(false);
+  const [blockRemoteImages, setBlockRemoteImages] = useState(true);
+  const [imagesRevealedFor, setImagesRevealedFor] = useState<Set<string>>(new Set());
 
   // Reading pane state
   const [selectedMessage, setSelectedMessage] = useState<InboxMessage | null>(null);
@@ -110,22 +135,38 @@ export default function DashboardPage() {
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [privacyTier, setPrivacyTier] = useState<string>('exposed');
 
-  const searchParams = useSearchParams();
-  const emailParam = searchParams?.get('email') || null;
-
   // Derive wallet address safely from Privy session (avoids useWallets() crash)
-  // Prioritize linked external wallets over embedded wallet - NFTMail names are owned by external wallets
+  // Prioritize linked external wallets over embedded wallet for SIGNING (sends/burns/
+  // forwarding all need a single wallet to sign with; external/web3 wallet wins when connected).
   const linkedWallets = (user?.linkedAccounts as any[])?.filter((a: any) => a?.type === 'wallet' && a?.address) || [];
   const embeddedWallet = user?.wallet?.address;
   const walletAddress = linkedWallets[0]?.address || embeddedWallet || null;
   const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
+  // All wallets tied to this Privy session — used to RESOLVE NFTMail names so that
+  // toggling between embedded (Privy) and external (web3) wallets never hides accounts
+  // owned by the wallet that is no longer "preferred".
+  const allWalletAddresses = Array.from(new Set(
+    [...linkedWallets.map((w: any) => w.address), embeddedWallet]
+      .filter(Boolean)
+      .map((a: string) => a.toLowerCase())
+  ));
 
-  // Load persisted read IDs from localStorage
+  // Debug: log detected wallets
+  console.log('Detected wallets:', { linkedWallets, embeddedWallet, allWalletAddresses });
+
+  // Load persisted read IDs + privacy preferences from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem('nftmail:readIds');
       if (stored) setReadIds(new Set(JSON.parse(stored) as string[]));
+      const blockImages = localStorage.getItem('nftmail:blockRemoteImages');
+      if (blockImages !== null) setBlockRemoteImages(blockImages === 'true');
     } catch {}
+  }, []);
+
+  const toggleBlockRemoteImages = useCallback((next: boolean) => {
+    setBlockRemoteImages(next);
+    try { localStorage.setItem('nftmail:blockRemoteImages', String(next)); } catch {}
   }, []);
 
   const markRead = useCallback((messageId: string) => {
@@ -151,16 +192,39 @@ export default function DashboardPage() {
     } catch {}
   }, [selectedName, selectedMessage]);
 
-  // Resolve NFTMail names for connected wallet
+  // Resolve NFTMail names across ALL wallets tied to this session (embedded + linked
+  // external), merged by email, so switching preferred wallet never hides accounts.
   const resolveNames = useCallback(async () => {
-    if (!preferredWallet?.address) return;
+    if (allWalletAddresses.length === 0) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/resolve-nftmail?address=${preferredWallet.address}`);
-      const data = await res.json() as { error?: string; names?: NftMailName[] };
-      if (!res.ok) throw new Error(data.error || 'Failed to resolve names');
-      const resolved: NftMailName[] = data.names || [];
+      const results = await Promise.all(
+        allWalletAddresses.map(addr => {
+          const isPrivy = addr.toLowerCase() === embeddedWallet?.toLowerCase();
+          return fetch(`/api/resolve-nftmail?address=${addr}`)
+            .then(r => r.json())
+            .then((data: { names?: NftMailName[] }) => ({
+              names: (data.names || []).map((n: NftMailName) => ({
+                ...n,
+                walletType: isPrivy ? 'privy' as const : 'web3' as const
+              }))
+            }))
+            .catch(() => ({ names: [] as NftMailName[] }));
+        })
+      ) as { error?: string; names?: NftMailName[] }[];
+
+      const merged = new Map<string, NftMailName>();
+      for (const data of results) {
+        for (const n of data.names || []) {
+          merged.set(n.email.toLowerCase(), n);
+        }
+      }
+      const resolved = Array.from(merged.values());
+      if (resolved.length === 0) {
+        const firstError = results.find(r => r.error)?.error;
+        if (firstError) throw new Error(firstError);
+      }
       setNames(resolved);
       if (resolved.length > 0 && !selectedName) {
         // If ?email= param matches one of the resolved names, pre-select it
@@ -172,7 +236,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [preferredWallet?.address, selectedName]);
+  }, [allWalletAddresses.join(','), selectedName, embeddedWallet]);
 
   // Fetch inbox for selected name
   const fetchInbox = useCallback(async () => {
@@ -194,10 +258,10 @@ export default function DashboardPage() {
   }, [selectedName, preferredWallet?.address]);
 
   useEffect(() => {
-    if (authenticated && preferredWallet?.address) {
+    if (authenticated && allWalletAddresses.length > 0) {
       resolveNames();
     }
-  }, [authenticated, preferredWallet?.address, resolveNames]);
+  }, [authenticated, allWalletAddresses.join(','), resolveNames]);
 
   // Extract unique domains from user's names for domain selection.
   // PREMIUM mailboxes can also send from ghostmail.box.
@@ -348,6 +412,37 @@ export default function DashboardPage() {
     }
   };
 
+  // Save email forwarding config — requires wallet signature per /api/forwarding/[name] contract
+  const handleSaveForwarding = useCallback(async (config: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' }) => {
+    if (!selectedName || !preferredWallet) throw new Error('No wallet connected');
+    setSavingForwarding(true);
+    try {
+      const provider = await preferredWallet.getEthereumProvider();
+      const signedAt = Date.now();
+      const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [statement, preferredWallet.address],
+      });
+      const res = await fetch(`/api/forwarding/${selectedName.label}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          ownerAddress: preferredWallet.address,
+          signature,
+          signedAt,
+          statement,
+        }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Failed to save forwarding settings');
+      setForwardingConfig(config);
+    } finally {
+      setSavingForwarding(false);
+    }
+  }, [selectedName, preferredWallet]);
+
   const formatTimeAgo = (ts: string) => {
     const raw = parseInt(ts, 10);
     // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
@@ -457,7 +552,9 @@ export default function DashboardPage() {
                     {[...names]
                       .sort((a, b) => a.email.localeCompare(b.email))
                       .map((n: NftMailName) => (
-                        <option key={n.tokenId} value={n.label} className="bg-black text-white">{n.email}</option>
+                        <option key={n.tokenId} value={n.label} className="bg-black text-white">
+                          {n.walletType === 'privy' ? '🔒 ' : '🔗 '}{n.email}
+                        </option>
                       ))}
                   </select>
                 )}
@@ -472,7 +569,51 @@ export default function DashboardPage() {
                   {isPremium ? 'PREMIUM' : isPro ? 'PRO' : 'FREE'}
                 </span>
               )}
+              <button
+                onClick={() => setShowSettings(v => !v)}
+                title="Account settings"
+                aria-label="Account settings"
+                className={`ml-auto flex h-7 w-7 items-center justify-center rounded-lg border transition ${showSettings ? 'border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.1)] text-[rgb(160,220,255)]' : 'border-[var(--border)] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)]'}`}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+              </button>
             </div>
+
+            {/* Settings panel — image privacy (all tiers) + forwarding (premium, non-agent) */}
+            {showSettings && (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Block Remote Images (Anti-Tracking)</h3>
+                    <p className="text-xs text-[var(--muted)] mt-0.5">Blocks tracking pixels &amp; remote images in HTML mail until you choose to load them per-message.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleBlockRemoteImages(!blockRemoteImages)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${blockRemoteImages ? 'bg-blue-600' : 'bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blockRemoteImages ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+                {isPremium && !isAgent && selectedName && (
+                  <div className="border-t border-[var(--border)] pt-5">
+                    <ForwardingSetup
+                      agentName={selectedName.label}
+                      ownerAddress={preferredWallet?.address || ''}
+                      currentConfig={forwardingConfig}
+                      onSave={handleSaveForwarding}
+                    />
+                  </div>
+                )}
+                {!isPremium && (
+                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding.</p>
+                )}
+              </div>
+            )}
 
             {/* Privacy toggle — agent accounts only */}
             {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
@@ -757,13 +898,26 @@ export default function DashboardPage() {
                             <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
                           ) : viewMode === 'html' ? (
                             selectedMessage.bodyHtml ? (
-                              <iframe
-                                srcDoc={selectedMessage.bodyHtml}
-                                sandbox="allow-popups allow-popups-to-escape-sandbox"
-                                className="w-full border-0 bg-white rounded"
-                                style={{ minHeight: '320px' }}
-                                title="email-html"
-                              />
+                              <div className="space-y-2">
+                                {blockRemoteImages && !imagesRevealedFor.has(selectedMessage.messageId) && (
+                                  <div className="flex items-center justify-between rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2">
+                                    <span className="text-[11px] text-amber-300">Remote images blocked to prevent tracking pixels.</span>
+                                    <button
+                                      onClick={() => setImagesRevealedFor(prev => new Set(prev).add(selectedMessage.messageId))}
+                                      className="rounded-md border border-amber-500/30 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/16 transition"
+                                    >
+                                      Load images
+                                    </button>
+                                  </div>
+                                )}
+                                <iframe
+                                  srcDoc={blockRemoteImages && !imagesRevealedFor.has(selectedMessage.messageId) ? blockRemoteImagesInHtml(selectedMessage.bodyHtml) : selectedMessage.bodyHtml}
+                                  sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                  className="w-full border-0 bg-white rounded"
+                                  style={{ minHeight: '320px' }}
+                                  title="email-html"
+                                />
+                              </div>
                             ) : (
                               <p className="text-xs text-[var(--muted)] py-4 text-center">No HTML content available for this message.</p>
                             )
@@ -957,11 +1111,22 @@ export default function DashboardPage() {
 
         <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
           <span>nftmail.box dashboard — privacy-first email</span>
-          <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
-            Upgrade to Premium →
-          </Link>
+          {!isPremium && (
+            <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
+              Upgrade to Premium →
+            </Link>
+          )}
         </footer>
       </div>
     </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[var(--bg)] flex items-center justify-center text-[var(--muted)]">Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateWuTangName, generateClaimCode, isValidAgentName } from '../../../lib/wutang';
+import { generateWuTangName, generateClaimCode, isValidAgentName } from '../../lib/wutang';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ENS public client for collision checking

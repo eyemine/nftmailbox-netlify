@@ -1,0 +1,18 @@
+services:
+  nftmail:
+    build:
+      context: app
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_PRIVY_APP_ID
+        - NEXT_PUBLIC_GNOSIS_RPC
+        - NEXT_PUBLIC_BASE_RPC
+        - NEXT_PUBLIC_WORKER_URL
+        - NEXT_PUBLIC_APP_URL
+        - NEXT_PUBLIC_GHOSTAGENT_PROXY_URL
+    image: nftmail:latest
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
