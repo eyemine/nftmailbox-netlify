@@ -871,14 +871,15 @@ export default function MiniApp() {
           body: JSON.stringify({ action: 'getAgentProfile', agentName: label }),
         });
         const data = await res.json();
-        if (data && data.label) {
-          setAgentName(data.label);
-          setHumanEmail(`${data.label}@nftmail.box`);
-          if (data.tier) setInboxTier(normaliseTier(data.tier));
+        if (data && (data.agentName || data.label)) {
+          const name = data.agentName || data.label;
+          setAgentName(name);
+          setHumanEmail(`${name}@nftmail.box`);
+          if (data.tier || data.profile?.tier) setInboxTier(normaliseTier(data.tier || data.profile?.tier));
           let privKey: string | null = null;
-          try { privKey = localStorage.getItem(`ecies-priv:${data.label}`); } catch {}
+          try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {}
           if (privKey) setEciesPrivKey(privKey);
-          await loadInboxDirect(data.label, privKey);
+          await loadInboxDirect(name, privKey);
         } else {
           setSigninError('Account not found. Check the email or claim a new inbox.');
         }
