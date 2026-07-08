@@ -859,7 +859,7 @@ export default function MiniApp() {
 
   if (step === 'signin') {
     const handleSignin = async () => {
-      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '').replace(/[^a-z0-9-]/g, '');
+      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '');
       if (!label) { setSigninError('Please enter a valid email or label'); return; }
       setSigninLoading(true);
       setSigninError('');
