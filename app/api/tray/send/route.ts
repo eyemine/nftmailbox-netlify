@@ -12,11 +12,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
 const MAX_BASE64_LENGTH = 1_400_000; // ~1MB binary
-const ALLOWED_FORMATS = new Set(['png', 'bmp']);
+const ALLOWED_FORMATS = new Set(['png', 'bmp', 'jpg']);
 
 // Minimal magic-byte check so a mislabeled/malicious file can't ride through
 // as a "bitmap" — this is a transmission channel with no HTML/script context,
@@ -32,6 +32,11 @@ function matchesFormat(base64: string, format: string): boolean {
     if (format === 'bmp') {
       // 'BM'
       return header.length >= 2 && header[0] === 0x42 && header[1] === 0x4d;
+    }
+    if (format === 'jpg') {
+      // FF D8 FF
+      return header.length >= 3 &&
+        header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
     }
     return false;
   } catch {
@@ -60,8 +65,9 @@ export async function POST(req: NextRequest) {
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
-    if (!format || !ALLOWED_FORMATS.has(format.toLowerCase())) {
-      return NextResponse.json({ error: 'Only PNG or BMP formats are permitted' }, { status: 400 });
+    const normFormat = (format || '').toLowerCase() === 'jpeg' ? 'jpg' : (format || '').toLowerCase();
+    if (!normFormat || !ALLOWED_FORMATS.has(normFormat)) {
+      return NextResponse.json({ error: 'Only PNG, JPG, or BMP formats are permitted' }, { status: 400 });
     }
     if (!dataBase64) {
       return NextResponse.json({ error: 'Missing dataBase64' }, { status: 400 });
@@ -69,7 +75,7 @@ export async function POST(req: NextRequest) {
     if (dataBase64.length > MAX_BASE64_LENGTH) {
       return NextResponse.json({ error: 'Document too large (max ~1MB)' }, { status: 413 });
     }
-    if (!matchesFormat(dataBase64, format.toLowerCase())) {
+    if (!matchesFormat(dataBase64, normFormat)) {
       return NextResponse.json({ error: 'File content does not match declared format' }, { status: 400 });
     }
 
@@ -104,7 +110,7 @@ export async function POST(req: NextRequest) {
         secret: WORKER_SECRET,
         from: fromEmail,
         to,
-        format: format.toLowerCase(),
+        format: normFormat,
         dataBase64,
       }),
     });

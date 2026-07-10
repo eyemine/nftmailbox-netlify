@@ -21,7 +21,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
 import { verifyXDAIPayment, verifyEUREPayment, verifyUSDCBasePayment, autoDetectXDAIPayment, autoDetectEUREPayment, autoDetectUSDCBasePayment, burnTxHash, TIER_PRICES_USD, TIER_PRICES_EURE } from '../../lib/payments';
 
-const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // ─── Lite tier: $10 — Safe factory on Gnosis for user's body ───

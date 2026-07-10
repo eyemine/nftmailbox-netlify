@@ -10,6 +10,7 @@ import { ChatView } from '../components/ChatView';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
+import NftFax from '../components/NftFax';
 
 function stripHtml(html: string): string {
   const s = html
@@ -614,8 +615,16 @@ function DashboardContent() {
                     />
                   </div>
                 )}
+                {isPremium && selectedName && preferredWallet && (
+                  <div className="border-t border-[var(--border)] pt-5">
+                    <NftFax
+                      fromLabel={selectedName.label}
+                      ownerWallet={preferredWallet.address}
+                    />
+                  </div>
+                )}
                 {!isPremium && (
-                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding.</p>
+                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and nftFax.</p>
                 )}
               </div>
             )}

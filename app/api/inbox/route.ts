@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const ownerWalletParam = req.nextUrl.searchParams.get('ownerWallet')?.toLowerCase() || '';
 
     // Always fetch from Worker KV (all streams store here)
-    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     let kvMessages: any[] = [];
     let accountTier: string | null = null;
 

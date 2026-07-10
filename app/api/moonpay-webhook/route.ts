@@ -3,7 +3,7 @@ import { createHmac } from 'crypto';
 
 // MoonPay signs webhooks with HMAC-SHA256 using your webhook secret key
 const MOONPAY_WEBHOOK_SECRET = process.env.MOONPAY_WEBHOOK_SECRET || '';
-const WORKER_URL = process.env.NEXT_PUBLIC_NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NEXT_PUBLIC_NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 

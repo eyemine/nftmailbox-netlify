@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid owner address' }, { status: 400 });
     }
 
-    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET || '';
 
     // Gate: require adminKey matching NFTMAIL_WEBHOOK_SECRET (if set)

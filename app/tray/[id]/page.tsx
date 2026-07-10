@@ -8,21 +8,26 @@
 
 export const dynamic = 'force-dynamic';
 
-const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
 interface TrayDocument {
   id: string;
   from: string;
-  format: 'png' | 'bmp';
+  format: 'png' | 'bmp' | 'jpg';
   dataBase64: string;
   createdAt: number;
 }
 
 async function getTrayDocument(id: string): Promise<TrayDocument | null> {
   try {
+    // Runs server-side, so the secret never reaches the client. The Hetzner
+    // worker requires X-Worker-Secret for getTrayDocument (not a public action).
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ action: 'getTrayDocument', id }),
       cache: 'no-store',
     });
@@ -48,7 +53,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const mimeType = doc.format === 'png' ? 'image/png' : 'image/bmp';
+  const mimeType = doc.format === 'png' ? 'image/png' : doc.format === 'jpg' ? 'image/jpeg' : 'image/bmp';
   const dataUri = `data:${mimeType};base64,${doc.dataBase64}`;
   const receivedAt = new Date(doc.createdAt).toLocaleString();
 
@@ -72,7 +77,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
       }}>
         {/* Retro cover sheet header */}
         <div style={{ borderBottom: '2px dashed #999', paddingBottom: 10, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>SECURE TRANSMISSION</div>
+          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>nftFAX · SECURE TRANSMISSION</div>
           <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>FROM: {doc.from}</div>
           <div style={{ fontSize: 10, color: '#888' }}>T/#{doc.id.toUpperCase()} · {receivedAt}</div>
         </div>
@@ -91,7 +96,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
         />
 
         <div style={{ borderTop: '2px dashed #999', paddingTop: 8, marginTop: 14, fontSize: 9, color: '#999', textAlign: 'center' }}>
-          DOCUMENT TRAY · nftmail.box · bitmap-only, no scripts, no tracking
+          nftFAX · nftmail.box · bitmap-only, no scripts, no tracking
         </div>
       </div>
     </main>
