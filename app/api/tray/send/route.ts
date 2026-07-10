@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       const isPremium = accountTier === 'premium' || accountTier === 'imago' || accountTier === 'ghost';
       if (!isPremium) {
         return NextResponse.json({
-          error: 'Document Tray is a PREMIUM feature.',
+          error: 'NFTfax is a PREMIUM feature.',
           upgradeUrl: `/nftmail?upgrade=premium&label=${fromLabel}`,
         }, { status: 402 });
       }

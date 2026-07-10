@@ -54,6 +54,19 @@ function blockRemoteImagesInHtml(html: string): string {
     );
 }
 
+// NFTfax detection: received faxes arrive as inbox notifications whose body
+// carries a /tray/{id} pointer and a NFTfax-prefixed subject. We surface these
+// in a dedicated FaxTray instead of the normal message list.
+const TRAY_ID_RE = /\/tray\/([a-z0-9]+)/i;
+function parseTrayId(msg: { body?: string; summary?: string }): string | null {
+  const src = `${msg.body || ''} ${msg.summary || ''}`;
+  const m = src.match(TRAY_ID_RE);
+  return m ? m[1] : null;
+}
+function isFaxMessage(msg: { subject?: string; body?: string; summary?: string }): boolean {
+  return /^NFTfax\b/i.test(msg.subject || '') || parseTrayId(msg) !== null;
+}
+
 interface NftMailName {
   tokenId: number;
   label: string;
@@ -78,7 +91,7 @@ interface InboxMessage {
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'sentbox' | 'compose' | 'killswitch';
+type Tab = 'inbox' | 'sentbox' | 'compose' | 'fax' | 'killswitch';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
 const WORKER_URL = '/api/mini-worker';
 
@@ -479,6 +492,10 @@ function DashboardContent() {
   const isPremium = normalisedTier === 'premium';
   const isPro = normalisedTier === 'pro';
 
+  // Split received faxes out of the main inbox list into the FaxTray.
+  const faxMessages = messages.filter(isFaxMessage);
+  const inboxMessages = messages.filter((m) => !isFaxMessage(m));
+
   if (!ready) return null;
 
   return (
@@ -615,16 +632,8 @@ function DashboardContent() {
                     />
                   </div>
                 )}
-                {isPremium && selectedName && preferredWallet && (
-                  <div className="border-t border-[var(--border)] pt-5">
-                    <NftFax
-                      fromLabel={selectedName.label}
-                      ownerWallet={preferredWallet.address}
-                    />
-                  </div>
-                )}
                 {!isPremium && (
-                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and nftFax.</p>
+                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and NFTfax.</p>
                 )}
               </div>
             )}
@@ -647,7 +656,7 @@ function DashboardContent() {
                 onClick={() => setTab('inbox')}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
               >
-                Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
+                Inbox{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}
               </button>
               <button
                 onClick={() => setTab('sentbox')}
@@ -663,6 +672,13 @@ function DashboardContent() {
                 Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : 'PRO+'}</span>
               </button>
               <button
+                onClick={() => canSend && setTab('fax')}
+                title={!canSend ? 'Upgrade to unlock NFTfax' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'fax' ? 'bg-amber-500/12 text-amber-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+              >
+                Fax{faxMessages.length > 0 ? ` (${faxMessages.length})` : ''} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>PREMIUM</span>
+              </button>
+              <button
                 onClick={() => setTab('killswitch')}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
               >
@@ -676,7 +692,7 @@ function DashboardContent() {
                 {/* Toolbar */}
                 <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{messages.length > 0 ? ` (${messages.length})` : ''}</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}</span>
                     {!isPremium && messages.length > 0 && (
                       <div className="hidden sm:flex items-center gap-3">
                         {[['bg-emerald-500','Fresh'],['bg-amber-500','Aging'],['bg-red-500','Expiring']].map(([c,l]) => (
@@ -709,6 +725,43 @@ function DashboardContent() {
                 {inboxNote && (
                   <div className="border-b border-[var(--border)] bg-amber-500/5 px-4 py-2">
                     <p className="text-xs text-amber-300">{inboxNote}</p>
+                  </div>
+                )}
+
+                {/* ── FaxTray: received NFTfax transmissions ── */}
+                {!chatMode && faxMessages.length > 0 && (
+                  <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">
+                    <div className="flex items-center gap-2 px-4 py-2">
+                      <svg className="h-3.5 w-3.5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                      <span className="text-[10px] font-semibold tracking-wider text-amber-300">FAXTRAY ({faxMessages.length})</span>
+                      <span className="text-[9px] text-[var(--muted)]">Secure NFTfax transmissions</span>
+                    </div>
+                    <div className="divide-y divide-[var(--border)]">
+                      {faxMessages.map((msg: InboxMessage) => {
+                        const trayId = parseTrayId(msg);
+                        return (
+                          <div key={msg.messageId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-amber-500/10 text-amber-300">
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs text-white">{msg.sender || msg.fromAddress || 'Unknown sender'}</p>
+                                <p className="truncate text-[10px] text-[var(--muted)]">{trayId ? `T/#${trayId.slice(0, 4).toUpperCase()}` : (msg.subject || 'NFTfax')} · {formatTimeAgo(msg.receivedTime)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {trayId && (
+                                <a href={`/tray/${trayId}`} target="_blank" rel="noopener noreferrer" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
+                              )}
+                              <button onClick={() => handleDelete(msg.messageId)} title="Delete fax" className="rounded p-1.5 text-red-400/50 hover:text-red-400 transition">
+                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -781,14 +834,14 @@ function DashboardContent() {
                 {!chatMode && <div className="flex" style={{ minHeight: '460px' }}>
                   {/* Left: message list */}
                   <div className={`flex flex-col border-r border-[var(--border)] ${selectedMessage ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
-                    {loadingInbox && messages.length === 0 ? (
+                    {loadingInbox && inboxMessages.length === 0 ? (
                       <div className="flex flex-1 items-center justify-center py-12">
                         <div className="flex items-center gap-3">
                           <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
                           <span className="text-sm text-[var(--muted)]">Loading...</span>
                         </div>
                       </div>
-                    ) : messages.length === 0 ? (
+                    ) : inboxMessages.length === 0 ? (
                       <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
                         <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
@@ -798,7 +851,7 @@ function DashboardContent() {
                       </div>
                     ) : (
                       <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
-                        {messages.map((msg: InboxMessage) => {
+                        {inboxMessages.map((msg: InboxMessage) => {
                           const isRead = readIds.has(msg.messageId) || msg.isRead;
                           const isSelected = selectedMessage?.messageId === msg.messageId;
                           return (
@@ -1093,6 +1146,27 @@ function DashboardContent() {
                   </div>
                   {sendResult && <p className={`text-xs ${sendResult.startsWith('Sent') ? 'text-emerald-400' : 'text-red-400'}`}>{sendResult}</p>}
                 </div>
+              </div>
+            )}
+
+            {/* ── FAX TAB ── */}
+            {tab === 'fax' && (
+              <div className="space-y-4">
+                {!isPremium ? (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">{isPro ? 'PRO' : 'FREE'}</span>
+                      <span className="text-sm text-amber-300">NFTfax is a PREMIUM feature</span>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--muted)]">Upgrade to PREMIUM on the <Link href="/nftmail" className="text-amber-300 hover:underline">mint page</Link> to send secure static-image transmissions.</p>
+                  </div>
+                ) : selectedName && preferredWallet ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+                    <NftFax fromLabel={selectedName.label} ownerWallet={preferredWallet.address} />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Select a mailbox to send an NFTfax.</div>
+                )}
               </div>
             )}
 

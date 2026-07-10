@@ -77,7 +77,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
       }}>
         {/* Retro cover sheet header */}
         <div style={{ borderBottom: '2px dashed #999', paddingBottom: 10, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>nftFAX · SECURE TRANSMISSION</div>
+          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>NFTfax · SECURE TRANSMISSION</div>
           <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>FROM: {doc.from}</div>
           <div style={{ fontSize: 10, color: '#888' }}>T/#{doc.id.toUpperCase()} · {receivedAt}</div>
         </div>
@@ -96,7 +96,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
         />
 
         <div style={{ borderTop: '2px dashed #999', paddingTop: 8, marginTop: 14, fontSize: 9, color: '#999', textAlign: 'center' }}>
-          nftFAX · nftmail.box · bitmap-only, no scripts, no tracking
+          NFTfax · nftmail.box · static image, no scripts, no tracking
         </div>
       </div>
     </main>

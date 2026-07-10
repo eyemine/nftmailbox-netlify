@@ -1,4 +1,4 @@
-/// nftFax compose panel — PREMIUM feature.
+/// NFTfax compose panel — PREMIUM feature.
 ///
 /// The transmission channel is bitmap-only: the recipient's inbox receives a
 /// plaintext pointer notification, and the image is rendered as a static <img>
@@ -70,7 +70,7 @@ function renderTextToPng(text: string): string {
   // Header band
   ctx.fillStyle = '#2a2a2a';
   ctx.font = `bold 12px 'Courier New', Courier, monospace`;
-  ctx.fillText('nftFAX · SECURE TRANSMISSION', padding, padding + 4);
+  ctx.fillText('NFTfax · SECURE TRANSMISSION', padding, padding + 4);
   ctx.strokeStyle = '#999';
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
@@ -191,7 +191,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">nftFax</h3>
+          <h3 className="text-lg font-semibold text-white">NFTfax</h3>
           <p className="text-sm text-gray-400">
             Static-image secure transmission (PNG/JPG/BMP) — no tracking pixels, no remote loads, no scripts.
           </p>
@@ -290,7 +290,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
         disabled={sending}
         className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 text-white font-semibold py-2.5 px-4 rounded-lg transition disabled:opacity-50"
       >
-        {sending ? 'Transmitting…' : 'Send nftFax'}
+        {sending ? 'Transmitting…' : 'Send NFTfax'}
       </button>
     </div>
   );
