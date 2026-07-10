@@ -75,6 +75,8 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       // Dynamic import — SDK is only needed client-side and only present in Farcaster env
       try {
         const { sdk } = await import('@farcaster/miniapp-sdk');
+        // Signal ready as early as possible — Warpcast waits for this before exposing context.
+        try { await sdk.actions.ready(); } catch {}
         const context = await sdk.context;
         if (context?.user?.fid) {
           setIsFarcasterEnv(true);
@@ -82,8 +84,6 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
           // custodyAddress is the Farcaster-managed hot wallet
           const addr = (context.user as unknown as { custodyAddress?: string }).custodyAddress ?? null;
           setActiveWalletAddress(addr);
-          // Signal to Farcaster that splash screen can be hidden
-          try { await sdk.actions.ready(); } catch {}
         }
       } catch {
         // Not in a Farcaster environment — standard browser path

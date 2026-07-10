@@ -329,6 +329,13 @@ export default function MiniApp() {
 
   useEffect(() => {
     const init = async () => {
+      // Signal ready as early as possible — Warpcast waits for this before exposing context.
+      try {
+        await sdk.actions.ready();
+      } catch {
+        // ready() may fail outside Warpcast - that's ok
+      }
+
       let userFid: number | null = null;
       let verifiedAddrs: string[] = [];
       try {
@@ -338,12 +345,6 @@ export default function MiniApp() {
         verifiedAddrs = ((context?.user as unknown as Record<string, unknown>)?.verifiedAddresses as Record<string, string[]> | undefined)?.ethAddresses ?? [];
       } catch {
         // running outside Warpcast — continue without FID
-      }
-      // Signal ready immediately after getting context - critical for Farcaster Mini Apps
-      try {
-        await sdk.actions.ready();
-      } catch {
-        // ready() may fail outside Warpcast - that's ok
       }
 
       // Run FID check and NFT controller check in parallel

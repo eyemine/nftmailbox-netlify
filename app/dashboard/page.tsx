@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
@@ -86,6 +86,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
   const { authenticated, login, logout, ready, user } = usePrivy();
+  const { wallets } = useWallets();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
@@ -141,7 +142,11 @@ function DashboardContent() {
   const linkedWallets = (user?.linkedAccounts as any[])?.filter((a: any) => a?.type === 'wallet' && a?.address) || [];
   const embeddedWallet = user?.wallet?.address;
   const walletAddress = linkedWallets[0]?.address || embeddedWallet || null;
-  const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
+  // Use the actual Privy wallet object so signing goes to the correct provider/account.
+  const preferredWallet = React.useMemo(() => {
+    if (!walletAddress) return null;
+    return wallets.find(w => typeof w.address === 'string' && w.address.toLowerCase() === walletAddress.toLowerCase()) || null;
+  }, [wallets, walletAddress]);
   // All wallets tied to this Privy session — used to RESOLVE NFTMail names so that
   // toggling between embedded (Privy) and external (web3) wallets never hides accounts
   // owned by the wallet that is no longer "preferred".
