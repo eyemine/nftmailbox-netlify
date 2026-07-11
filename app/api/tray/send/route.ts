@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
+const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || '';
 
 const MAX_BASE64_LENGTH = 1_400_000; // ~1MB binary
 const ALLOWED_FORMATS = new Set(['png', 'bmp', 'jpg']);
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
     // Verify caller against on-chain controller of the sending address
     const resolveRes = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: fromLabel }),
     });
     if (resolveRes.ok) {
@@ -104,10 +105,10 @@ export async function POST(req: NextRequest) {
     const fromEmail = `${fromLabel}@nftmail.box`;
     const setRes = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({
         action: 'setTrayDocument',
-        secret: WORKER_SECRET,
+        secret: WEBHOOK_SECRET,
         from: fromEmail,
         to,
         format: normFormat,
