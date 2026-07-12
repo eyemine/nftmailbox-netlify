@@ -493,6 +493,7 @@ function DashboardContent() {
     return 'free';
   })();
   const canSend = !isAgent && (normalisedTier === 'pro' || normalisedTier === 'premium');
+  const canFax = !isAgent;
   const isPremium = normalisedTier === 'premium';
   const isPro = normalisedTier === 'pro';
 
@@ -676,11 +677,11 @@ function DashboardContent() {
                 Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : 'PRO+'}</span>
               </button>
               <button
-                onClick={() => canSend && setTab('fax')}
-                title={!canSend ? 'Upgrade to unlock NFTfax' : undefined}
-                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'fax' ? 'bg-amber-500/12 text-amber-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+                onClick={() => canFax && setTab('fax')}
+                title={!canFax ? 'NFTfax is unavailable for agent mailboxes' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'fax' ? 'bg-amber-500/12 text-amber-300' : canFax ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
               >
-                Fax{faxMessages.length > 0 ? ` (${faxMessages.length})` : ''} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>PREMIUM</span>
+                Fax{faxMessages.length > 0 ? ` (${faxMessages.length})` : ''} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : isPro ? 'PRO' : '2 FREE/MO'}</span>
               </button>
               <button
                 onClick={() => setTab('killswitch')}
@@ -1156,17 +1157,12 @@ function DashboardContent() {
             {/* ── FAX TAB ── */}
             {tab === 'fax' && (
               <div className="space-y-4">
-                {!isPremium ? (
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-500/20">{isPro ? 'PRO' : 'FREE'}</span>
-                      <span className="text-sm text-amber-300">NFTfax is a PREMIUM feature</span>
-                    </div>
-                    <p className="mt-2 text-xs text-[var(--muted)]">Upgrade to PREMIUM on the <Link href="/nftmail" className="text-amber-300 hover:underline">mint page</Link> to send secure static-image transmissions.</p>
-                  </div>
-                ) : selectedName && preferredWallet ? (
+                {selectedName && preferredWallet ? (
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
                     <NftFax fromLabel={selectedName.label} ownerWallet={preferredWallet.address} />
+                    {!isPro && !isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">Basic: 2 faxes/month to @nftmail.box recipients. <Link href="/nftmail" className="text-amber-300 hover:underline">Upgrade to PRO</Link> for unlimited external delivery.</p>}
+                    {isPro && <p className="mt-4 text-[10px] text-[var(--muted)]">PRO: unlimited single-page greyscale faxes, including external recipients.</p>}
+                    {isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">PREMIUM: external delivery with 256-colour and multipage options.</p>}
                   </div>
                 ) : (
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Select a mailbox to send an NFTfax.</div>

@@ -128,22 +128,47 @@ function SafeMarkdown({ text }: { text: string }) {
   );
 }
 
+function openUrl(url: string) {
+  try { (sdk.actions as any).openUrl(url); } catch { window.open(url, '_blank'); }
+}
+
 function renderInline(text: string): React.ReactNode[] {
-  // Strip any markdown link syntax [label](url) → just show label
-  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  // Strip bare URLs (no rendering as anchors)
-  text = text.replace(/https?:\/\/\S+/g, '[link]');
+  // Convert markdown link syntax [label](url) → clickable label
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '[$1→$2]');
   const parts: React.ReactNode[] = [];
-  // Tokenise bold+italic, bold, italic, inline code
-  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  // Tokenise URLs, markdown link syntax, bold+italic, bold, italic, inline code
+  const re = /(https?:\/\/[^\s\]]+|\[([^\]]+)→([^\]]+)\]|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
   let last = 0, m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(<span key={idx++}>{text.slice(last, m.index)}</span>);
-    if (m[2]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[2]}</strong>);
-    else if (m[3]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[3]}</strong>);
-    else if (m[4]) parts.push(<em key={idx++} className="italic text-gray-200">{m[4]}</em>);
-    else if (m[5]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[5]}</code>);
+    if (m[1] && /^https?:\/\//.test(m[1])) {
+      const url = m[1];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {url}
+        </button>
+      );
+    } else if (m[2] && m[3]) {
+      const label = m[2];
+      const url = m[3];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {label}
+        </button>
+      );
+    } else if (m[4]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[4]}</strong>);
+    else if (m[5]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[5]}</strong>);
+    else if (m[6]) parts.push(<em key={idx++} className="italic text-gray-200">{m[6]}</em>);
+    else if (m[7]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[7]}</code>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(<span key={idx++}>{text.slice(last)}</span>);

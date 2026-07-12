@@ -1,4 +1,4 @@
-/// NFTfax compose panel — PREMIUM feature.
+/// NFTfax compose panel — tiered Basic, PRO, and PREMIUM feature.
 ///
 /// The transmission channel is bitmap-only: the recipient's inbox receives a
 /// plaintext pointer notification, and the image is rendered as a static <img>
@@ -19,7 +19,8 @@ interface NftFaxProps {
 
 type Mode = 'compose' | 'upload';
 
-const MAX_BASE64_LENGTH = 1_400_000; // ~1MB binary, mirrors /api/tray/send
+const MAX_SOURCE_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_UPLOAD_BASE64_LENGTH = 1_300_000;
 
 // Strip the `data:*;base64,` prefix so we send raw base64 to the worker.
 function stripDataUri(dataUri: string): string {
@@ -103,7 +104,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
   const [trayUrl, setTrayUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     setError('');
     setTrayUrl('');
     const lower = file.name.toLowerCase();
@@ -118,19 +119,48 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       setError('Only PNG, JPG, or BMP files are permitted.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const b64 = stripDataUri(String(reader.result || ''));
-      if (b64.length > MAX_BASE64_LENGTH) {
-        setError('Document too large (max ~1MB).');
-        return;
+    if (file.size > MAX_SOURCE_FILE_SIZE) {
+      setError('Source image too large (max 20MB).');
+      return;
+    }
+
+    try {
+      const bitmap = await createImageBitmap(file);
+      const maxWidth = 1728;
+      const maxHeight = 2200;
+      const initialScale = Math.min(1, maxWidth / bitmap.width, maxHeight / bitmap.height);
+      let scale = initialScale;
+      let encoded = '';
+
+      for (let attempt = 0; attempt < 7; attempt += 1) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(320, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(400, Math.round(bitmap.height * scale));
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) throw new Error('Image processing is unavailable');
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < pixels.data.length; i += 4) {
+          const grey = Math.round(pixels.data[i] * 0.299 + pixels.data[i + 1] * 0.587 + pixels.data[i + 2] * 0.114);
+          pixels.data[i] = grey;
+          pixels.data[i + 1] = grey;
+          pixels.data[i + 2] = grey;
+        }
+        ctx.putImageData(pixels, 0, 0);
+        encoded = stripDataUri(canvas.toDataURL('image/jpeg', 0.76));
+        if (encoded.length <= MAX_UPLOAD_BASE64_LENGTH) break;
+        scale *= 0.8;
       }
-      setFileB64(b64);
-      setFileFormat(format);
-      setFileName(file.name);
-    };
-    reader.onerror = () => setError('Could not read file.');
-    reader.readAsDataURL(file);
+      bitmap.close();
+      if (!encoded || encoded.length > MAX_UPLOAD_BASE64_LENGTH) {
+        throw new Error('Image could not be reduced to fax size');
+      }
+      setFileB64(encoded);
+      setFileFormat('jpg');
+      setFileName(`${file.name} · compressed to ${Math.round(encoded.length * 0.75 / 1024)}KB greyscale`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not process file.');
+    }
   };
 
   const handleSend = async () => {
@@ -193,11 +223,11 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
         <div>
           <h3 className="text-lg font-semibold text-white">NFTfax</h3>
           <p className="text-sm text-gray-400">
-            Static-image secure transmission (PNG/JPG/BMP) — no tracking pixels, no remote loads, no scripts.
+            Static-image transmission (PNG/JPG/BMP) — uploads are resized and colour-reduced automatically.
           </p>
         </div>
         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          PREMIUM
+          NFTFAX
         </span>
       </div>
 
@@ -223,7 +253,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
               : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
           }`}
         >
-          Upload PNG/BMP
+          Upload image
         </button>
       </div>
 
@@ -257,7 +287,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
         </div>
       ) : (
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Image file (PNG/JPG/BMP)</label>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Image file (PNG/JPG/BMP, up to 20MB)</label>
           <input
             ref={fileInputRef}
             type="file"
