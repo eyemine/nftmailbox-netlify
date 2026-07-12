@@ -81,6 +81,7 @@ interface InboxMessage {
   sender: string;
   fromAddress: string;
   receivedTime: string;
+  receivedAt?: string | number;
   summary: string;
   body: string;
   bodyHtml?: string;
@@ -462,11 +463,14 @@ function DashboardContent() {
     }
   }, [selectedName, preferredWallet]);
 
-  const formatTimeAgo = (ts: string) => {
-    const raw = parseInt(ts, 10);
+  const formatTimeAgo = (ts: string, fallbackTs?: string | number) => {
+    const candidate = ts ?? fallbackTs ?? '';
+    const raw = parseInt(String(candidate), 10);
+    if (!candidate || isNaN(raw) || raw <= 0) return '—';
     // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
-    const epoch = !isNaN(raw) ? (raw < 1e11 ? raw * 1000 : raw) : (Date.parse(ts) || Date.now());
+    const epoch = raw < 1e11 ? raw * 1000 : raw;
     const ms = Date.now() - epoch;
+    if (ms < 0) return 'now';
     const mins = Math.floor(ms / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
@@ -747,7 +751,7 @@ function DashboardContent() {
                               </div>
                               <div className="min-w-0">
                                 <p className="truncate text-xs text-white">{msg.sender || msg.fromAddress || 'Unknown sender'}</p>
-                                <p className="truncate text-[10px] text-[var(--muted)]">{trayId ? `T/#${trayId.slice(0, 4).toUpperCase()}` : (msg.subject || 'NFTfax')} · {formatTimeAgo(msg.receivedTime)}</p>
+                                <p className="truncate text-[10px] text-[var(--muted)]">{trayId ? `T/#${trayId.slice(0, 4).toUpperCase()}` : (msg.subject || 'NFTfax')} · {formatTimeAgo(msg.receivedTime, msg.receivedAt)}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
