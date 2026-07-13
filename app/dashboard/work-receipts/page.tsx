@@ -28,6 +28,10 @@ interface AgentReceipt {
   };
 }
 
+function hasTbaAddress(receipt: AgentReceipt): receipt is AgentReceipt & { tbaAddress: string } {
+  return typeof receipt.tbaAddress === 'string' && receipt.tbaAddress.length > 0;
+}
+
 const publicClient = createPublicClient({
   chain: gnosis,
   transport: http(),
@@ -200,13 +204,13 @@ export default function WorkReceiptsPage() {
       )}
 
       {/* AgentAuditCards — one per unique TBA */}
-      {receipts.filter(r => r.tbaAddress).length > 0 && (
+      {receipts.filter(hasTbaAddress).length > 0 && (
         <div className="space-y-4">
           <h2 className="text-sm font-semibold tracking-wider text-[var(--muted)]">AGENT TELEMETRY</h2>
-          {Array.from(new Map(receipts.filter(r => r.tbaAddress).map(r => [r.tbaAddress, r])).values()).map((receipt) => (
+          {Array.from(new Map(receipts.filter(hasTbaAddress).map((r) => [r.tbaAddress, r])).values()).map((receipt) => (
             <AgentAuditCard
               key={receipt.tbaAddress}
-              tbaAddress={receipt.tbaAddress!}
+              tbaAddress={receipt.tbaAddress}
               namespace={receipt.namespace}
               registrar={receipt.registrar}
             />

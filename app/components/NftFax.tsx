@@ -15,6 +15,9 @@ import { useRef, useState } from 'react';
 interface NftFaxProps {
   fromLabel: string;
   ownerWallet: string;
+  /// Private (end-to-end encrypted) fax is a Pro/Premium feature. When false,
+  /// the toggle is hidden entirely (the server also enforces this with a 402).
+  canPrivate?: boolean;
 }
 
 type Mode = 'compose' | 'upload';
@@ -92,7 +95,7 @@ function renderTextToPng(text: string): string {
   return stripDataUri(canvas.toDataURL('image/png'));
 }
 
-export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
+export default function NftFax({ fromLabel, ownerWallet, canPrivate = false }: NftFaxProps) {
   const [mode, setMode] = useState<Mode>('compose');
   const [to, setTo] = useState('');
   const [message, setMessage] = useState('');
@@ -102,6 +105,10 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [trayUrl, setTrayUrl] = useState('');
+  // Private channel: ECIES-encrypt the bitmap to the recipient. Requires the
+  // recipient to have enabled Private Fax (a wallet-held key) and an
+  // @nftmail.box recipient. Pro/Premium only (enforced server-side).
+  const [privateMode, setPrivateMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -199,7 +206,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       const res = await fetch('/api/tray/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64 }),
+        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: (canPrivate && privateMode) ? 'private' : 'public' }),
       });
       const data = (await res.json()) as { trayUrl?: string; error?: string; upgradeUrl?: string };
       if (!res.ok) {
@@ -266,10 +273,33 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
           id="faxTo"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          placeholder="agent@nftmail.box or any email"
+          placeholder="agent@nftmail.box (Premium for external addresses)"
           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-500 transition"
         />
       </div>
+
+      {/* Private (encrypted) channel toggle — Pro/Premium only */}
+      {canPrivate && (
+        <>
+          <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={privateMode}
+              onChange={(e) => setPrivateMode(e.target.checked)}
+              className="accent-emerald-500"
+            />
+            <span className="text-sm text-emerald-300 font-medium">
+              Private (end-to-end encrypted)
+            </span>
+            <span className="ml-auto text-[10px] text-emerald-400/70">PRO / PREMIUM · @nftmail.box only</span>
+          </label>
+          {privateMode && (
+            <p className="text-[11px] text-gray-400 -mt-2">
+              The bitmap is encrypted to the recipient&apos;s wallet key. It is ciphertext at rest and the public tray URL cannot reveal it. The recipient must have enabled Private Fax.
+            </p>
+          )}
+        </>
+      )}
 
       {mode === 'compose' ? (
         <div>

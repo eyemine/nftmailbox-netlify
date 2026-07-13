@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
+import { spendCredit, earnForwardCredit, setLastReceived, applyThermalFade, getCredits } from '@/app/lib/fax-credits';
+import { eciesEncrypt } from '@/app/lib/fax-crypto';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -23,12 +25,6 @@ const MAX_FAX_WIDTH = 1728;
 const MAX_FAX_HEIGHT = 2200;
 const ALLOWED_FORMATS = new Set(['png', 'bmp', 'jpg']);
 
-const BASIC_MONTHLY_FAX_LIMIT = 2;
-
-function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-}
 
 // Minimal magic-byte check so a mislabeled/malicious file can't ride through
 // as a "bitmap" — this is a transmission channel with no HTML/script context,
@@ -83,37 +79,21 @@ async function processFaxImage(dataBase64: string, preserveColor: boolean): Prom
   throw new Error('Image could not be reduced below the 1MB fax limit');
 }
 
-async function getFaxCount(label: string): Promise<number> {
+async function getChainDocument(id: string): Promise<{ dataBase64: string; from: string; to: string } | null> {
   try {
-    const key = `fax-sent:${label}:${currentMonthKey()}`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-      body: JSON.stringify({ action: 'kvGet', key }),
+      headers,
+      body: JSON.stringify({ action: 'getTrayDocument', id }),
+      cache: 'no-store',
     });
-    if (!res.ok) return 0;
-    const { value } = await res.json() as { value: string | null };
-    const n = parseInt(value || '0', 10);
-    return isNaN(n) ? 0 : n;
+    if (!res.ok) return null;
+    return await res.json() as { dataBase64: string; from: string; to: string };
   } catch {
-    return 0;
+    return null;
   }
-}
-
-async function incrementFaxCount(label: string, ownerWallet: string) {
-  const key = `fax-sent:${label}:${currentMonthKey()}`;
-  const count = await getFaxCount(label);
-  await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-    body: JSON.stringify({
-      action: 'kvPut',
-      key,
-      value: String(count + 1),
-      ownerAddress: ownerWallet,
-      webhookSecret: WEBHOOK_SECRET,
-    }),
-  });
 }
 
 export async function POST(req: NextRequest) {
@@ -124,11 +104,14 @@ export async function POST(req: NextRequest) {
       to?: string;
       format?: string;
       dataBase64?: string;
+      chainTrayId?: string;
       isMultipage?: boolean;
       colorMode?: 'greyscale' | '256';
+      channel?: 'public' | 'private';
     };
 
-    const { fromLabel, ownerWallet, to, format, dataBase64, isMultipage, colorMode } = body;
+    const { fromLabel, ownerWallet, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
+    const channel = body.channel === 'private' ? 'private' : 'public';
 
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
@@ -139,56 +122,136 @@ export async function POST(req: NextRequest) {
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
-    const normFormat = (format || '').toLowerCase() === 'jpeg' ? 'jpg' : (format || '').toLowerCase();
-    if (!normFormat || !ALLOWED_FORMATS.has(normFormat)) {
-      return NextResponse.json({ error: 'Only PNG, JPG, or BMP formats are permitted' }, { status: 400 });
-    }
-    if (!dataBase64) {
-      return NextResponse.json({ error: 'Missing dataBase64' }, { status: 400 });
-    }
-    if (dataBase64.length > MAX_SOURCE_BASE64_LENGTH) {
-      return NextResponse.json({ error: 'Source image too large (max ~20MB)' }, { status: 413 });
-    }
-    if (!matchesFormat(dataBase64, normFormat)) {
-      return NextResponse.json({ error: 'File content does not match declared format' }, { status: 400 });
+
+    let isForward = false;
+    let processedBase64: string;
+    let rawDataBase64: string | undefined;
+    if (chainTrayId) {
+      const chain = await getChainDocument(chainTrayId);
+      if (!chain || !chain.dataBase64) {
+        return NextResponse.json({ error: 'Chain tray not found' }, { status: 404 });
+      }
+      // Ensure the forwarder is the recipient of the source fax.
+      const chainToLocal = chain.to.split('@')[0].toLowerCase();
+      if (chainToLocal !== fromLabel.toLowerCase()) {
+        return NextResponse.json({ error: 'You can only forward faxes sent to you' }, { status: 403 });
+      }
+      isForward = true;
+      rawDataBase64 = chain.dataBase64;
+    } else {
+      const normFormat = (format || '').toLowerCase() === 'jpeg' ? 'jpg' : (format || '').toLowerCase();
+      if (!normFormat || !ALLOWED_FORMATS.has(normFormat)) {
+        return NextResponse.json({ error: 'Only PNG, JPG, or BMP formats are permitted' }, { status: 400 });
+      }
+      if (!dataBase64) {
+        return NextResponse.json({ error: 'Missing dataBase64 or chainTrayId' }, { status: 400 });
+      }
+      if (dataBase64.length > MAX_SOURCE_BASE64_LENGTH) {
+        return NextResponse.json({ error: 'Source image too large (max ~20MB)' }, { status: 413 });
+      }
+      if (!matchesFormat(dataBase64, normFormat)) {
+        return NextResponse.json({ error: 'File content does not match declared format' }, { status: 400 });
+      }
+      rawDataBase64 = dataBase64;
     }
 
-    // Verify caller against on-chain controller of the sending address
+    // Verify caller against the controller of the sending address. Fail CLOSED:
+    // a fax stamps `from`, so we must positively bind fromLabel → ownerWallet
+    // before sending. An unverifiable sender (resolve error, non-existent
+    // mailbox, or a mailbox with no on-chain/wallet controller) is rejected —
+    // this closes the impersonation gap where a missing controller silently
+    // passed and let any wallet send as any label (including premium accounts).
     const resolveRes = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
       body: JSON.stringify({ action: 'resolveAddress', name: fromLabel }),
     });
-
-    let accountTier = 'basic';
-    if (resolveRes.ok) {
-      const resolved = await resolveRes.json() as Record<string, unknown>;
-      const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-      if (controller && controller !== ownerWallet.toLowerCase()) {
-        return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
-      }
-      accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
+    if (!resolveRes.ok) {
+      return NextResponse.json({ error: 'Could not verify sender ownership. Try again.' }, { status: 503 });
     }
+    const resolved = await resolveRes.json() as Record<string, unknown>;
+    if (resolved.exists === false) {
+      return NextResponse.json({ error: 'Sender mailbox does not exist.' }, { status: 404 });
+    }
+    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+    if (!controller) {
+      return NextResponse.json({
+        error: 'Sender ownership could not be verified. Connect the wallet that controls this mailbox.',
+      }, { status: 403 });
+    }
+    if (controller !== ownerWallet.toLowerCase()) {
+      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
+    }
+    const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
 
     const isPremium = accountTier === 'premium' || accountTier === 'imago' || accountTier === 'ghost';
     const isPro = accountTier === 'pro' || accountTier === 'pupa' || accountTier === 'lite';
     const isBasic = !isPremium && !isPro;
 
-    // Basic tier: 2 free 1-page greyscale faxes per month, internal delivery only
-    if (isBasic) {
-      const recipientDomain = to.trim().toLowerCase().split('@').pop();
-      if (recipientDomain !== 'nftmail.box') {
+    // ── Private (end-to-end encrypted) fax gating ──
+    // The bitmap is ECIES-encrypted to the recipient's public key so KV stores
+    // only ciphertext and the public /tray/{id} URL can never reveal the image.
+    // This is the Pro/Premium confidentiality tier — distinct from the public
+    // chain-letter game. Forwarding an encrypted fax is not supported (the
+    // forwarder would have to decrypt then re-encrypt to the next recipient).
+    let recipientFaxPubKey: string | null = null;
+    if (channel === 'private') {
+      if (isBasic) {
         return NextResponse.json({
-          error: 'Basic accounts can only send NFTfax to @nftmail.box recipients. Upgrade to PRO for external delivery.',
+          error: 'Private (encrypted) NFTfax is a PRO/PREMIUM feature. Upgrade to send end-to-end encrypted faxes.',
           upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
         }, { status: 402 });
       }
-      const sent = await getFaxCount(fromLabel);
-      if (sent >= BASIC_MONTHLY_FAX_LIMIT) {
+      if (isForward) {
+        return NextResponse.json({ error: 'Encrypted faxes cannot be forwarded into the public chain.' }, { status: 400 });
+      }
+      const privRecipientDomain = to.trim().toLowerCase().split('@').pop();
+      if (privRecipientDomain !== 'nftmail.box') {
+        return NextResponse.json({ error: 'Private faxes can only be sent to @nftmail.box recipients.' }, { status: 400 });
+      }
+      const recipientLocal = to.trim().toLowerCase().split('@')[0];
+      const keyRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+        body: JSON.stringify({ action: 'getFaxKey', local: recipientLocal }),
+        cache: 'no-store',
+      });
+      if (keyRes.ok) {
+        const keyData = await keyRes.json() as { hasKey?: boolean; publicKey?: string };
+        if (keyData.hasKey && keyData.publicKey) recipientFaxPubKey = keyData.publicKey;
+      }
+      if (!recipientFaxPubKey) {
         return NextResponse.json({
-          error: 'You have used your 2 free NFTfax sends this month. Upgrade to PRO for unlimited faxes.',
-          upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
+          error: `${recipientLocal}@nftmail.box has not enabled private fax. They must provision a fax key in their dashboard before you can send an encrypted fax.`,
+        }, { status: 409 });
+      }
+    }
+
+    // External delivery is Premium-only. Basic and Pro stay within @nftmail.box/fax.box.
+    const recipientDomain = to.trim().toLowerCase().split('@').pop();
+    if (recipientDomain !== 'nftmail.box' && recipientDomain !== 'fax.box') {
+      if (!isPremium) {
+        return NextResponse.json({
+          error: 'External NFTfax delivery is a PREMIUM feature. Upgrade to send to non-@nftmail.box addresses.',
+          upgradeUrl: `/nftmail?upgrade=premium&label=${fromLabel}`,
         }, { status: 402 });
+      }
+    }
+
+    // Basic tier uses Thermal Fade credits: new sends cost 1 credit; forwards earn 1 credit
+    // if performed within 72 hours of receiving. If a received fax is not forwarded in time,
+    // all credits fade to zero.
+    if (isBasic) {
+      if (isForward) {
+        await earnForwardCredit(fromLabel, ownerWallet);
+      } else {
+        const canSend = await spendCredit(fromLabel, ownerWallet);
+        if (!canSend) {
+          return NextResponse.json({
+            error: 'Thermal fade: you have no fax send credits. Forward a received fax within 72 hours to earn a credit, or upgrade to PRO for unlimited internal faxes / PREMIUM for external delivery.',
+            upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
+          }, { status: 402 });
+        }
       }
     }
 
@@ -208,28 +271,50 @@ export async function POST(req: NextRequest) {
       }, { status: 402 });
     }
 
-    let processedBase64: string;
-    try {
-      processedBase64 = await processFaxImage(dataBase64, isPremium && colorMode === '256');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Image processing failed';
-      return NextResponse.json({ error: message }, { status: 400 });
+    if (isForward && rawDataBase64) {
+      processedBase64 = rawDataBase64;
+    } else if (rawDataBase64) {
+      try {
+        processedBase64 = await processFaxImage(rawDataBase64, isPremium && colorMode === '256');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Image processing failed';
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    } else {
+      return NextResponse.json({ error: 'No image data to send' }, { status: 400 });
     }
 
-    const fromEmail = `${fromLabel}@nftmail.box`;
+    const fromDomain = recipientDomain === 'fax.box' ? 'fax.box' : 'nftmail.box';
+    const fromEmail = `${fromLabel}@${fromDomain}`;
+
+    // For the private channel, ECIES-encrypt the processed bitmap to the
+    // recipient's public key. The worker (and the public /tray URL) only ever
+    // see the envelope — never the plaintext image.
+    const trayPayload: Record<string, unknown> = {
+      action: 'setTrayDocument',
+      secret: WEBHOOK_SECRET,
+      from: fromEmail,
+      to,
+      format: 'png',
+      isMultipage: !!isMultipage,
+      colorMode: colorMode || 'greyscale',
+    };
+    if (channel === 'private' && recipientFaxPubKey) {
+      try {
+        trayPayload.channel = 'private';
+        trayPayload.envelope = await eciesEncrypt(processedBase64, recipientFaxPubKey);
+      } catch {
+        return NextResponse.json({ error: 'Failed to encrypt fax for recipient' }, { status: 500 });
+      }
+    } else {
+      trayPayload.channel = 'public';
+      trayPayload.dataBase64 = processedBase64;
+    }
+
     const setRes = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-      body: JSON.stringify({
-        action: 'setTrayDocument',
-        secret: WEBHOOK_SECRET,
-        from: fromEmail,
-        to,
-        format: 'png',
-        dataBase64: processedBase64,
-        isMultipage: !!isMultipage,
-        colorMode: colorMode || 'greyscale',
-      }),
+      body: JSON.stringify(trayPayload),
     });
 
     const data = await setRes.json() as { id?: string; trayUrl?: string; error?: string };
@@ -237,9 +322,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: data.error || 'Failed to store document' }, { status: setRes.status });
     }
 
-    if (isBasic) await incrementFaxCount(fromLabel, ownerWallet);
+    // Mark the recipient as having received a fax (starts the 72-hour Thermal Fade).
+    if (recipientDomain === 'nftmail.box' || recipientDomain === 'fax.box') {
+      const recipientLocal = to.split('@')[0].toLowerCase();
+      await setLastReceived(recipientLocal, Date.now(), ownerWallet);
+    }
 
-    return NextResponse.json({ success: true, id: data.id, trayUrl: data.trayUrl });
+    // Chain-letter game: a successful forward UNLOCKS the "Mint to Base" action
+    // for the source fax. The forwarder was already verified as the source
+    // fax's recipient above (chainToLocal === fromLabel). Non-fatal.
+    if (isForward && chainTrayId) {
+      try {
+        await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+          body: JSON.stringify({ action: 'markTrayForwarded', secret: WEBHOOK_SECRET, trayId: chainTrayId }),
+        });
+      } catch { /* non-fatal — the mint gate can be retried by forwarding again */ }
+    }
+
+    return NextResponse.json({ success: true, id: data.id, trayUrl: data.trayUrl, isForward, channel, encrypted: channel === 'private' });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Transmission failed';
     return NextResponse.json({ error: message }, { status: 500 });
