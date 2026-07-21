@@ -584,7 +584,7 @@ function DashboardContent() {
                       .sort((a, b) => a.email.localeCompare(b.email))
                       .map((n: NftMailName) => (
                         <option key={n.tokenId} value={n.label} className="bg-black text-white">
-                          {n.walletType === 'privy' ? '🔒 ' : '🔗 '}{n.email}
+                          {n.label.endsWith('_') ? '⻤ ' : ''}{n.email}
                         </option>
                       ))}
                   </select>
