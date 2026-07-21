@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     // Determine tier from amount
     let tier: string | null = null;
     if (cryptoAmount !== undefined) {
-      if (cryptoAmount >= 24) tier = 'premium';     // Premium
-      else if (cryptoAmount >= 10) tier = 'lite';   // legacy alias for Pro
+      if (cryptoAmount >= 24) tier = 'premium';     // Imago / Pro
+      else if (cryptoAmount >= 10) tier = 'lite';   // Pupa
     }
 
     if (!tier) {

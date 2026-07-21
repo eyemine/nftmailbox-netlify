@@ -84,24 +84,12 @@ export async function GET(req: NextRequest) {
       let controller = '';
       let onChainOwner = '';
       let safe = '';
-      // Decay policy comes from resolveAddress (the authority), NOT getBlindInbox.
-      // `decayDays: null` = NEVER decays (Premium/Agent). A Free/Basic account
-      // is 8 days, Pro 30. Agent addresses (trailing _) never decay.
-      let accountDecayDays = 8;
-      let decayIsNever = isAgentAddress;
       if (resolveRes.ok) {
         const rd = await resolveRes.json() as Record<string, any>;
         accountTier = rd.accountTier || null;
         controller = (rd.controller || '').toLowerCase();
         onChainOwner = (rd.onChainOwner || '').toLowerCase();
         safe = (rd.safe || '').toLowerCase();
-        const tierLower = (accountTier || '').toLowerCase();
-        // 'imago'/'ghost' are legacy aliases for Premium (kept for old KV values).
-        if (['premium', 'imago', 'ghost'].includes(tierLower) || rd.decayDays === null) {
-          decayIsNever = true;
-        } else if (typeof rd.decayDays === 'number' && rd.decayDays > 0) {
-          accountDecayDays = rd.decayDays;
-        }
       }
 
       // Enforce auth gate for human accounts (no trailing _)
@@ -124,16 +112,15 @@ export async function GET(req: NextRequest) {
 
       if (workerRes.ok) {
         const workerData = await workerRes.json() as Record<string, any>;
+        // decayDays from resolveAddress: 8 for Larva, 30 for Pupa, null for Imago/Agent
+        const acctDecayDays: number | null = workerData.decayDays ?? null;
         kvMessages = (workerData.messages || []).map((m: any) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
           const receivedMs = m.receivedAt || now;
           const frozen = m.frozen === true;
-          // A message never decays if it is frozen, or the account tier never
-          // decays (Premium/Agent). Otherwise use per-message decayDays,
-          // else the account default (8 Free/Basic / 30 Pro).
-          const msgNever = frozen || decayIsNever;
-          const msgDecayDays = m.decayDays ?? accountDecayDays;
+          // Frozen emails never decay; use per-message decayDays if available, else account default
+          const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
           const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
           const ageMs = now - receivedMs;
 

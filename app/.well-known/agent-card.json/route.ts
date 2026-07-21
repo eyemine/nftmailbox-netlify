@@ -59,7 +59,7 @@ export async function GET() {
         examples: [
           'Provision inbox for new agent "myagent"',
           'Link inbox to existing Safe address',
-          'Upgrade inbox tier (Free/Basic → Pro → Premium)'
+          'Upgrade inbox tier (larva → pupa → imago)'
         ],
       },
       {

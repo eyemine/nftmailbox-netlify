@@ -125,7 +125,6 @@ export async function POST(req: NextRequest) {
     }
     if (!fromDomain) fromDomain = 'nftmail.box';
     const isFaxSender = fromDomain === 'fax';
-
     const channel = body.channel === 'private' && to && !to.toLowerCase().trim().endsWith('@fax')
       ? 'private'
       : 'public';
@@ -253,7 +252,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // External delivery is Premium-only. Basic and Pro stay within @nftmail.box / @fax / fax.box.
+    // External delivery is Premium-only. Basic and Pro stay within @nftmail.box/fax.box.
     const recipientDomain = to.trim().toLowerCase().split('@').pop();
     if (recipientDomain !== 'nftmail.box' && recipientDomain !== 'fax.box' && recipientDomain !== 'fax') {
       if (!isPremium) {
@@ -274,7 +273,7 @@ export async function POST(req: NextRequest) {
         const canSend = await spendCredit(fromLabel, ownerWallet);
         if (!canSend) {
           return NextResponse.json({
-            error: 'LINE JAMMED — you have no fax send credits. Forward a received fax within 72 hours to earn a credit, or upgrade to PRO for unlimited internal faxes / PREMIUM for external delivery.',
+            error: 'Thermal fade: you have no fax send credits. Forward a received fax within 72 hours to earn a credit, or upgrade to PRO for unlimited internal faxes / PREMIUM for external delivery.',
             upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
           }, { status: 402 });
         }

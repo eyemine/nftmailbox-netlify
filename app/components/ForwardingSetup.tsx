@@ -1,5 +1,5 @@
-/// Forwarding Setup Panel for Premium accounts
-/// Allows users to configure email forwarding for their Premium tier
+/// Forwarding Setup Panel for Imago accounts
+/// Allows users to configure email forwarding for their premium tier
 
 'use client';
 

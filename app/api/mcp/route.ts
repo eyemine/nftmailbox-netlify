@@ -80,12 +80,12 @@ const MCP_TOOLS = [
   },
   {
     name: 'upgrade_tier',
-    description: 'Upgrade inbox tier (Free/Basic → Pro → Premium) for longer retention and features.',
+    description: 'Upgrade inbox tier (larva → pupa → imago) for longer retention and features.',
     inputSchema: {
       type: 'object',
       properties: {
         agentName: { type: 'string', description: 'Agent name' },
-        targetTier: { type: 'string', enum: ['pro', 'premium'], description: 'Target tier' },
+        targetTier: { type: 'string', enum: ['pupa', 'imago'], description: 'Target tier' },
         paymentTxHash: { type: 'string', description: 'xDAI payment transaction hash' }
       },
       required: ['agentName', 'targetTier', 'paymentTxHash']

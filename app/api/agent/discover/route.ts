@@ -66,22 +66,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { type = 'autonomous', source } = body;
     
-    // Check if user wants nftmail.box alias (Premium tier only)
+    // Check if user wants nftmail.box alias (Imago tier only)
     const requestedDomain = body.domain || DEFAULT_DOMAIN;
     let domain = DEFAULT_DOMAIN;
     let tier = body.tier || 'freemium';
-    // 'imago' is a legacy alias for Premium (still accepted from old clients).
-    const isPremiumTier = tier === 'premium' || tier === 'imago';
     
-    // Premium tier users can request nftmail.box as alias
-    if (requestedDomain === 'nftmail.box' && !isPremiumTier) {
+    // Imago tier users can request nftmail.box as alias
+    if (requestedDomain === 'nftmail.box' && tier !== 'imago') {
       return NextResponse.json(
-        { error: 'nftmail.box requires Premium tier. Use ghostmail.box or upgrade to Premium.' },
+        { error: 'nftmail.box requires Imago tier. Use ghostmail.box or upgrade to Imago.' },
         { status: 403 }
       );
     }
     
-    if (requestedDomain === 'nftmail.box' && isPremiumTier) {
+    if (requestedDomain === 'nftmail.box' && tier === 'imago') {
       domain = 'nftmail.box';
     }
 
@@ -123,13 +121,13 @@ export async function POST(request: NextRequest) {
       email: `${name}@${domain}`,
       tier,
       apiKey,
-      emailsRemaining: isPremiumTier ? 1000 : tier === 'professional' ? 500 : 100,
-      storageDays: isPremiumTier ? 365 : tier === 'professional' ? 30 : 8,
+      emailsRemaining: tier === 'imago' ? 1000 : tier === 'professional' ? 500 : 100,
+      storageDays: tier === 'imago' ? 365 : tier === 'professional' ? 30 : 8,
       createdAt: new Date().toISOString(),
       source: source || 'api',
       type: type || 'autonomous',
       ip: ip === 'unknown' ? undefined : ip,
-      canMolt: isPremiumTier,
+      canMolt: tier === 'imago',
     };
     
     // TODO: Persist to KV store (Cloudflare Workers KV)

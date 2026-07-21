@@ -37,14 +37,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json().catch(() => ({})) as {
     local?: string;
-    domain?: string;
     ownerWallet?: string;
     baseTx?: string;
     baseTokenId?: string | number;
     ipfsCid?: string;
   };
-  const domain = (body.domain || 'nftmail.box').toLowerCase();
-  const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '').replace(/@fax$/, '');
+  const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '');
   const wallet = (body.ownerWallet || '').trim();
 
   if (!id) return NextResponse.json({ error: 'Missing tray id' }, { status: 400, headers: NO_STORE });
@@ -57,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Ownership + propagation gate are both derived from the caller's own inbox
     // listing, which itself enforces the fail-closed wallet-ownership check.
     const listRes = await fetch(
-      `${req.nextUrl.origin}/api/tray/inbox?local=${encodeURIComponent(local)}&wallet=${encodeURIComponent(wallet)}&domain=${encodeURIComponent(domain)}`,
+      `${req.nextUrl.origin}/api/tray/inbox?local=${encodeURIComponent(local)}&wallet=${encodeURIComponent(wallet)}`,
       { cache: 'no-store' },
     );
     if (!listRes.ok) {

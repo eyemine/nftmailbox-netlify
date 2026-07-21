@@ -12,11 +12,8 @@ import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
 import NftFax from '../components/NftFax';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
-// app (fax.nftmail.box). Disabled in the mailbox console — re-enable if the
-// chain-letter lab returns to the dashboard.
+// app (fax.nftmail.box). Hidden in the mailbox console.
 // import FaxChainComposer from '../components/FaxChainComposer';
-import FaxKeySetup from '../components/FaxKeySetup';
-import PrivateFaxViewer from '../components/PrivateFaxViewer';
 
 function stripHtml(html: string): string {
   const s = html
@@ -156,8 +153,6 @@ function DashboardContent() {
   // Privacy toggle state
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   const [privacyTier, setPrivacyTier] = useState<string>('exposed');
-  // In-dashboard fax viewer (handles both public bitmaps and encrypted faxes)
-  const [viewFaxId, setViewFaxId] = useState<string | null>(null);
 
   // Derive wallet address safely from Privy session (avoids useWallets() crash)
   // Prioritize linked external wallets over embedded wallet for SIGNING (sends/burns/
@@ -765,7 +760,7 @@ function DashboardContent() {
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                               {trayId && (
-                                <button onClick={() => setViewFaxId(trayId)} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</button>
+                                <a href={`/tray/${trayId}`} target="_blank" rel="noopener noreferrer" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
                               )}
                               <button onClick={() => handleDelete(msg.messageId)} title="Delete fax" className="rounded p-1.5 text-red-400/50 hover:text-red-400 transition">
                                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
@@ -1167,16 +1162,13 @@ function DashboardContent() {
               <div className="space-y-4">
                 {selectedName && preferredWallet ? (
                   <>
-                    {(isPro || isPremium) && (
-                      <FaxKeySetup local={selectedName.label} walletAddress={preferredWallet.address} />
-                    )}
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-                      <NftFax fromLabel={selectedName.label} ownerWallet={preferredWallet.address} canPrivate={isPro || isPremium} />
+                      <NftFax fromLabel={selectedName.label} ownerWallet={preferredWallet.address} />
                       {!isPro && !isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">Basic: earn send credits by forwarding within 72 hours. <Link href="/nftmail" className="text-amber-300 hover:underline">Upgrade to PRO</Link> for unlimited internal faxes, or PREMIUM for external delivery.</p>}
                       {isPro && <p className="mt-4 text-[10px] text-[var(--muted)]">PRO: unlimited single-page greyscale faxes to @nftmail.box. <Link href="/nftmail" className="text-amber-300 hover:underline">Upgrade to PREMIUM</Link> for external delivery.</p>}
                       {isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">PREMIUM: external delivery with 256-colour and multipage options.</p>}
                     </div>
-                    {/* Chain-letter lab reserved for the standalone NFTfax app.
+                    {/* Chain-letter lab reserved for the standalone NFTfax app (fax.nftmail.box).
                     <FaxChainComposer fromLabel={selectedName.label} ownerWallet={preferredWallet.address} /> */}
                   </>
                 ) : (
@@ -1209,37 +1201,6 @@ function DashboardContent() {
         {error && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
             <p className="text-xs text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* In-app fax viewer — renders public bitmaps directly and decrypts
-            private (encrypted) faxes client-side with the connected wallet. */}
-        {viewFaxId && selectedName && preferredWallet && (
-          <div
-            onClick={() => setViewFaxId(null)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 50, display: 'flex',
-              alignItems: 'center', justifyContent: 'center', padding: '24px 16px',
-              background: 'rgba(0,0,0,0.75)',
-            }}
-          >
-            <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: '100%' }}>
-              <PrivateFaxViewer
-                trayId={viewFaxId}
-                local={selectedName.label}
-                walletAddress={preferredWallet.address}
-              />
-              <button
-                onClick={() => setViewFaxId(null)}
-                style={{
-                  display: 'block', margin: '12px auto 0', padding: '8px 16px',
-                  background: 'transparent', color: '#ccc', border: '1px solid #444',
-                  fontSize: 11, cursor: 'pointer', fontFamily: 'monospace',
-                }}
-              >
-                Close
-              </button>
-            </div>
           </div>
         )}
 
