@@ -79,18 +79,21 @@ async function processFaxImage(dataBase64: string, preserveColor: boolean): Prom
   throw new Error('Image could not be reduced below the 1MB fax limit');
 }
 
-async function getChainDocument(id: string): Promise<{ dataBase64: string; from: string; to: string } | null> {
+async function getChainDocument(id: string): Promise<{ dataBase64: string; from: string; to?: string } | null> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
+    if (WEBHOOK_SECRET) headers['X-Webhook-Secret'] = WEBHOOK_SECRET;
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ action: 'getTrayDocument', id }),
+      // `secret` authenticates this backend call so the worker returns `to`
+      // (needed to verify the forwarder was the fax's recipient).
+      body: JSON.stringify({ action: 'getTrayDocument', id, secret: WEBHOOK_SECRET }),
       cache: 'no-store',
     });
     if (!res.ok) return null;
-    return await res.json() as { dataBase64: string; from: string; to: string };
+    return await res.json() as { dataBase64: string; from: string; to?: string };
   } catch {
     return null;
   }
@@ -108,10 +111,24 @@ export async function POST(req: NextRequest) {
       isMultipage?: boolean;
       colorMode?: 'greyscale' | '256';
       channel?: 'public' | 'private';
+      fromDomain?: string;
     };
 
-    const { fromLabel, ownerWallet, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
-    const channel = body.channel === 'private' ? 'private' : 'public';
+    let { fromLabel, ownerWallet, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
+    let fromDomain = (body.fromDomain || '').toLowerCase().trim();
+    if (fromLabel) {
+      const parts = fromLabel.toLowerCase().trim().split('@');
+      if (parts.length > 1) {
+        fromLabel = parts[0];
+        if (!fromDomain) fromDomain = parts[1];
+      }
+    }
+    if (!fromDomain) fromDomain = 'nftmail.box';
+    const isFaxSender = fromDomain === 'fax';
+
+    const channel = body.channel === 'private' && to && !to.toLowerCase().trim().endsWith('@fax')
+      ? 'private'
+      : 'public';
 
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
@@ -132,12 +149,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Chain tray not found' }, { status: 404 });
       }
       // Ensure the forwarder is the recipient of the source fax.
+      if (!chain.to) {
+        return NextResponse.json({ error: 'Could not verify chain ownership. Try again.' }, { status: 502 });
+      }
       const chainToLocal = chain.to.split('@')[0].toLowerCase();
       if (chainToLocal !== fromLabel.toLowerCase()) {
         return NextResponse.json({ error: 'You can only forward faxes sent to you' }, { status: 403 });
       }
       isForward = true;
-      rawDataBase64 = chain.dataBase64;
+      // A forward may carry a NEW composited image (the next chain link). If so,
+      // use it; otherwise re-use the source fax bitmap unchanged.
+      rawDataBase64 = dataBase64 || chain.dataBase64;
     } else {
       const normFormat = (format || '').toLowerCase() === 'jpeg' ? 'jpg' : (format || '').toLowerCase();
       if (!normFormat || !ALLOWED_FORMATS.has(normFormat)) {
@@ -155,38 +177,42 @@ export async function POST(req: NextRequest) {
       rawDataBase64 = dataBase64;
     }
 
-    // Verify caller against the controller of the sending address. Fail CLOSED:
-    // a fax stamps `from`, so we must positively bind fromLabel → ownerWallet
-    // before sending. An unverifiable sender (resolve error, non-existent
-    // mailbox, or a mailbox with no on-chain/wallet controller) is rejected —
-    // this closes the impersonation gap where a missing controller silently
-    // passed and let any wallet send as any label (including premium accounts).
-    const resolveRes = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-      body: JSON.stringify({ action: 'resolveAddress', name: fromLabel }),
-    });
-    if (!resolveRes.ok) {
-      return NextResponse.json({ error: 'Could not verify sender ownership. Try again.' }, { status: 503 });
-    }
-    const resolved = await resolveRes.json() as Record<string, unknown>;
-    if (resolved.exists === false) {
-      return NextResponse.json({ error: 'Sender mailbox does not exist.' }, { status: 404 });
-    }
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (!controller) {
-      return NextResponse.json({
-        error: 'Sender ownership could not be verified. Connect the wallet that controls this mailbox.',
-      }, { status: 403 });
-    }
-    if (controller !== ownerWallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
-    }
-    const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
+    // Determine account tier. @fax is the free public namespace and skips
+    // on-chain ownership resolution in Phase 1; @nftmail.box still enforces
+    // fail-closed wallet ownership via resolveAddress.
+    let isPremium = false;
+    let isPro = false;
+    let isBasic = true;
 
-    const isPremium = accountTier === 'premium' || accountTier === 'imago' || accountTier === 'ghost';
-    const isPro = accountTier === 'pro' || accountTier === 'pupa' || accountTier === 'lite';
-    const isBasic = !isPremium && !isPro;
+    if (!isFaxSender) {
+      const resolveRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+        body: JSON.stringify({ action: 'resolveAddress', name: fromLabel, domain: fromDomain }),
+      });
+      if (!resolveRes.ok) {
+        return NextResponse.json({ error: 'Could not verify sender ownership. Try again.' }, { status: 503 });
+      }
+      const resolved = await resolveRes.json() as Record<string, unknown>;
+      if (resolved.exists === false) {
+        return NextResponse.json({ error: 'Sender mailbox does not exist.' }, { status: 404 });
+      }
+      const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+      if (!controller) {
+        return NextResponse.json({
+          error: 'Sender ownership could not be verified. Connect the wallet that controls this mailbox.',
+        }, { status: 403 });
+      }
+      if (controller !== ownerWallet.toLowerCase()) {
+        return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
+      }
+      const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
+
+      // 'imago'/'ghost' → Premium, 'pupa'/'lite' → Pro (legacy KV aliases).
+      isPremium = accountTier === 'premium' || accountTier === 'imago' || accountTier === 'ghost';
+      isPro = accountTier === 'pro' || accountTier === 'pupa' || accountTier === 'lite';
+      isBasic = !isPremium && !isPro;
+    }
 
     // ── Private (end-to-end encrypted) fax gating ──
     // The bitmap is ECIES-encrypted to the recipient's public key so KV stores
@@ -227,9 +253,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // External delivery is Premium-only. Basic and Pro stay within @nftmail.box/fax.box.
+    // External delivery is Premium-only. Basic and Pro stay within @nftmail.box / @fax / fax.box.
     const recipientDomain = to.trim().toLowerCase().split('@').pop();
-    if (recipientDomain !== 'nftmail.box' && recipientDomain !== 'fax.box') {
+    if (recipientDomain !== 'nftmail.box' && recipientDomain !== 'fax.box' && recipientDomain !== 'fax') {
       if (!isPremium) {
         return NextResponse.json({
           error: 'External NFTfax delivery is a PREMIUM feature. Upgrade to send to non-@nftmail.box addresses.',
@@ -248,7 +274,7 @@ export async function POST(req: NextRequest) {
         const canSend = await spendCredit(fromLabel, ownerWallet);
         if (!canSend) {
           return NextResponse.json({
-            error: 'Thermal fade: you have no fax send credits. Forward a received fax within 72 hours to earn a credit, or upgrade to PRO for unlimited internal faxes / PREMIUM for external delivery.',
+            error: 'LINE JAMMED — you have no fax send credits. Forward a received fax within 72 hours to earn a credit, or upgrade to PRO for unlimited internal faxes / PREMIUM for external delivery.',
             upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
           }, { status: 402 });
         }
@@ -271,7 +297,8 @@ export async function POST(req: NextRequest) {
       }, { status: 402 });
     }
 
-    if (isForward && rawDataBase64) {
+    if (isForward && rawDataBase64 && !dataBase64) {
+      // Forward with no new image: re-use the already-processed chain bitmap.
       processedBase64 = rawDataBase64;
     } else if (rawDataBase64) {
       try {
@@ -284,7 +311,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No image data to send' }, { status: 400 });
     }
 
-    const fromDomain = recipientDomain === 'fax.box' ? 'fax.box' : 'nftmail.box';
     const fromEmail = `${fromLabel}@${fromDomain}`;
 
     // For the private channel, ECIES-encrypt the processed bitmap to the
@@ -299,6 +325,9 @@ export async function POST(req: NextRequest) {
       isMultipage: !!isMultipage,
       colorMode: colorMode || 'greyscale',
     };
+    if (chainTrayId) {
+      trayPayload.chainTrayId = chainTrayId;
+    }
     if (channel === 'private' && recipientFaxPubKey) {
       try {
         trayPayload.channel = 'private';
@@ -317,13 +346,23 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(trayPayload),
     });
 
-    const data = await setRes.json() as { id?: string; trayUrl?: string; error?: string };
+    const rawSet = await setRes.text();
+    let data: { id?: string; trayUrl?: string; error?: string };
+    try {
+      data = JSON.parse(rawSet) as { id?: string; trayUrl?: string; error?: string };
+    } catch {
+      // The worker returned a non-JSON body (e.g. an HTML 5xx/gateway page).
+      // Surface a clear, actionable error instead of a raw JSON-parse message.
+      return NextResponse.json({
+        error: `Transmission relay error (worker returned ${setRes.status}). Please try again shortly.`,
+      }, { status: 502 });
+    }
     if (!setRes.ok) {
       return NextResponse.json({ error: data.error || 'Failed to store document' }, { status: setRes.status });
     }
 
     // Mark the recipient as having received a fax (starts the 72-hour Thermal Fade).
-    if (recipientDomain === 'nftmail.box' || recipientDomain === 'fax.box') {
+    if (recipientDomain === 'nftmail.box' || recipientDomain === 'fax.box' || recipientDomain === 'fax') {
       const recipientLocal = to.split('@')[0].toLowerCase();
       await setLastReceived(recipientLocal, Date.now(), ownerWallet);
     }

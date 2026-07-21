@@ -22,11 +22,12 @@ function workerHeaders(): Record<string, string> {
   return h;
 }
 
-async function verifyOwner(local: string, wallet: string): Promise<NextResponse | null> {
+async function verifyOwner(local: string, wallet: string, domain: string): Promise<NextResponse | null> {
+  if (domain === 'fax') return null;
   const resolveRes = await fetch(WORKER_URL, {
     method: 'POST',
     headers: workerHeaders(),
-    body: JSON.stringify({ action: 'resolveAddress', name: local }),
+    body: JSON.stringify({ action: 'resolveAddress', name: local, domain }),
     cache: 'no-store',
   });
   if (!resolveRes.ok) {
@@ -50,11 +51,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json().catch(() => ({})) as {
     local?: string;
+    domain?: string;
     ownerWallet?: string;
     gnosisTx?: string;
     gnosisTokenId?: string | number;
   };
-  const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '');
+  const domain = (body.domain || 'nftmail.box').toLowerCase();
+  const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '').replace(/@fax$/, '');
   const wallet = (body.ownerWallet || '').trim();
 
   if (!id) return NextResponse.json({ error: 'Missing tray id' }, { status: 400, headers: NO_STORE });
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const denied = await verifyOwner(local, wallet);
+    const denied = await verifyOwner(local, wallet, domain);
     if (denied) return denied;
 
     const res = await fetch(WORKER_URL, {

@@ -1,6 +1,6 @@
 /// Fax Chain credit/decay (Thermal Fade) helpers.
 ///
-/// Free/Basic accounts use `fax-credits` instead of a hard monthly cap.
+/// Free/Basic accounts use `credits` instead of a hard monthly cap.
 /// - Receiving a fax sets `fax-last-received`.
 /// - Forwarding a received fax within 72 hours adds +1 credit.
 /// - If a received fax is not forwarded within 72 hours, the account loses
@@ -13,6 +13,7 @@ const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK
 
 export const FADE_HOURS = 72;
 export const FADE_MS = FADE_HOURS * 60 * 60 * 1000;
+export const DECAY_MS = 8 * 24 * 60 * 60 * 1000;
 
 export const BASE_FREE_CREDITS = 2;
 
@@ -41,7 +42,10 @@ async function kvGet(key: string): Promise<string | null> {
 async function kvPut(key: string, value: string, ownerAddress: string) {
   await fetch(WORKER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(WORKER_SECRET ? { 'X-Worker-Secret': WORKER_SECRET } : {}),
+    },
     body: JSON.stringify({
       action: 'kvPut',
       key,
@@ -53,14 +57,20 @@ async function kvPut(key: string, value: string, ownerAddress: string) {
 }
 
 export async function getCredits(label: string): Promise<number> {
-  const raw = await kvGet(labelKey('fax-credits', label));
+  const raw = await kvGet(labelKey('credits', label));
   if (raw === null) return BASE_FREE_CREDITS;
   const n = parseInt(raw, 10);
   return isNaN(n) ? BASE_FREE_CREDITS : n;
 }
 
 export async function setCredits(label: string, credits: number, ownerAddress: string) {
-  await kvPut(labelKey('fax-credits', label), String(credits), ownerAddress);
+  await kvPut(labelKey('credits', label), String(credits), ownerAddress);
+}
+
+export async function clearJam(label: string, ownerAddress: string): Promise<number> {
+  await setCredits(label, 1, ownerAddress);
+  await setLastForwarded(label, Date.now(), ownerAddress);
+  return 1;
 }
 
 export async function getLastReceived(label: string): Promise<number | null> {

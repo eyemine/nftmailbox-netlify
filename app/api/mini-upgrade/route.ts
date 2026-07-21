@@ -15,7 +15,7 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 // Beacon NFT contract on Base (deploy NFTmailBeacon.sol, then set this env var)
 const NFTMAIL_BEACON_BASE = process.env.NFTMAIL_BEACON_CONTRACT ?? '';
 
-// Fees: free/basic → professional (Pro) = $10,  pro/premium → vault (Premium/Imago) = $14
+// Fees: free/basic → Pro = $10,  pro → Premium = $14
 const TIER_FEES_USDC: Record<string, number> = { basic: 10, free: 10, pro: 10, premium: 14 };
 
 async function verifyPayment(

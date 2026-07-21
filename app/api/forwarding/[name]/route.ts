@@ -11,7 +11,8 @@ const WORKER_SECRET = process.env.WORKER_SECRET || '';
 interface ForwardingConfig {
   enabled: boolean;
   targetEmail: string;
-  level: 'imago' | 'ghost';
+  // 'imago'/'ghost' are legacy aliases for Premium.
+  level: 'premium' | 'imago' | 'ghost';
 }
 
 export async function GET(

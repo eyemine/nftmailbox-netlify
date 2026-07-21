@@ -3,12 +3,13 @@
 ///
 /// Auth: ownerWallet in body (verified against KV-registered controller)
 ///
-/// Tier gate: basic = receive-only. lite/premium/ghost = send via Mailgun.
+/// Tier gate: Free/Basic = receive-only. Pro/Premium = send via Mailgun.
+/// (legacy KV aliases: lite→Pro, imago/ghost→Premium.)
 ///
 /// Send strategy:
-///   - All tiers (lite, premium, ghost): Mailgun API, From: label@nftmail.box
+///   - Paid tiers (Pro, Premium): Mailgun API, From: label@nftmail.box
 ///     True per-address sending — no relay, no ghostagent@nftmail.box in the envelope.
-///   - Imago (Zoho provisioned seat): send via Zoho directly (calendar/webmail users).
+///   - Premium (Zoho provisioned seat): send via Zoho directly (calendar/webmail users).
 ///     Detected by zoho-seat KV flag set during upgrade provisioning.
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -93,7 +94,7 @@ function validateTierPrivileges(
     return { allowed: true };
   }
   
-  // Pro/Pupa tier: max 2 CC/BCC, max 5 total recipients
+  // Pro tier: max 2 CC/BCC, max 5 total recipients ('pupa' = legacy alias)
   if (normalizedTier === 'pro' || normalizedTier === 'pupa') {
     if (ccCount > 2 || bccCount > 2) {
       return { allowed: false, error: 'Pro tier limited to 2 CC/BCC addresses' };
@@ -104,7 +105,7 @@ function validateTierPrivileges(
     return { allowed: true };
   }
   
-  // Premium/Imago/Ghost tier: unlimited
+  // Premium tier: unlimited ('imago'/'ghost' = legacy aliases)
   return { allowed: true };
 }
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
@@ -261,7 +262,7 @@ export async function POST(req: NextRequest) {
       ? htmlBody // Already stripped to text for basic tier
       : mailBody;
 
-    // ── Imago path: dedicated Zoho seat (opt-in, calendar/webmail users) ────
+    // ── Premium path: dedicated Zoho seat (opt-in, calendar/webmail users) ────
     const hasZohoSeat = (resolved.zohoSeat as boolean | undefined) ?? false;
     if (hasZohoSeat) {
       const zohoOrgId = process.env.ZOHO_ORG_ID;

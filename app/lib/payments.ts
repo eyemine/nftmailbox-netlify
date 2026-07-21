@@ -24,10 +24,10 @@ export const USDC_BASE_CONTRACT = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'.t
 
 // Tier prices in xDAI (18 decimals)
 export const TIER_PRICES_XDAI: Record<string, bigint> = {
-  lite: parseEther('10'),   // Pupa — 10 xDAI
-  premium: parseEther('24'), // Imago — 24 xDAI/yr
+  lite: parseEther('10'),   // legacy alias for Pro — 10 xDAI
+  premium: parseEther('24'), // Premium — 24 xDAI/yr
   pro: parseEther('24'),
-  ghost: parseEther('24'),
+  ghost: parseEther('24'),   // legacy alias for Premium
   agent: parseEther('12'),  // GhostAgent.ninja mint
 };
 

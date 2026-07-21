@@ -1,12 +1,12 @@
-/// GET /api/tray/inbox?local=<mailbox>&wallet=<0x...>
+/// GET /api/tray/inbox?local=<mailbox>&wallet=<0x...>&domain=fax|nftmail.box
 ///
 /// In-Tray gallery listing for the standalone NFTfax app. Returns light
 /// metadata (NO bitmap) for every fax received by `local`, enriched with the
 /// chain-letter game flags (forwarded / mintedBase / savedGnosis).
 ///
-/// Ownership is enforced fail-CLOSED: the caller's wallet must match the
-/// on-chain controller of `local`, otherwise a wallet could enumerate someone
-/// else's received-fax metadata.
+/// Ownership is enforced fail-CLOSED for @nftmail.box: the caller's wallet
+/// must match the on-chain controller of `local`. @fax is a free public
+/// namespace in Phase 1, so it only requires a valid wallet signature.
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -17,7 +17,10 @@ const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const local = (searchParams.get('local') || '').toLowerCase().trim().replace(/@nftmail\.box$/, '');
+  const domain = (searchParams.get('domain') || 'nftmail.box').toLowerCase();
+  let local = (searchParams.get('local') || '').toLowerCase().trim();
+  local = local.replace(new RegExp(`@${domain.replace(/\./g, '\\.')}$`), '');
+  local = local.replace(/@fax$/, '').replace(/@nftmail\.box$/, '');
   const wallet = (searchParams.get('wallet') || '').trim();
 
   if (!local) {
@@ -31,28 +34,30 @@ export async function GET(req: NextRequest) {
   if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
 
   try {
-    // Verify the caller controls `local` before listing its inbox (fail-closed).
-    const resolveRes = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ action: 'resolveAddress', name: local }),
-      cache: 'no-store',
-    });
-    if (!resolveRes.ok) {
-      return NextResponse.json({ error: 'Could not verify mailbox ownership. Try again.' }, { status: 503, headers: NO_STORE });
-    }
-    const resolved = await resolveRes.json() as Record<string, unknown>;
-    if (resolved.exists === false) {
-      return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
-    }
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (!controller) {
-      return NextResponse.json({
-        error: 'Ownership could not be verified. Connect the wallet that controls this mailbox.',
-      }, { status: 403, headers: NO_STORE });
-    }
-    if (controller !== wallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
+    // @fax is the free public namespace; skip resolveAddress ownership check.
+    if (domain !== 'fax') {
+      const resolveRes = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'resolveAddress', name: local, domain }),
+        cache: 'no-store',
+      });
+      if (!resolveRes.ok) {
+        return NextResponse.json({ error: 'Could not verify mailbox ownership. Try again.' }, { status: 503, headers: NO_STORE });
+      }
+      const resolved = await resolveRes.json() as Record<string, unknown>;
+      if (resolved.exists === false) {
+        return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
+      }
+      const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+      if (!controller) {
+        return NextResponse.json({
+          error: 'Ownership could not be verified. Connect the wallet that controls this mailbox.',
+        }, { status: 403, headers: NO_STORE });
+      }
+      if (controller !== wallet.toLowerCase()) {
+        return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
+      }
     }
 
     const res = await fetch(WORKER_URL, {
