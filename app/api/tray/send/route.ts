@@ -14,13 +14,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { spendCredit, earnForwardCredit, setLastReceived, applyThermalFade, getCredits } from '@/app/lib/fax-credits';
 import { eciesEncrypt } from '@/app/lib/fax-crypto';
+import { isFaxEligible } from '@/app/lib/fax-eligibility';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || '';
 
 const MAX_SOURCE_BASE64_LENGTH = 28_000_000; // ~20MB binary before processing
-const MAX_STORED_BASE64_LENGTH = 1_400_000; // ~1MB binary after processing
+const MAX_STORED_BASE64_LENGTH = 2_800_000; // ~2MB binary after processing
 const MAX_FAX_WIDTH = 1728;
 const MAX_FAX_HEIGHT = 2200;
 const ALLOWED_FORMATS = new Set(['png', 'bmp', 'jpg']);
@@ -76,7 +77,7 @@ async function processFaxImage(dataBase64: string, preserveColor: boolean): Prom
     scale *= 0.8;
   }
 
-  throw new Error('Image could not be reduced below the 1MB fax limit');
+  throw new Error('Image could not be reduced below the 2MB fax limit');
 }
 
 async function getChainDocument(id: string): Promise<{ dataBase64: string; from: string; to?: string } | null> {
@@ -104,6 +105,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       fromLabel?: string;
       ownerWallet?: string;
+      vaultWallet?: string;
+      tokenId?: string;
       to?: string;
       format?: string;
       dataBase64?: string;
@@ -112,10 +115,15 @@ export async function POST(req: NextRequest) {
       colorMode?: 'greyscale' | '256';
       channel?: 'public' | 'private';
       fromDomain?: string;
+      collection?: string;
     };
 
-    let { fromLabel, ownerWallet, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
+    const collection = (body.collection as string | undefined)?.toLowerCase();
+
+    let { fromLabel, ownerWallet, vaultWallet, tokenId, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
     let fromDomain = (body.fromDomain || '').toLowerCase().trim();
+    const normalizedVault = (vaultWallet || '').toLowerCase().trim() || undefined;
+    const normalizedTokenId = (tokenId || '').trim() || undefined;
     if (fromLabel) {
       const parts = fromLabel.toLowerCase().trim().split('@');
       if (parts.length > 1) {
@@ -125,9 +133,10 @@ export async function POST(req: NextRequest) {
     }
     if (!fromDomain) fromDomain = 'nftmail.box';
     const isFaxSender = fromDomain === 'fax';
-    const channel = body.channel === 'private' && to && !to.toLowerCase().trim().endsWith('@fax')
-      ? 'private'
-      : 'public';
+    const toDomain = (to || '').toLowerCase().trim().split('@').pop() || '';
+    // NFTmail policy: faxes sent to @nftmail.box are end-to-end encrypted / private;
+    // the @fax namespace (and any external domain) is the public canvas.
+    const channel = toDomain === 'nftmail.box' ? 'private' : 'public';
 
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
@@ -211,6 +220,13 @@ export async function POST(req: NextRequest) {
       isPremium = accountTier === 'premium' || accountTier === 'imago' || accountTier === 'ghost';
       isPro = accountTier === 'pro' || accountTier === 'pupa' || accountTier === 'lite';
       isBasic = !isPremium && !isPro;
+    }
+
+    if (isFaxSender) {
+      const { eligible, reason } = await isFaxEligible(ownerWallet, fromLabel, collection, normalizedVault, normalizedTokenId);
+      if (!eligible) {
+        return NextResponse.json({ error: reason || 'Not eligible to send from this fax mailbox.' }, { status: 403 });
+      }
     }
 
     // ── Private (end-to-end encrypted) fax gating ──
