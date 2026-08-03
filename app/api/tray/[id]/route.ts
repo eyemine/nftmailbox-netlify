@@ -27,6 +27,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       cache: 'no-store',
     });
     const data = await res.json();
+    // The worker exposes the recipient (`to`) only to authenticated callers. This proxy
+    // is unauthenticated-public, so for private faxes we strip `to` before it reaches
+    // the browser — the encrypted envelope alone is enough for the recipient to decrypt.
+    if (data && data.channel === 'private' && typeof data.to === 'string') {
+      delete data.to;
+    }
     return NextResponse.json(data, { status: res.status, headers: NO_STORE });
   } catch {
     return NextResponse.json({ error: 'Lookup failed' }, { status: 502, headers: NO_STORE });
