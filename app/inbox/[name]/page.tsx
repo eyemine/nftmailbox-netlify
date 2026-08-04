@@ -25,14 +25,11 @@ function isAgentAddress(addr: string): boolean {
   return local.endsWith('_');
 }
 
-// Coerce a timestamp to epoch milliseconds. Some records store `receivedAt`
-// as Unix seconds; new Date() expects ms and would render 1970. Values below
-// 1e11 are treated as seconds (year 5138 in ms) and scaled up. Returns 0 for
-// missing/invalid input so callers can render an empty string.
 function normalizeTimestamp(ts: unknown): number {
   if (ts == null || ts === '') return 0;
   const n = typeof ts === 'number' ? ts : Number(ts);
   if (Number.isFinite(n) && n > 0) {
+    // Values below 1e11 ms are in the year 5138 in ms, so treat as Unix seconds.
     return n < 1e11 ? n * 1000 : n;
   }
   const parsed = typeof ts === 'string' ? Date.parse(ts) : NaN;
@@ -411,7 +408,7 @@ export default function InboxPage() {
           if (kvRes.ok) {
             const kvData = await kvRes.json() as { messages?: any[] };
             const kvMessages = (kvData.messages || []).map((m: any) => {
-              const receivedMs = normalizeTimestamp(m.receivedAt ?? m.timestamp);
+              const receivedMs = normalizeTimestamp(m.receivedAt);
               return {
                 id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
                 subject: m.subject || '(no subject)',
@@ -480,12 +477,14 @@ export default function InboxPage() {
       });
       if (res.ok) {
         const data = await res.json() as { messages?: any[] };
-        const sent = (data.messages || []).map((m: any) => ({
+        const sent = (data.messages || []).map((m: any) => {
+          const sentMs = normalizeTimestamp(m.receivedAt || m.timestamp || m.sentAt || 0);
+          return {
           id: m.id || `sent-${Math.random().toString(36).slice(2)}`,
           subject: m.subject || '(no subject)',
           sender: m.from || 'me',
           fromAddress: m.from || '',
-          receivedTime: (() => { const s = normalizeTimestamp(m.receivedAt ?? m.timestamp ?? m.sentAt); return s ? new Date(s).toISOString() : ''; })(),
+          receivedTime: sentMs ? new Date(sentMs).toISOString() : '',
           summary: m.content || '',
           body: m.content || '',
           bodyHtml: m.content?.includes('<') ? m.content : '',
@@ -494,7 +493,8 @@ export default function InboxPage() {
           type: m.channel || 'sent',
           decayPct: 0,
           expiresAt: '',
-        }));
+          };
+        });
         setSentMessages(sent);
       }
     } catch {}
@@ -589,6 +589,7 @@ export default function InboxPage() {
   };
 
   const formatTimeAgo = (ts: string | number | undefined) => {
+    if (ts == null || ts === '') return '';
     const epochMs = normalizeTimestamp(ts);
     if (!epochMs) return '';
     const ms = Date.now() - epochMs;
@@ -604,7 +605,8 @@ export default function InboxPage() {
   const formatTimestamp = (ts: number | string) => {
     const epochMs = normalizeTimestamp(ts);
     if (!epochMs) return '—';
-    return new Date(epochMs).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    const d = new Date(epochMs);
+    return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   };
 
   const daysRemaining = (expiresAt: string) => {
