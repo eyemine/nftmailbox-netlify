@@ -25,6 +25,20 @@ function isAgentAddress(addr: string): boolean {
   return local.endsWith('_');
 }
 
+// Coerce a timestamp to epoch milliseconds. Some records store `receivedAt`
+// as Unix seconds; new Date() expects ms and would render 1970. Values below
+// 1e11 are treated as seconds (year 5138 in ms) and scaled up. Returns 0 for
+// missing/invalid input so callers can render an empty string.
+function normalizeTimestamp(ts: unknown): number {
+  if (ts == null || ts === '') return 0;
+  const n = typeof ts === 'number' ? ts : Number(ts);
+  if (Number.isFinite(n) && n > 0) {
+    return n < 1e11 ? n * 1000 : n;
+  }
+  const parsed = typeof ts === 'string' ? Date.parse(ts) : NaN;
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function BlurFrom({ from, reveal = false }: { from: string; reveal?: boolean }) {
   if (!from || from === 'unknown') return <span className="text-white/70">unknown</span>;
   if (reveal || isAgentAddress(from)) return <span className="text-white/70">{from}</span>;
@@ -397,9 +411,7 @@ export default function InboxPage() {
           if (kvRes.ok) {
             const kvData = await kvRes.json() as { messages?: any[] };
             const kvMessages = (kvData.messages || []).map((m: any) => {
-              const rawRa = m.receivedAt || 0;
-              // Guard: receivedAt may be seconds if < 1e12 (pre-2001 in ms = likely seconds)
-              const receivedMs = rawRa > 0 && rawRa < 1e12 ? rawRa * 1000 : rawRa;
+              const receivedMs = normalizeTimestamp(m.receivedAt ?? m.timestamp);
               return {
                 id: m.id || `msg-${Math.random().toString(36).slice(2)}`,
                 subject: m.subject || '(no subject)',
@@ -473,7 +485,7 @@ export default function InboxPage() {
           subject: m.subject || '(no subject)',
           sender: m.from || 'me',
           fromAddress: m.from || '',
-          receivedTime: m.receivedAt ? new Date(m.receivedAt).toISOString() : '',
+          receivedTime: (() => { const s = normalizeTimestamp(m.receivedAt ?? m.timestamp ?? m.sentAt); return s ? new Date(s).toISOString() : ''; })(),
           summary: m.content || '',
           body: m.content || '',
           bodyHtml: m.content?.includes('<') ? m.content : '',
@@ -576,11 +588,10 @@ export default function InboxPage() {
     setDeletingId(null);
   };
 
-  const formatTimeAgo = (ts: string) => {
-    if (!ts) return '';
-    const date = new Date(ts);
-    if (isNaN(date.getTime()) || date.getFullYear() < 2020) return '';
-    const ms = Date.now() - date.getTime();
+  const formatTimeAgo = (ts: string | number | undefined) => {
+    const epochMs = normalizeTimestamp(ts);
+    if (!epochMs) return '';
+    const ms = Date.now() - epochMs;
     const mins = Math.floor(ms / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
@@ -591,8 +602,9 @@ export default function InboxPage() {
   };
 
   const formatTimestamp = (ts: number | string) => {
-    const d = typeof ts === 'number' ? new Date(ts) : new Date(ts);
-    return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+    const epochMs = normalizeTimestamp(ts);
+    if (!epochMs) return '—';
+    return new Date(epochMs).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   };
 
   const daysRemaining = (expiresAt: string) => {

@@ -3,6 +3,19 @@ import { NextRequest, NextResponse } from 'next/server';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
 
+// Coerce a timestamp to epoch milliseconds. Some worker records store
+// `receivedAt` as Unix seconds; `new Date()` expects ms and would render 1970.
+// Values below 1e11 are treated as seconds (year 5138 in ms) and scaled up.
+function normalizeTimestamp(ts: unknown): number {
+  if (ts == null) return Date.now();
+  const n = typeof ts === 'number' ? ts : Number(ts);
+  if (Number.isFinite(n) && n > 0) {
+    return n < 1e11 ? n * 1000 : n;
+  }
+  const parsed = typeof ts === 'string' ? Date.parse(ts) : NaN;
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
 async function getZohoAccessToken(): Promise<string | null> {
   const existing = process.env.ZOHO_OAUTH_TOKEN;
   if (existing) return existing;
@@ -117,7 +130,7 @@ export async function GET(req: NextRequest) {
         kvMessages = (workerData.messages || []).map((m: any) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
-          const receivedMs = m.receivedAt || now;
+          const receivedMs = normalizeTimestamp(m.receivedAt ?? m.timestamp);
           const frozen = m.frozen === true;
           // Frozen emails never decay; use per-message decayDays if available, else account default
           const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
