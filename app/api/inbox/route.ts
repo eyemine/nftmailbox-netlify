@@ -3,17 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
 
-function normalizeTimestamp(ts: unknown): number {
-  if (ts == null) return Date.now();
-  const n = typeof ts === 'number' ? ts : Number(ts);
-  if (Number.isFinite(n) && n > 0) {
-    // Timestamps < 1e11 ms are in the year 5138 in ms, so they are almost certainly Unix seconds.
-    return n < 1e11 ? n * 1000 : n;
-  }
-  const parsed = typeof ts === 'string' ? Date.parse(ts) : NaN;
-  return Number.isNaN(parsed) ? Date.now() : parsed;
-}
-
 async function getZohoAccessToken(): Promise<string | null> {
   const existing = process.env.ZOHO_OAUTH_TOKEN;
   if (existing) return existing;
@@ -125,26 +114,15 @@ export async function GET(req: NextRequest) {
         const workerData = await workerRes.json() as Record<string, any>;
         // decayDays from resolveAddress: 8 for Larva, 30 for Pupa, null for Imago/Agent
         const acctDecayDays: number | null = workerData.decayDays ?? null;
-        const normalizedTier = (accountTier || 'basic').toLowerCase();
-        // Tier defaults: basic/larva 8 days, pro/pupa/lite 30 days, sovereign/imago/premium/ghost never decay
-        const tierDefaultDays: number | null =
-          normalizedTier === 'basic' ? 8 :
-          ['pro', 'pupa', 'lite'].includes(normalizedTier) ? 30 :
-          null;
         kvMessages = (workerData.messages || []).map((m: any) => {
           const isEnc = m.encrypted === true;
           const now = Date.now();
-          const receivedMs = normalizeTimestamp(m.receivedAt || m.timestamp || now);
+          const receivedMs = m.receivedAt || now;
           const frozen = m.frozen === true;
           // Frozen emails never decay; use per-message decayDays if available, else account default
-          const msgDecayDays: number | null = m.decayDays ?? acctDecayDays ?? tierDefaultDays;
+          const msgDecayDays = m.decayDays ?? acctDecayDays ?? 8;
+          const decayMs = msgDecayDays * 24 * 60 * 60 * 1000;
           const ageMs = now - receivedMs;
-          // null decayDays means the account has persistent history (never decay)
-          const hasDecay = !frozen && msgDecayDays != null;
-          const decayMs = hasDecay ? msgDecayDays * 24 * 60 * 60 * 1000 : null;
-          const expired = hasDecay && decayMs != null && ageMs >= decayMs;
-          const expiresAt = hasDecay && decayMs != null ? new Date(receivedMs + decayMs).toISOString() : null;
-          const decayPct = hasDecay && decayMs != null ? Math.min(100, Math.round((ageMs / decayMs) * 100)) : 0;
 
           return {
             id: m.id,
@@ -163,9 +141,9 @@ export async function GET(req: NextRequest) {
             contentHash: m.envelope?.contentHash || m.plaintextHash || '',
             frozen,
             decayDays: frozen ? null : msgDecayDays,
-            decayPct,
-            expiresAt,
-            expired,
+            decayPct: frozen ? 0 : Math.min(100, Math.round((ageMs / decayMs) * 100)),
+            expiresAt: frozen ? null : new Date(receivedMs + decayMs).toISOString(),
+            expired: !frozen && ageMs >= decayMs,
           };
         });
       } else {
