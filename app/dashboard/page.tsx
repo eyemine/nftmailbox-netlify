@@ -66,8 +66,8 @@ function parseTrayId(msg: { body?: string; summary?: string }): string | null {
   const m = src.match(TRAY_ID_RE);
   return m ? m[1] : null;
 }
-function isFaxMessage(msg: { subject?: string; body?: string; summary?: string }): boolean {
-  return /^NFTfax\b/i.test(msg.subject || '') || parseTrayId(msg) !== null;
+function isFaxMessage(msg: { type?: string; subject?: string; body?: string; summary?: string }): boolean {
+  return (msg.type === 'tray-notification') || /^NFTfax\b/i.test(msg.subject || '') || parseTrayId(msg) !== null;
 }
 
 interface NftMailName {
@@ -266,7 +266,7 @@ function DashboardContent() {
     if (!selectedName) return;
     setLoadingInbox(true);
     try {
-      const ownerParam = preferredWallet?.address ? `&ownerWallet=${encodeURIComponent(preferredWallet.address)}` : '';
+      const ownerParam = walletAddress ? `&ownerWallet=${encodeURIComponent(walletAddress)}` : '';
       const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
@@ -517,7 +517,7 @@ function DashboardContent() {
   // Fax is disabled for agent accounts — agents don't need a fax in-tray
   // (PIPES will be the preferred agent comms channel once shipped).
   const faxMessages = isAgent ? [] : messages.filter(isFaxMessage);
-  const inboxMessages = isAgent ? messages : messages.filter((m) => !isFaxMessage(m));
+  const inboxMessages = messages.filter((m) => !isFaxMessage(m));
 
   if (!ready) return null;
 
@@ -1175,16 +1175,13 @@ function DashboardContent() {
             {/* ── FAX TAB ── */}
             {tab === 'fax' && (
               <div className="space-y-4">
-                {selectedName && preferredWallet ? (
+                {selectedName && walletAddress ? (
                   <>
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-                      <NftFax fromLabel={selectedName.label} ownerWallet={preferredWallet.address} />
-                      {!isPro && !isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">Basic: earn send credits by forwarding within 72 hours. <Link href="/nftmail" className="text-amber-300 hover:underline">Upgrade to PRO</Link> for unlimited internal faxes, or PREMIUM for external delivery.</p>}
-                      {isPro && <p className="mt-4 text-[10px] text-[var(--muted)]">PRO: unlimited single-page greyscale faxes to @nftmail.box. <Link href="/nftmail" className="text-amber-300 hover:underline">Upgrade to PREMIUM</Link> for external delivery.</p>}
-                      {isPremium && <p className="mt-4 text-[10px] text-[var(--muted)]">PREMIUM: external delivery with 256-colour and multipage options.</p>}
+                      <NftFax fromLabel={selectedName.label} ownerWallet={walletAddress} />
                     </div>
                     {/* Chain-letter lab reserved for the standalone NFTfax app (fax.nftmail.box).
-                    <FaxChainComposer fromLabel={selectedName.label} ownerWallet={preferredWallet.address} /> */}
+                    <FaxChainComposer fromLabel={selectedName.label} ownerWallet={walletAddress} /> */}
                   </>
                 ) : (
                   <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Select a mailbox to send an NFTfax.</div>

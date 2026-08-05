@@ -95,16 +95,18 @@ export async function GET(req: NextRequest) {
       let controller = '';
       let onChainOwner = '';
       let safe = '';
+      let privacyTier = 'exposed';
       if (resolveRes.ok) {
         const rd = await resolveRes.json() as Record<string, any>;
         accountTier = rd.accountTier || null;
+        privacyTier = (rd.privacyTier || 'exposed').toLowerCase();
         controller = (rd.controller || '').toLowerCase();
         onChainOwner = (rd.onChainOwner || '').toLowerCase();
         safe = (rd.safe || '').toLowerCase();
       }
 
-      // Enforce auth gate for human accounts (no trailing _)
-      if (!isAgentAddress) {
+      // Enforce auth gate for human accounts (no trailing _) unless explicitly public
+      if (!isAgentAddress && privacyTier !== 'exposed') {
         if (!ownerWalletParam) {
           return NextResponse.json({ error: 'Authentication required to view this inbox', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
         }
