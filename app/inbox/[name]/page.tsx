@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
@@ -181,6 +181,7 @@ interface FeedItem {
   encrypted?: boolean;
   redacted?: boolean;
   direction?: string;
+  kind?: 'inbox' | 'activity';
 }
 
 interface MoltTransition {
@@ -388,7 +389,7 @@ export default function InboxPage() {
                 to: e.to,
                 subject: e.subject,
                 content: e.content || '',
-                timestamp: e.timestamp,
+                timestamp: normalizeTimestamp(e.timestamp),
                 contentHash: e.contentHash,
                 verified: true,
               })));
@@ -516,12 +517,13 @@ export default function InboxPage() {
   // Unified feed for glassbox agents: merge audit entries + inbox messages
   const glassboxFeed = useMemo<FeedItem[]>(() => {
     if (!isGlassbox) return [];
-    const feed: FeedItem[] = [];
+    const inboxItems: FeedItem[] = [];
+    const activityItems: FeedItem[] = [];
     const inboxSubjects = new Set<string>();
     for (const msg of messages) {
-      const ts = msg.receivedTime ? new Date(msg.receivedTime).getTime() : 0;
+      const ts = normalizeTimestamp(msg.receivedTime);
       inboxSubjects.add(msg.subject.toLowerCase().trim());
-      feed.push({
+      inboxItems.push({
         key: `msg-${msg.id}`,
         id: msg.id,
         subject: msg.subject,
@@ -530,6 +532,7 @@ export default function InboxPage() {
         channel: msg.type || 'email',
         body: msg.summary || '',
         encrypted: msg.encrypted,
+        kind: 'inbox',
       });
     }
     for (const entry of auditEntries) {
@@ -539,7 +542,7 @@ export default function InboxPage() {
       const isTg = isTgInbound || isTgOutbound;
       const isMoltbook = entry.id.startsWith('moltbook-');
       const dir = isTgInbound || entry.id.startsWith('in-') ? 'inbound' : 'outbound';
-      feed.push({
+      activityItems.push({
         key: `audit-${entry.id}`,
         subject: isTgOutbound ? entry.subject : (entry.subject || '(no subject)'),
         from: entry.from,
@@ -549,10 +552,14 @@ export default function InboxPage() {
         body: entry.content || '',
         redacted: entry.redacted,
         direction: dir,
+        kind: 'activity',
       });
     }
-    feed.sort((a, b) => b.timestamp - a.timestamp);
-    return feed;
+    // Keep inbox (human-received) and agent activity in separate groups so the
+    // render can label them distinctly instead of one conflated stream.
+    inboxItems.sort((a, b) => b.timestamp - a.timestamp);
+    activityItems.sort((a, b) => b.timestamp - a.timestamp);
+    return [...inboxItems, ...activityItems];
   }, [isGlassbox, messages, auditEntries]);
 
   // Privacy tier toggle: exposed → private (and vice versa). hard-privacy requires payment.
@@ -981,16 +988,24 @@ export default function InboxPage() {
           )}
           {!loading && isGlassbox && glassboxFeed.length > 0 && (
             <div className="space-y-3">
-              <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">ACTIVITY FEED ({glassboxFeed.length})</span>
-              {glassboxFeed.map((item) => {
+              {glassboxFeed.map((item, idx) => {
                 const isOut = item.direction === 'outbound';
                 const channelColor =
                   item.channel === 'telegram' ? 'bg-sky-500/10 text-sky-300 ring-sky-500/20' :
                   item.channel === 'moltbook' ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' :
                   (item.channel === 'ghost-wire' || item.channel === 'a2a') ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/20' :
                   'bg-blue-500/10 text-blue-300 ring-blue-500/20';
+                const showInboxHeader = idx === 0 && item.kind === 'inbox';
+                const showActivityHeader = item.kind === 'activity' && (idx === 0 || glassboxFeed[idx - 1]?.kind !== 'activity');
                 return (
-                  <div key={item.key} className={`rounded-xl border p-4 space-y-2 ${item.redacted ? 'border-amber-500/25 bg-amber-500/5' : 'border-[var(--border)] bg-[var(--card)]'}`}>
+                  <Fragment key={item.key}>
+                    {showInboxHeader && (
+                      <span className="block text-[10px] font-semibold tracking-wider text-[var(--muted)] pt-1">INBOX</span>
+                    )}
+                    {showActivityHeader && (
+                      <span className="block text-[10px] font-semibold tracking-wider text-[var(--muted)] pt-3">AGENT ACTIVITY</span>
+                    )}
+                  <div className={`rounded-xl border p-4 space-y-2 ${item.redacted ? 'border-amber-500/25 bg-amber-500/5' : 'border-[var(--border)] bg-[var(--card)]'}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <span className={`text-sm font-medium ${item.redacted ? 'text-amber-300' : 'text-white'}`}>{item.subject}</span>
@@ -1002,7 +1017,7 @@ export default function InboxPage() {
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${isOut ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-blue-500/10 text-blue-300 ring-blue-500/20'}`}>{isOut ? '↑ out' : '↓ in'}</span>
                         <span className={`rounded-full px-1.5 py-0.5 text-[8px] ring-1 ${channelColor}`}>{item.channel}</span>
-                        <span className="text-[10px] text-[var(--muted)] whitespace-nowrap">{item.timestamp ? formatTimeAgo(new Date(item.timestamp).toISOString()) : ''}</span>
+                        <span className="text-[10px] text-[var(--muted)] whitespace-nowrap">{item.timestamp ? formatTimeAgo(item.timestamp) : ''}</span>
                         {isOwner && item.id && (
                           <button
                             onClick={async () => {
@@ -1040,6 +1055,7 @@ export default function InboxPage() {
                       </div>
                     )}
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -1103,6 +1119,12 @@ export default function InboxPage() {
     ? 'text-emerald-300 bg-emerald-500/10 ring-emerald-500/20'
     : 'text-red-300 bg-red-500/10 ring-red-500/20';
   const dotColor = effectivePrivacyTier === 'hard-privacy' ? 'bg-cyan-400' : effectivePrivacyTier === 'private' ? 'bg-emerald-400' : 'bg-red-400';
+
+  // Faxes arrive as 'tray-notification' messages; group them into a dedicated
+  // Fax In-Tray section above the regular email inbox (faxes first).
+  const faxMessages = messages.filter((m) => m.type === 'tray-notification');
+  const inboxMessages = messages.filter((m) => m.type !== 'tray-notification');
+  const orderedMessages = [...faxMessages, ...inboxMessages];
 
   return (
     <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.12),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.10),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
@@ -1294,7 +1316,7 @@ export default function InboxPage() {
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">
-                INBOX ({messages.length})
+                MAILBOX ({messages.length})
               </span>
             </div>
             <span className="text-[9px] text-[var(--muted)]">
@@ -1306,14 +1328,20 @@ export default function InboxPage() {
         {/* ── Message list (inbox) ── */}
         {(activeFolder === 'inbox' || activeFolder === 'compose') && !loading && !isBlurred && messages.length > 0 && (
           <div className="space-y-2">
-            {messages.map((msg) => {
+            {orderedMessages.map((msg, idx) => {
               const isExpanded = expandedId === msg.id;
               const isDeleting = deletingId === msg.id;
               const remaining = msg.expiresAt ? daysRemaining(msg.expiresAt) : '∞';
 
               return (
+                <Fragment key={msg.id}>
+                  {idx === 0 && faxMessages.length > 0 && (
+                    <div className="px-1 pt-1"><span className="text-[10px] font-semibold tracking-wider text-emerald-300">FAX IN-TRAY ({faxMessages.length})</span></div>
+                  )}
+                  {idx === faxMessages.length && inboxMessages.length > 0 && (
+                    <div className="px-1 pt-3"><span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX ({inboxMessages.length})</span></div>
+                  )}
                 <div
-                  key={msg.id}
                   className={`rounded-xl border transition-all duration-200 ${
                     msg.encrypted
                       ? 'border-cyan-500/20 bg-cyan-500/5'
@@ -1491,6 +1519,7 @@ export default function InboxPage() {
                     </div>
                   )}
                 </div>
+                </Fragment>
               );
             })}
           </div>
