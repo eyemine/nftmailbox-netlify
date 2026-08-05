@@ -466,15 +466,28 @@ function DashboardContent() {
     }
   }, [selectedName, preferredWallet]);
 
-  const formatTimeAgo = (ts: string, fallbackTs?: string | number) => {
-    const candidate = ts ?? fallbackTs ?? '';
-    const raw = parseInt(String(candidate), 10);
-    if (!candidate || isNaN(raw) || raw <= 0) return '—';
-    // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
-    const epoch = raw < 1e11 ? raw * 1000 : raw;
+  const formatTimeAgo = (ts: string | number | undefined, fallbackTs?: string | number) => {
+    const candidate = ts ?? fallbackTs;
+    if (candidate == null || candidate === '') return '—';
+    let epoch: number;
+    if (typeof candidate === 'number') {
+      // Unix seconds if < 1e11 (year ~5138), else already milliseconds.
+      epoch = candidate < 1e11 ? candidate * 1000 : candidate;
+    } else {
+      const s = String(candidate).trim();
+      if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        epoch = n < 1e11 ? n * 1000 : n;
+      } else {
+        // ISO / date string — parseInt() would truncate to the year, so use Date.parse.
+        epoch = Date.parse(s);
+      }
+    }
+    if (!epoch || isNaN(epoch) || epoch <= 0) return '—';
     const ms = Date.now() - epoch;
     if (ms < 0) return 'now';
     const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
@@ -501,8 +514,10 @@ function DashboardContent() {
   const isPro = normalisedTier === 'pro';
 
   // Split received faxes out of the main inbox list into the FaxTray.
-  const faxMessages = messages.filter(isFaxMessage);
-  const inboxMessages = messages.filter((m) => !isFaxMessage(m));
+  // Fax is disabled for agent accounts — agents don't need a fax in-tray
+  // (PIPES will be the preferred agent comms channel once shipped).
+  const faxMessages = isAgent ? [] : messages.filter(isFaxMessage);
+  const inboxMessages = isAgent ? messages : messages.filter((m) => !isFaxMessage(m));
 
   if (!ready) return null;
 
