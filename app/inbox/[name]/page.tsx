@@ -521,6 +521,9 @@ export default function InboxPage() {
     const activityItems: FeedItem[] = [];
     const inboxSubjects = new Set<string>();
     for (const msg of messages) {
+      // Fax disabled for agent accounts — agents don't need a fax in-tray.
+      // When PIPES ship they'll be the preferred agent comms channel instead.
+      if (msg.type === 'tray-notification') continue;
       const ts = normalizeTimestamp(msg.receivedTime);
       inboxSubjects.add(msg.subject.toLowerCase().trim());
       inboxItems.push({
