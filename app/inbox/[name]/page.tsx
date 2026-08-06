@@ -362,8 +362,15 @@ export default function InboxPage() {
 
         // For agents, tld + isPublic are now embedded in resolveAddress response
         if (isAgent && agentName) {
-          setAgentTld((data as any).tld || 'nftmail.gno');
-          setIsGlassbox((data as any).isPublic === true);
+          const rawTld = (data as any).tld || 'nftmail.gno';
+          const decodedTld = decodeIfBase64(rawTld);
+          const originNft = String((data as any).originNft || '');
+          setAgentTld(decodedTld);
+          setIsGlassbox(
+            (data as any).isPublic === true ||
+            decodedTld === 'molt.gno' ||
+            originNft.endsWith('.molt.gno')
+          );
           setClassificationDone(true);
         } else {
           setClassificationDone(true);
