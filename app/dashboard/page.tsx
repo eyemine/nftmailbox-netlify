@@ -891,11 +891,21 @@ function DashboardContent() {
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
                                     <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                                    {!isPremium && (
-                                      <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
-                                        <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
-                                      </div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {!isPremium && (
+                                        <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
+                                          <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
+                                        </div>
+                                      )}
+                                      <span
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(msg.messageId); }}
+                                        title="Delete"
+                                        role="button"
+                                        className="rounded p-1 text-red-400/40 transition hover:text-red-400"
+                                      >
+                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>

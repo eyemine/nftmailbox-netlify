@@ -25,6 +25,21 @@ function isAgentAddress(addr: string): boolean {
   return local.endsWith('_');
 }
 
+function decodeIfBase64(s: string): string {
+  if (!s) return s;
+  const t = s.trim();
+  if (!t) return t;
+  if (t.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(t)) return t;
+  try {
+    const decoded = typeof window !== 'undefined' ? window.atob(t) : Buffer.from(t, 'base64').toString('utf8');
+    // Accept only printable ASCII that decodes to a plausible label (letters, digits, dots, dashes)
+    if (/^[\x20-\x7E]+$/.test(decoded) && /^[a-z0-9.-]+$/.test(decoded.trim().toLowerCase())) {
+      return decoded.trim();
+    }
+  } catch { /* not valid base64 */ }
+  return t;
+}
+
 function normalizeTimestamp(ts: unknown): number {
   if (ts == null || ts === '') return 0;
   const n = typeof ts === 'number' ? ts : Number(ts);
@@ -895,7 +910,7 @@ export default function InboxPage() {
   if (isAgent) {
     const hasMolted = transitions.length > 0;
     const boxLabel = isGlassbox ? 'GLASS BOX' : 'BLACK BOX';
-    const tldLabel = agentTld || (isGlassbox ? 'molt.gno' : 'agent.gno');
+    const tldLabel = decodeIfBase64(agentTld) || (isGlassbox ? 'molt.gno' : 'agent.gno');
 
     return (
       <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(124,77,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(0,163,255,0.14),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
