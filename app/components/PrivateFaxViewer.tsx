@@ -155,7 +155,7 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
               fontFamily: 'inherit', opacity: busy || !walletAddress ? 0.4 : 1,
             }}
           >
-            {busy ? 'Decrypting…' : 'Unlock with Wallet'}
+            {busy ? 'DECRYPTING…' : 'DECRYPT WITH WALLET'}
           </button>
           {error && <div style={{ marginTop: 12, fontSize: 10, color: '#a94228' }}>{error}</div>}
         </div>

@@ -4,7 +4,7 @@
 /// plaintext pointer notification, and the image is rendered as a static <img>
 /// from a base64 data URI on our own domain (no HTML parsing, no remote loads,
 /// no script context). This component builds that bitmap two ways:
-///   1. Upload  — user supplies a PNG/BMP file.
+///   1. Upload  — user supplies a PNG/JPG/BMP file.
 ///   2. Compose — user types a message that we render to a PNG via <canvas>,
 ///                giving a retro thermal-fax look with zero tracking surface.
 
@@ -212,7 +212,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       }
     } else {
       if (!fileB64) {
-        setError('Choose a PNG or BMP file to transmit.');
+        setError('Choose a PNG, JPG, or BMP file to transmit.');
         return;
       }
       dataBase64 = fileB64;
