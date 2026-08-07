@@ -632,6 +632,9 @@ function DashboardContent() {
             {/* Settings panel — image privacy (all tiers) + forwarding (premium, non-agent) */}
             {showSettings && (
               <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-5">
+                {selectedName && walletAddress && (
+                  <FaxKeySetup local={selectedName.label} walletAddress={walletAddress} />
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-white">Block Remote Images (Anti-Tracking)</h3>
@@ -658,12 +661,6 @@ function DashboardContent() {
                 )}
                 {!isPremium && (
                   <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and NFTfax.</p>
-                )}
-
-                {selectedName && preferredWallet && (
-                  <div className="border-t border-[var(--border)] pt-5">
-                    <FaxKeySetup local={selectedName.label} walletAddress={preferredWallet.address} />
-                  </div>
                 )}
               </div>
             )}
