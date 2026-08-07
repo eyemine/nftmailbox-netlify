@@ -86,7 +86,10 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
   }, [doc, plaintextB64]);
 
   const handleDecrypt = useCallback(async () => {
-    if (!doc?.envelope || !doc.local) return;
+    if (!doc?.envelope || !doc.local) {
+      setError('Fax envelope is incomplete. Cannot decrypt.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -103,7 +106,10 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
       const plaintext = await eciesDecrypt(doc.envelope, privPkcs8);
       setPlaintextB64(plaintext);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Decryption failed — wrong wallet or corrupted fax');
+      // eslint-disable-next-line no-console
+      console.error('PrivateFaxViewer decrypt failed:', err);
+      const msg = err instanceof Error ? err.message : 'Decryption failed — wrong wallet or corrupted fax';
+      setError(msg || 'Decryption failed — wrong wallet or corrupted fax');
     } finally {
       setBusy(false);
     }
