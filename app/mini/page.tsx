@@ -1171,6 +1171,11 @@ export default function MiniApp() {
                                 {msg.channel === 'private' ? '🔒 Open private fax' : '👁 View fax'}
                               </button>
                             )}
+                            {msg.trayId && msg.channel === 'private' && (
+                              <p className="mt-2 text-[10px] text-emerald-300">
+                                End-to-end encrypted on nftmail.box — only the recipient wallet can decrypt.
+                              </p>
+                            )}
                           </>
                         ) : (
                           <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>

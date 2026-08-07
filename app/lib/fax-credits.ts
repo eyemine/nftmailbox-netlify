@@ -136,3 +136,14 @@ export async function earnForwardCredit(label: string, ownerAddress: string): Pr
   await setCredits(label, nextCredits, ownerAddress);
   await setLastForwarded(label, now, ownerAddress);
 }
+
+/// Reset an account's thermal-fade jam and refill free credits.
+export async function clearJam(label: string, ownerAddress: string): Promise<number> {
+  const now = Date.now();
+  await Promise.all([
+    setCredits(label, BASE_FREE_CREDITS, ownerAddress),
+    setLastReceived(label, now, ownerAddress),
+    setLastForwarded(label, now, ownerAddress),
+  ]);
+  return BASE_FREE_CREDITS;
+}
