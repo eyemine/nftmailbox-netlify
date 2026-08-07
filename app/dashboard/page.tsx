@@ -11,6 +11,7 @@ import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
 import NftFax from '../components/NftFax';
+import FaxKeySetup from '../components/FaxKeySetup';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
 // app (fax.nftmail.box). Hidden in the mailbox console.
 // import FaxChainComposer from '../components/FaxChainComposer';
@@ -671,6 +672,9 @@ function DashboardContent() {
             )}
             {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
+            )}
+            {selectedName && preferredWallet && (
+              <FaxKeySetup local={selectedName.label} walletAddress={preferredWallet.address} />
             )}
 
             {/* Tabs */}

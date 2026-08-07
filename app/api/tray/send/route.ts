@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     const toDomain = (to || '').toLowerCase().trim().split('@').pop() || '';
     // NFTmail policy: faxes sent to @nftmail.box are end-to-end encrypted / private;
     // the @fax namespace (and any external domain) is the public canvas.
-    const channel = toDomain === 'nftmail.box' ? 'private' : 'public';
+    let channel: 'public' | 'private' = toDomain === 'nftmail.box' ? 'private' : 'public';
 
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
@@ -255,9 +255,9 @@ export async function POST(req: NextRequest) {
         if (keyData.hasKey && keyData.publicKey) recipientFaxPubKey = keyData.publicKey;
       }
       if (!recipientFaxPubKey) {
-        return NextResponse.json({
-          error: `${recipientLocal}@nftmail.box has not enabled private fax. They must provision a fax key in their dashboard before you can send an encrypted fax.`,
-        }, { status: 409 });
+        // Recipient hasn't provisioned a fax key; fall back to an unencrypted public
+        // transmission so the sender is never blocked from delivering to @nftmail.box.
+        channel = 'public';
       }
     }
 
