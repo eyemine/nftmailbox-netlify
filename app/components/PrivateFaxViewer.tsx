@@ -7,7 +7,9 @@
 /// ECIES-decrypt the bitmap. Plaintext exists only transiently in this tab.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { FAX_KEY_MESSAGE, unwrapFaxKey, eciesDecrypt, type FaxEnvelope, type WrappedFaxKey } from '@/app/lib/fax-crypto';
+import { signWithWallet } from '@/app/lib/wallet-sign';
 
 interface PrivateFaxViewerProps {
   trayId: string;
@@ -48,18 +50,14 @@ function drawStochasticBitmap(canvas: HTMLCanvasElement, envelope: FaxEnvelope) 
   }
 }
 
-async function signMessage(message: string, account: string): Promise<string> {
-  const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<string> } }).ethereum;
-  if (!eth) throw new Error('No wallet provider available');
-  return eth.request({ method: 'personal_sign', params: [message, account] });
-}
-
 export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxViewerProps) {
   const [doc, setDoc] = useState<TrayEnvelopeDoc | null>(null);
   const [plaintextB64, setPlaintextB64] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { wallets } = useWallets();
+  const { signMessage } = usePrivy();
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +95,7 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
       if (!keyRes.ok || !keyData.hasKey) {
         throw new Error('No private fax key found for this mailbox. Enable Private Fax first.');
       }
-      const signature = await signMessage(FAX_KEY_MESSAGE, walletAddress);
+      const signature = await signWithWallet(FAX_KEY_MESSAGE, walletAddress, wallets, signMessage);
       const privPkcs8 = await unwrapFaxKey(
         { publicKey: keyData.publicKey, wrappedPrivateKey: keyData.wrappedPrivateKey, wrapIv: keyData.wrapIv },
         signature,
@@ -109,7 +107,7 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
     } finally {
       setBusy(false);
     }
-  }, [doc, walletAddress]);
+  }, [doc, walletAddress, wallets, signMessage]);
 
   if (error && !doc) {
     return <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">{error}</div>;
