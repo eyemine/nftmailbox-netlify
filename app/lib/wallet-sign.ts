@@ -4,9 +4,19 @@ interface EIP1193Provider {
   request: (req: { method: string; params?: unknown[] }) => Promise<unknown>;
 }
 
+interface EIP1193ProviderWithMeta {
+  request: (req: { method: string; params?: unknown[] }) => Promise<unknown>;
+  isMetaMask?: boolean;
+}
+
 function getWindowEthereum(): EIP1193Provider | undefined {
   if (typeof window === 'undefined') return undefined;
-  return (window as unknown as { ethereum?: EIP1193Provider }).ethereum;
+  const ethereum = (window as unknown as { ethereum?: EIP1193ProviderWithMeta & { providers?: EIP1193ProviderWithMeta[] } }).ethereum;
+  if (!ethereum) return undefined;
+  if (ethereum.providers && ethereum.providers.length > 0) {
+    return ethereum.providers.find((p) => p.isMetaMask) || ethereum.providers[0];
+  }
+  return ethereum;
 }
 
 /**
