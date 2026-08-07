@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface NftFaxProps {
   fromLabel: string;
@@ -102,7 +102,32 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [trayUrl, setTrayUrl] = useState('');
+  const [recipientHasKey, setRecipientHasKey] = useState<boolean | null>(null);
+  const [channel, setChannel] = useState<'public' | 'private'>('public');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRecipientHasKey(null);
+    setChannel('public');
+    const address = to.trim().toLowerCase();
+    if (!address.endsWith('@nftmail.box')) return;
+    const name = address.split('@')[0];
+    if (!name) return;
+    fetch(`/api/fax-key?local=${encodeURIComponent(name)}`, { cache: 'no-store' })
+      .then(async (res) => {
+        if (cancelled) return;
+        const data = await res.json() as { hasKey?: boolean };
+        setRecipientHasKey(!!data.hasKey);
+        setChannel(data.hasKey ? 'private' : 'public');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRecipientHasKey(false);
+        setChannel('public');
+      });
+    return () => { cancelled = true; };
+  }, [to]);
 
   const handleFile = async (file: File) => {
     setError('');
@@ -163,7 +188,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (sendChannel: 'public' | 'private' = channel) => {
     setError('');
     setTrayUrl('');
 
@@ -199,7 +224,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       const res = await fetch('/api/tray/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64 }),
+        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: sendChannel }),
       });
       const data = (await res.json()) as { trayUrl?: string; error?: string; upgradeUrl?: string };
       if (!res.ok) {
@@ -314,14 +339,59 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleSend}
-        disabled={sending}
-        className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 text-white font-semibold py-2.5 px-4 rounded-lg transition disabled:opacity-50"
-      >
-        {sending ? 'Transmitting…' : 'Send NFTfax'}
-      </button>
+      {to.trim().toLowerCase().endsWith('@nftmail.box') ? (
+        <div className="space-y-2">
+          {recipientHasKey === null ? (
+            <div className="text-[11px] text-[var(--muted)]">Checking recipient key&hellip;</div>
+          ) : (
+            <div className="text-[11px]">
+              {recipientHasKey ? (
+                <span className="text-emerald-300">Recipient has enabled private fax.</span>
+              ) : (
+                <span className="text-amber-300">Recipient has not enabled private fax. Encrypted send is disabled.</span>
+              )}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => { setChannel('private'); void handleSend('private'); }}
+              disabled={sending || !recipientHasKey}
+              className={`p-2.5 rounded-lg border text-sm font-semibold transition ${
+                channel === 'private'
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                  : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              Send encrypted
+            </button>
+            <button
+              type="button"
+              onClick={() => { setChannel('public'); void handleSend('public'); }}
+              disabled={sending}
+              className={`p-2.5 rounded-lg border text-sm font-semibold transition ${
+                channel === 'public'
+                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              Send plaintext
+            </button>
+          </div>
+          {channel === 'public' && (
+            <p className="text-[10px] text-amber-300">This fax will be sent as plaintext (not encrypted).</p>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void handleSend('public')}
+          disabled={sending}
+          className="w-full bg-amber-600 hover:bg-amber-700 disabled:bg-amber-800 text-white font-semibold py-2.5 px-4 rounded-lg transition disabled:opacity-50"
+        >
+          {sending ? 'Transmitting…' : 'Send NFTfax'}
+        </button>
+      )}
     </div>
   );
 }

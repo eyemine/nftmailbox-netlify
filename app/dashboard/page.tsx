@@ -659,6 +659,12 @@ function DashboardContent() {
                 {!isPremium && (
                   <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and NFTfax.</p>
                 )}
+
+                {selectedName && preferredWallet && (
+                  <div className="border-t border-[var(--border)] pt-5">
+                    <FaxKeySetup local={selectedName.label} walletAddress={preferredWallet.address} />
+                  </div>
+                )}
               </div>
             )}
 
@@ -672,9 +678,6 @@ function DashboardContent() {
             )}
             {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
               <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
-            )}
-            {selectedName && preferredWallet && (
-              <FaxKeySetup local={selectedName.label} walletAddress={preferredWallet.address} />
             )}
 
             {/* Tabs */}

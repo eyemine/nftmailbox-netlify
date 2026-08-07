@@ -136,7 +136,11 @@ export async function POST(req: NextRequest) {
     const toDomain = (to || '').toLowerCase().trim().split('@').pop() || '';
     // NFTmail policy: faxes sent to @nftmail.box are end-to-end encrypted / private;
     // the @fax namespace (and any external domain) is the public canvas.
-    let channel: 'public' | 'private' = toDomain === 'nftmail.box' ? 'private' : 'public';
+    // The client can explicitly request 'public' or 'private'; otherwise we default
+    // from the recipient domain. Backward-compatible callers (no channel) still get
+    // the automatic public fallback if the recipient has no fax key.
+    const requestedChannel = body.channel;
+    let channel: 'public' | 'private' = requestedChannel || (toDomain === 'nftmail.box' ? 'private' : 'public');
 
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
@@ -255,8 +259,13 @@ export async function POST(req: NextRequest) {
         if (keyData.hasKey && keyData.publicKey) recipientFaxPubKey = keyData.publicKey;
       }
       if (!recipientFaxPubKey) {
-        // Recipient hasn't provisioned a fax key; fall back to an unencrypted public
-        // transmission so the sender is never blocked from delivering to @nftmail.box.
+        // Client explicitly asked for private and the recipient has no key: fail.
+        if (requestedChannel === 'private') {
+          return NextResponse.json({
+            error: `${recipientLocal}@nftmail.box has not enabled private fax. They must provision a fax key in their dashboard before you can send an encrypted fax.`,
+          }, { status: 409 });
+        }
+        // Backward-compatible callers get the public fallback when the key is missing.
         channel = 'public';
       }
     }
