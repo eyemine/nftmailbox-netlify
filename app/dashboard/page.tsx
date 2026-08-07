@@ -12,6 +12,7 @@ import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
 import NftFax from '../components/NftFax';
 import FaxKeySetup from '../components/FaxKeySetup';
+import { signWithWallet } from '@/app/lib/wallet-sign';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
 // app (fax.nftmail.box). Hidden in the mailbox console.
 // import FaxChainComposer from '../components/FaxChainComposer';
@@ -443,10 +444,7 @@ function DashboardContent() {
     try {
       const signedAt = Date.now();
       const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
-      const external = wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
-      const signature = external
-        ? await external.sign(statement)
-        : await signMessage(statement);
+      const signature = await signWithWallet(statement, walletAddress, wallets, signMessage);
       const res = await fetch(`/api/forwarding/${selectedName.label}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

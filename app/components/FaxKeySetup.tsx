@@ -11,6 +11,7 @@
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useCallback, useEffect, useState } from 'react';
 import { FAX_KEY_MESSAGE, provisionFaxKey } from '@/app/lib/fax-crypto';
+import { signWithWallet } from '@/app/lib/wallet-sign';
 
 interface FaxKeySetupProps {
   local: string;         // mailbox local-part (e.g. "alice" or "mac.slave")
@@ -44,10 +45,7 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
     setMessage(null);
     setIsError(false);
     try {
-      const external = wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
-      const signature = external
-        ? await external.sign(FAX_KEY_MESSAGE)
-        : await signMessage(FAX_KEY_MESSAGE);
+      const signature = await signWithWallet(FAX_KEY_MESSAGE, walletAddress, wallets, signMessage);
       const wrapped = await provisionFaxKey(signature);
       const res = await fetch('/api/fax-key', {
         method: 'POST',
