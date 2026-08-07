@@ -104,7 +104,7 @@ const WORKER_URL = '/api/mini-worker';
 function DashboardContent() {
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
-  const { authenticated, login, logout, ready, user } = usePrivy();
+  const { user, ready, authenticated, login, logout, signMessage } = usePrivy();
   const { wallets } = useWallets();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
@@ -438,22 +438,21 @@ function DashboardContent() {
 
   // Save email forwarding config — requires wallet signature per /api/forwarding/[name] contract
   const handleSaveForwarding = useCallback(async (config: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' }) => {
-    if (!selectedName || !preferredWallet) throw new Error('No wallet connected');
+    if (!selectedName || !walletAddress) throw new Error('No wallet connected');
     setSavingForwarding(true);
     try {
-      const provider = await preferredWallet.getEthereumProvider();
       const signedAt = Date.now();
       const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
-      const signature = await provider.request({
-        method: 'personal_sign',
-        params: [statement, preferredWallet.address],
-      });
+      const external = wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
+      const signature = external
+        ? await external.sign(statement)
+        : await signMessage(statement);
       const res = await fetch(`/api/forwarding/${selectedName.label}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
-          ownerAddress: preferredWallet.address,
+          ownerAddress: walletAddress,
           signature,
           signedAt,
           statement,
@@ -465,7 +464,7 @@ function DashboardContent() {
     } finally {
       setSavingForwarding(false);
     }
-  }, [selectedName, preferredWallet]);
+  }, [selectedName, walletAddress, wallets, signMessage]);
 
   const formatTimeAgo = (ts: string | number | undefined, fallbackTs?: string | number) => {
     const candidate = ts ?? fallbackTs;

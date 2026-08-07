@@ -8,7 +8,7 @@
 /// and the wrapped (encrypted) private key — never plaintext key material.
 /// Once enabled, other users can send this address end-to-end encrypted faxes.
 
-import { useWallets, type ConnectedWallet } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useCallback, useEffect, useState } from 'react';
 import { FAX_KEY_MESSAGE, provisionFaxKey } from '@/app/lib/fax-crypto';
 
@@ -17,15 +17,10 @@ interface FaxKeySetupProps {
   walletAddress: string; // connected wallet used to sign
 }
 
-async function signMessage(message: string, account: string, wallets: ConnectedWallet[]): Promise<string> {
-  const wallet = wallets.find(w => w.address.toLowerCase() === account.toLowerCase());
-  if (!wallet) throw new Error('No wallet connected');
-  const provider = await wallet.getEthereumProvider();
-  return provider.request({ method: 'personal_sign', params: [message, account] }) as Promise<string>;
-}
 
 export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) {
   const { wallets } = useWallets();
+  const { signMessage } = usePrivy();
   const [status, setStatus] = useState<'checking' | 'enabled' | 'disabled' | 'error'>('checking');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -49,7 +44,10 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
     setMessage(null);
     setIsError(false);
     try {
-      const signature = await signMessage(FAX_KEY_MESSAGE, walletAddress, wallets);
+      const external = wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
+      const signature = external
+        ? await external.sign(FAX_KEY_MESSAGE)
+        : await signMessage(FAX_KEY_MESSAGE);
       const wrapped = await provisionFaxKey(signature);
       const res = await fetch('/api/fax-key', {
         method: 'POST',
@@ -101,7 +99,7 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
           disabled={busy || !walletAddress}
           className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40"
         >
-          {busy ? 'Signing…' : 'Enable Fax Encrypted'}
+          {busy ? 'Signing…' : 'Enable Encrypted Fax'}
         </button>
       )}
 
