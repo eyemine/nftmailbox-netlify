@@ -6,7 +6,7 @@
 /// wallet re-sign FAX_KEY_MESSAGE, unwrap the private key in-browser, then
 /// ECIES-decrypt the bitmap. Plaintext exists only transiently in this tab.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FAX_KEY_MESSAGE, unwrapFaxKey, eciesDecrypt, type FaxEnvelope, type WrappedFaxKey } from '@/app/lib/fax-crypto';
 
 interface PrivateFaxViewerProps {
@@ -35,6 +35,42 @@ function contrastForElapsed(ms: number): number {
   return 0.1;
 }
 
+function drawQrLike(canvas: HTMLCanvasElement, envelope: FaxEnvelope) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const modules = 33;
+  const size = 420;
+  const mod = size / modules;
+  ctx.fillStyle = '#f4f1e8';
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#2a2a2a';
+  const finders: [number, number][] = [
+    [0, 0],
+    [modules - 7, 0],
+    [0, modules - 7],
+  ];
+  for (const [fx, fy] of finders) {
+    ctx.fillRect(fx * mod, fy * mod, 7 * mod, 7 * mod);
+    ctx.fillStyle = '#f4f1e8';
+    ctx.fillRect((fx + 1) * mod, (fy + 1) * mod, 5 * mod, 5 * mod);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect((fx + 3) * mod, (fy + 3) * mod, 3 * mod, 3 * mod);
+  }
+  const seed = (envelope.ct || '') + (envelope.hash || '') + (envelope.epk || '');
+  if (!seed) return;
+  let idx = 0;
+  for (let y = 0; y < modules; y += 1) {
+    for (let x = 0; x < modules; x += 1) {
+      const inFinder = (x < 7 && y < 7) || (x >= modules - 7 && y < 7) || (x < 7 && y >= modules - 7);
+      if (inFinder) continue;
+      if (seed.charCodeAt(idx % seed.length) % 2 === 1) {
+        ctx.fillRect(x * mod, y * mod, mod, mod);
+      }
+      idx += 1;
+    }
+  }
+}
+
 async function signMessage(message: string, account: string): Promise<string> {
   const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<string> } }).ethereum;
   if (!eth) throw new Error('No wallet provider available');
@@ -47,6 +83,7 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -73,6 +110,12 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
     })();
     return () => { cancelled = true; };
   }, [trayId]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !doc?.envelope || plaintextB64) return;
+    drawQrLike(canvas, doc.envelope);
+  }, [doc, plaintextB64]);
 
   const handleDecrypt = useCallback(async () => {
     if (!doc?.envelope) return;
@@ -144,8 +187,13 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
           style={{ width: '100%', display: 'block', filter: `grayscale(1) contrast(${contrast})`, imageRendering: 'pixelated' }}
         />
       ) : (
-        <div style={{ textAlign: 'center', padding: '24px 8px' }}>
-          <div style={{ fontSize: 32, marginBottom: 10 }}>&#128274;</div>
+        <div style={{ textAlign: 'center', padding: '12px 8px' }}>
+          <canvas
+            ref={canvasRef}
+            width={420}
+            height={420}
+            style={{ width: '100%', display: 'block', imageRendering: 'pixelated', marginBottom: 14 }}
+          />
           <button
             onClick={handleDecrypt}
             disabled={busy || !walletAddress}
