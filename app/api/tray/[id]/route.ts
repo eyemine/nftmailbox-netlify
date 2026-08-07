@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
+const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || '';
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
@@ -23,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ action: 'getTrayDocument', id }),
+      body: JSON.stringify({ action: 'getTrayDocument', id, secret: WEBHOOK_SECRET }),
       cache: 'no-store',
     });
     const data = await res.json();
