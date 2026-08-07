@@ -8,7 +8,6 @@
 /// Plaintext exists only in this tab. Works on both nftmail.box and nftfax.app
 /// for channel: 'private' faxes — the domain only changes marketing, not the key.
 
-import { useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import PrivateFaxViewer from '@/app/components/PrivateFaxViewer';
 
@@ -17,7 +16,6 @@ interface TrayClientProps {
 }
 
 export default function TrayClient({ trayId }: TrayClientProps) {
-  const [local, setLocal] = useState('');
   const { authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const walletAddress = wallets[0]?.address || '';
@@ -48,31 +46,11 @@ export default function TrayClient({ trayId }: TrayClientProps) {
 
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 10, color: '#888' }}>Recipient mailbox local-part</div>
-        <input
-          type="text"
-          value={local}
-          onChange={(e) => setLocal(e.target.value.toLowerCase().trim())}
-          placeholder="e.g. ghostagent"
-          style={{
-            width: '100%',
-            marginTop: 6,
-            padding: '8px 10px',
-            fontSize: 11,
-            fontFamily: "'Courier New', Courier, monospace",
-            border: '1px solid #999',
-            background: '#fff',
-            color: '#2a2a2a',
-          }}
-        />
-      </div>
-
-      {local && walletAddress ? (
-        <PrivateFaxViewer trayId={trayId} local={local} walletAddress={walletAddress} />
+      {walletAddress ? (
+        <PrivateFaxViewer trayId={trayId} walletAddress={walletAddress} />
       ) : (
         <div style={{ textAlign: 'center', padding: '12px 8px', fontSize: 10, color: '#888' }}>
-          Enter the mailbox local-part this fax was sent to, then unlock it.
+          Unlock with a connected wallet.
         </div>
       )}
     </div>

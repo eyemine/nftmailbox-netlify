@@ -6,12 +6,11 @@
 /// wallet re-sign FAX_KEY_MESSAGE, unwrap the private key in-browser, then
 /// ECIES-decrypt the bitmap. Plaintext exists only transiently in this tab.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FAX_KEY_MESSAGE, unwrapFaxKey, eciesDecrypt, type FaxEnvelope, type WrappedFaxKey } from '@/app/lib/fax-crypto';
 
 interface PrivateFaxViewerProps {
   trayId: string;
-  local: string;         // recipient mailbox local-part (owns the wrapped key)
   walletAddress: string; // connected wallet used to sign
 }
 
@@ -23,19 +22,11 @@ interface TrayEnvelopeDoc {
   encrypted?: boolean;
   envelope?: FaxEnvelope;
   dataBase64?: string;
+  local?: string;        // recipient mailbox local-part (auto-exposed from tray)
   createdAt: number;
 }
 
-const FADE_MS = 72 * 60 * 60 * 1000;
-
-function contrastForElapsed(ms: number): number {
-  if (ms <= 24 * 60 * 60 * 1000) return 1.0;
-  if (ms <= 48 * 60 * 60 * 1000) return 0.7;
-  if (ms <= 72 * 60 * 60 * 1000) return 0.4;
-  return 0.1;
-}
-
-function drawQrLike(canvas: HTMLCanvasElement, envelope: FaxEnvelope) {
+function drawStochasticBitmap(canvas: HTMLCanvasElement, envelope: FaxEnvelope) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const modules = 33;
@@ -44,25 +35,11 @@ function drawQrLike(canvas: HTMLCanvasElement, envelope: FaxEnvelope) {
   ctx.fillStyle = '#f4f1e8';
   ctx.fillRect(0, 0, size, size);
   ctx.fillStyle = '#2a2a2a';
-  const finders: [number, number][] = [
-    [0, 0],
-    [modules - 7, 0],
-    [0, modules - 7],
-  ];
-  for (const [fx, fy] of finders) {
-    ctx.fillRect(fx * mod, fy * mod, 7 * mod, 7 * mod);
-    ctx.fillStyle = '#f4f1e8';
-    ctx.fillRect((fx + 1) * mod, (fy + 1) * mod, 5 * mod, 5 * mod);
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect((fx + 3) * mod, (fy + 3) * mod, 3 * mod, 3 * mod);
-  }
   const seed = (envelope.ct || '') + (envelope.hash || '') + (envelope.epk || '');
   if (!seed) return;
   let idx = 0;
   for (let y = 0; y < modules; y += 1) {
     for (let x = 0; x < modules; x += 1) {
-      const inFinder = (x < 7 && y < 7) || (x >= modules - 7 && y < 7) || (x < 7 && y >= modules - 7);
-      if (inFinder) continue;
       if (seed.charCodeAt(idx % seed.length) % 2 === 1) {
         ctx.fillRect(x * mod, y * mod, mod, mod);
       }
@@ -77,18 +54,12 @@ async function signMessage(message: string, account: string): Promise<string> {
   return eth.request({ method: 'personal_sign', params: [message, account] });
 }
 
-export default function PrivateFaxViewer({ trayId, local, walletAddress }: PrivateFaxViewerProps) {
+export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxViewerProps) {
   const [doc, setDoc] = useState<TrayEnvelopeDoc | null>(null);
   const [plaintextB64, setPlaintextB64] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +70,6 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
         if (!res.ok) throw new Error(data.error || 'Fax not found');
         if (!cancelled) {
           setDoc(data);
-          // Public faxes carry the plaintext bitmap — render immediately.
           if (!data.encrypted && data.channel !== 'private' && data.dataBase64) {
             setPlaintextB64(data.dataBase64);
           }
@@ -114,15 +84,15 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !doc?.envelope || plaintextB64) return;
-    drawQrLike(canvas, doc.envelope);
+    drawStochasticBitmap(canvas, doc.envelope);
   }, [doc, plaintextB64]);
 
   const handleDecrypt = useCallback(async () => {
-    if (!doc?.envelope) return;
+    if (!doc?.envelope || !doc.local) return;
     setBusy(true);
     setError(null);
     try {
-      const keyRes = await fetch(`/api/fax-key?local=${encodeURIComponent(local)}`);
+      const keyRes = await fetch(`/api/fax-key?local=${encodeURIComponent(doc.local)}`);
       const keyData = await keyRes.json() as (WrappedFaxKey & { hasKey?: boolean; error?: string });
       if (!keyRes.ok || !keyData.hasKey) {
         throw new Error('No private fax key found for this mailbox. Enable Private Fax first.');
@@ -139,18 +109,7 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
     } finally {
       setBusy(false);
     }
-  }, [doc, local, walletAddress]);
-
-  const { contrast, remainingLabel, jammed } = useMemo(() => {
-    const elapsed = doc ? Math.max(0, now - doc.createdAt) : 0;
-    const remaining = Math.max(0, FADE_MS - elapsed);
-    const totalMinutes = Math.floor(remaining / 60000);
-    return {
-      contrast: contrastForElapsed(elapsed),
-      remainingLabel: `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`,
-      jammed: elapsed > FADE_MS,
-    };
-  }, [doc, now]);
+  }, [doc, walletAddress]);
 
   if (error && !doc) {
     return <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-300">{error}</div>;
@@ -164,7 +123,7 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
   return (
     <div style={{
       maxWidth: 420, width: '100%', background: '#f4f1e8', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-      padding: '20px 20px 28px', fontFamily: "'Courier New', Courier, monospace", color: '#2a2a2a',
+      padding: '20px 20px 28px', fontFamily: "'Courier New', Courier, monospace", color: '#2a2a2a', margin: '0 auto',
     }}>
       <div style={{ borderBottom: '2px dashed #999', paddingBottom: 10, marginBottom: 14 }}>
         <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>NFTfax · ENCRYPTED TRANSMISSION</div>
@@ -172,19 +131,12 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
         <div style={{ fontSize: 10, color: '#888' }}>T/#{doc.id.toUpperCase()}</div>
       </div>
 
-      <div style={{
-        padding: '8px 10px', marginBottom: 12, background: jammed ? '#a94228' : '#31372e',
-        color: jammed ? '#fff' : '#a9c99f', fontSize: 10, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase',
-      }}>
-        {jammed ? 'LINE JAMMED — THERMAL FADE EXPIRED' : `THERMAL FADE: ${remainingLabel} REMAINING`}
-      </div>
-
       {plaintextB64 ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={`data:${mimeType};base64,${plaintextB64}`}
           alt={`Decrypted transmission from ${doc.from}`}
-          style={{ width: '100%', display: 'block', filter: `grayscale(1) contrast(${contrast})`, imageRendering: 'pixelated' }}
+          style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto', filter: 'grayscale(1)', imageRendering: 'pixelated' }}
         />
       ) : (
         <div style={{ textAlign: 'center', padding: '12px 8px' }}>
@@ -192,7 +144,7 @@ export default function PrivateFaxViewer({ trayId, local, walletAddress }: Priva
             ref={canvasRef}
             width={420}
             height={420}
-            style={{ width: '100%', display: 'block', imageRendering: 'pixelated', marginBottom: 14 }}
+            style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto', imageRendering: 'pixelated', marginBottom: 14 }}
           />
           <button
             onClick={handleDecrypt}

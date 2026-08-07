@@ -31,6 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // is unauthenticated-public, so for private faxes we strip `to` before it reaches
     // the browser — the encrypted envelope alone is enough for the recipient to decrypt.
     if (data && data.channel === 'private' && typeof data.to === 'string') {
+      data.local = data.to.split('@')[0];
       delete data.to;
     }
     return NextResponse.json(data, { status: res.status, headers: NO_STORE });
