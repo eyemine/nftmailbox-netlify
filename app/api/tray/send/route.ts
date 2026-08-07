@@ -232,17 +232,10 @@ export async function POST(req: NextRequest) {
     // ── Private (end-to-end encrypted) fax gating ──
     // The bitmap is ECIES-encrypted to the recipient's public key so KV stores
     // only ciphertext and the public /tray/{id} URL can never reveal the image.
-    // This is the Pro/Premium confidentiality tier — distinct from the public
-    // chain-letter game. Forwarding an encrypted fax is not supported (the
-    // forwarder would have to decrypt then re-encrypt to the next recipient).
+    // Forwarding an encrypted fax is not supported (the forwarder would have to
+    // decrypt then re-encrypt to the next recipient).
     let recipientFaxPubKey: string | null = null;
     if (channel === 'private') {
-      if (isBasic) {
-        return NextResponse.json({
-          error: 'Private (encrypted) NFTfax is a PRO/PREMIUM feature. Upgrade to send end-to-end encrypted faxes.',
-          upgradeUrl: `/nftmail?upgrade=pro&label=${fromLabel}`,
-        }, { status: 402 });
-      }
       if (isForward) {
         return NextResponse.json({ error: 'Encrypted faxes cannot be forwarded into the public chain.' }, { status: 400 });
       }

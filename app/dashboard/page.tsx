@@ -775,7 +775,7 @@ function DashboardContent() {
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                               {trayId && (
-                                <a href={`/tray/${trayId}`} target="_blank" rel="noopener noreferrer" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
+                                <a href={`/tray/${trayId}`} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
                               )}
                               <button onClick={() => handleDelete(msg.messageId)} title="Delete fax" className="rounded p-1.5 text-red-400/50 hover:text-red-400 transition">
                                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
