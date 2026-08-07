@@ -8,6 +8,7 @@
 /// and the wrapped (encrypted) private key — never plaintext key material.
 /// Once enabled, other users can send this address end-to-end encrypted faxes.
 
+import { useWallets, type ConnectedWallet } from '@privy-io/react-auth';
 import { useCallback, useEffect, useState } from 'react';
 import { FAX_KEY_MESSAGE, provisionFaxKey } from '@/app/lib/fax-crypto';
 
@@ -16,16 +17,19 @@ interface FaxKeySetupProps {
   walletAddress: string; // connected wallet used to sign
 }
 
-async function signMessage(message: string, account: string): Promise<string> {
-  const eth = (window as unknown as { ethereum?: { request: (a: { method: string; params?: unknown[] }) => Promise<string> } }).ethereum;
-  if (!eth) throw new Error('No wallet provider available');
-  return eth.request({ method: 'personal_sign', params: [message, account] });
+async function signMessage(message: string, account: string, wallets: ConnectedWallet[]): Promise<string> {
+  const wallet = wallets.find(w => w.address.toLowerCase() === account.toLowerCase());
+  if (!wallet) throw new Error('No wallet connected');
+  const provider = await wallet.getEthereumProvider();
+  return provider.request({ method: 'personal_sign', params: [message, account] }) as Promise<string>;
 }
 
 export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) {
+  const { wallets } = useWallets();
   const [status, setStatus] = useState<'checking' | 'enabled' | 'disabled' | 'error'>('checking');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
 
   const refresh = useCallback(async () => {
     setStatus('checking');
@@ -43,8 +47,9 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
   const handleEnable = async () => {
     setBusy(true);
     setMessage(null);
+    setIsError(false);
     try {
-      const signature = await signMessage(FAX_KEY_MESSAGE, walletAddress);
+      const signature = await signMessage(FAX_KEY_MESSAGE, walletAddress, wallets);
       const wrapped = await provisionFaxKey(signature);
       const res = await fetch('/api/fax-key', {
         method: 'POST',
@@ -60,9 +65,10 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error || 'Registration failed');
       setStatus('enabled');
-      setMessage('Private fax enabled. Others can now send you encrypted faxes.');
+      setMessage('Fax encrypted enabled. Others can now send you encrypted faxes.');
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : 'Failed to enable private fax');
+      setIsError(true);
+      setMessage(err instanceof Error ? err.message : 'Failed to enable fax encrypted');
     } finally {
       setBusy(false);
     }
@@ -95,15 +101,15 @@ export default function FaxKeySetup({ local, walletAddress }: FaxKeySetupProps) 
           disabled={busy || !walletAddress}
           className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40"
         >
-          {busy ? 'Signing&hellip;' : 'Enable Private Fax'}
+          {busy ? 'Signing…' : 'Enable Fax Encrypted'}
         </button>
       )}
 
       {message && (
-        <div className={`rounded-lg px-3 py-2 text-[10px] ${
-          /fail|error|match/i.test(message)
-            ? 'border border-red-500/20 bg-red-500/5 text-red-300'
-            : 'border border-emerald-500/20 bg-emerald-500/5 text-emerald-300'
+        <div className={`rounded-lg px-3 py-2 text-[10px] border ${
+          isError
+            ? 'border-red-500/20 bg-red-500/5 text-red-300'
+            : 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300'
         }`}>
           {message}
         </div>
