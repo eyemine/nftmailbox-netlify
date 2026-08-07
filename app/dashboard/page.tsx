@@ -1190,6 +1190,7 @@ function DashboardContent() {
               <div className="space-y-4">
                 {selectedName && walletAddress ? (
                   <>
+                    <FaxKeySetup local={selectedName.label} walletAddress={walletAddress} />
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
                       <NftFax fromLabel={selectedName.label} ownerWallet={walletAddress} />
                     </div>
