@@ -201,7 +201,9 @@ interface InboxMessage {
   content?: string; // raw from worker getInbox (maps to payload.body)
   receivedAt: number;
   encrypted?: boolean;
-  type?: 'inbox' | 'sent';
+  type?: 'inbox' | 'sent' | 'tray-notification';
+  trayId?: string;  // for NFTfax tray notifications
+  channel?: 'public' | 'private';
 }
 
 interface InboxResult {
@@ -1159,7 +1161,17 @@ export default function MiniApp() {
                     {isOpen && (
                       <div className="mt-3 pt-3 border-t border-gray-800">
                         {body ? (
-                          <SafeMarkdown text={body} />
+                          <>
+                            <SafeMarkdown text={msg.trayId ? body.replace(/\[link\]/g, `[View](${APP_URL}/tray/${msg.trayId})`) : body} />
+                            {msg.trayId && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openUrl(`${APP_URL}/tray/${msg.trayId}`); }}
+                                className="mt-2 text-black bg-[#43a574] hover:bg-[#66c594] text-xs font-bold py-1.5 px-3 rounded"
+                              >
+                                {msg.channel === 'private' ? '🔒 Open private fax' : '👁 View fax'}
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
                         )}
