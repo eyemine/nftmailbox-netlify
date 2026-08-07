@@ -88,7 +88,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
       background: '#1a1a1a',
     }}>
       <div style={{
-        maxWidth: 420,
+        maxWidth: 630,
         width: '100%',
         background: '#f4f1e8',
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
@@ -98,7 +98,7 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
       }}>
         {/* Public NFTfax canvas */}
         <div style={{ borderBottom: '2px dashed #999', paddingBottom: 10, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>NFTfax · PUBLIC TRANSMISSION</div>
+          <div style={{ fontSize: 11, letterSpacing: 1, color: '#666' }}>NFTfax · CLEARTEXT TRANSMISSION</div>
           <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>FROM: {doc.from}</div>
           <div style={{ fontSize: 10, color: '#888' }}>T/#{doc.id.toUpperCase()} · {receivedAt}</div>
         </div>

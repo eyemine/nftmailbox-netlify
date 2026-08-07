@@ -32,7 +32,7 @@ function drawStochasticBitmap(canvas: HTMLCanvasElement, envelope: FaxEnvelope) 
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const modules = 33;
-  const size = 420;
+  const size = 630;
   const mod = size / modules;
   ctx.fillStyle = '#f4f1e8';
   ctx.fillRect(0, 0, size, size);
@@ -120,7 +120,7 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
 
   return (
     <div style={{
-      maxWidth: 420, width: '100%', background: '#f4f1e8', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      maxWidth: 630, width: '100%', background: '#f4f1e8', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
       padding: '20px 20px 28px', fontFamily: "'Courier New', Courier, monospace", color: '#2a2a2a', margin: '0 auto',
     }}>
       <div style={{ borderBottom: '2px dashed #999', paddingBottom: 10, marginBottom: 14 }}>
@@ -134,15 +134,15 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
         <img
           src={`data:${mimeType};base64,${plaintextB64}`}
           alt={`Decrypted transmission from ${doc.from}`}
-          style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto', filter: 'grayscale(1)', imageRendering: 'pixelated' }}
+          style={{ width: '100%', maxWidth: 630, display: 'block', margin: '0 auto', filter: 'grayscale(1)', imageRendering: 'pixelated' }}
         />
       ) : (
         <div style={{ textAlign: 'center', padding: '12px 8px' }}>
           <canvas
             ref={canvasRef}
-            width={420}
-            height={420}
-            style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto', imageRendering: 'pixelated', marginBottom: 14 }}
+            width={630}
+            height={630}
+            style={{ width: '100%', maxWidth: 630, display: 'block', margin: '0 auto', imageRendering: 'pixelated', marginBottom: 14 }}
           />
           <button
             onClick={handleDecrypt}
@@ -153,7 +153,7 @@ export default function PrivateFaxViewer({ trayId, walletAddress }: PrivateFaxVi
               fontFamily: 'inherit', opacity: busy || !walletAddress ? 0.4 : 1,
             }}
           >
-            {busy ? 'DECRYPTING…' : 'DECRYPT WITH WALLET'}
+            {busy ? 'DECRYPTING…' : 'CLICK TO DECRYPT WITH WALLET'}
           </button>
           {error && <div style={{ marginTop: 12, fontSize: 10, color: '#a94228' }}>{error}</div>}
         </div>
