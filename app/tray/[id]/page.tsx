@@ -22,6 +22,7 @@ interface TrayDocument {
   encrypted?: boolean;
   envelope?: unknown;
   createdAt: number;
+  coverNote?: string;
 }
 
 async function getTrayDocument(id: string): Promise<TrayDocument | null> {
@@ -102,6 +103,18 @@ export default async function TrayPage({ params }: { params: Promise<{ id: strin
           <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>FROM: {doc.from}</div>
           <div style={{ fontSize: 10, color: '#888' }}>T/#{doc.id.toUpperCase()} · {receivedAt}</div>
         </div>
+
+        {doc.coverNote && (
+          <div style={{
+            borderLeft: '3px solid #999',
+            background: '#e8e4d8',
+            padding: '8px 12px',
+            marginBottom: 14,
+          }}>
+            <div style={{ fontSize: 9, letterSpacing: 1, color: '#888', marginBottom: 4 }}>COVER NOTE</div>
+            <div style={{ fontSize: 12, color: '#2a2a2a', whiteSpace: 'pre-wrap' }}>{doc.coverNote}</div>
+          </div>
+        )}
 
         {/* Static bitmap render — no scripts, no remote loads */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
