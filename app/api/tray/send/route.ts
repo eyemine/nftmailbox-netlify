@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
       channel?: 'public' | 'private';
       fromDomain?: string;
       collection?: string;
+      coverNote?: string;
     };
 
     const collection = (body.collection as string | undefined)?.toLowerCase();
@@ -345,6 +346,9 @@ export async function POST(req: NextRequest) {
     if (chainTrayId) {
       trayPayload.chainTrayId = chainTrayId;
     }
+    if (body.coverNote && body.coverNote.trim()) {
+      trayPayload.coverNote = body.coverNote.trim().slice(0, 140);
+    }
     if (channel === 'private' && recipientFaxPubKey) {
       try {
         trayPayload.channel = 'private';
@@ -392,7 +396,7 @@ export async function POST(req: NextRequest) {
         await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-          body: JSON.stringify({ action: 'markTrayForwarded', secret: WEBHOOK_SECRET, trayId: chainTrayId }),
+          body: JSON.stringify({ action: 'markTrayForwarded', secret: WEBHOOK_SECRET, trayId: chainTrayId, forwardedTrayId: data.id }),
         });
       } catch { /* non-fatal — the mint gate can be retried by forwarding again */ }
     }

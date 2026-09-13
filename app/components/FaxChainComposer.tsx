@@ -25,6 +25,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
   const [previousIds, setPreviousIds] = useState('');
   const [blockHash, setBlockHash] = useState('');
   const [to, setTo] = useState('');
+  const [coverNote, setCoverNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [link, setLink] = useState<ChainLink | null>(null);
@@ -97,6 +98,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
           ownerWallet,
           to: to.trim(),
           chainTrayId: link.id,
+          ...(coverNote.trim() ? { coverNote: coverNote.trim().slice(0, 140) } : {}),
         }),
       });
       const data = await res.json() as { trayUrl?: string; error?: string; isForward?: boolean };
@@ -180,6 +182,18 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
               placeholder="next@nftmail.box"
               className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-violet-500/50"
             />
+          </div>
+          <div>
+            <label className="block text-[10px] text-[var(--muted)] mb-1">Cover note (optional, max 140 chars)</label>
+            <textarea
+              value={coverNote}
+              onChange={(e) => setCoverNote(e.target.value.slice(0, 140))}
+              rows={2}
+              maxLength={140}
+              placeholder="A short note attached to this fax…"
+              className="w-full rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-violet-500/50"
+            />
+            <p className="text-right text-[9px] text-[var(--muted)] mt-1">{coverNote.length}/140</p>
           </div>
           <button
             onClick={() => void forward()}

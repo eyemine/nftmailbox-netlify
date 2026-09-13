@@ -99,6 +99,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
   const [fileB64, setFileB64] = useState('');
   const [fileFormat, setFileFormat] = useState<'png' | 'bmp' | 'jpg'>('png');
   const [fileName, setFileName] = useState('');
+  const [coverNote, setCoverNote] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [trayUrl, setTrayUrl] = useState('');
@@ -224,7 +225,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       const res = await fetch('/api/tray/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: sendChannel }),
+        body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: sendChannel, ...(coverNote.trim() ? { coverNote: coverNote.trim().slice(0, 140) } : {}) }),
       });
       const data = (await res.json()) as { trayUrl?: string; error?: string; upgradeUrl?: string };
       if (!res.ok) {
@@ -232,6 +233,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
       }
       setTrayUrl(data.trayUrl || '');
       setMessage('');
+      setCoverNote('');
       setFileB64('');
       setFileName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -323,6 +325,22 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
           {fileName && <p className="text-xs text-emerald-300 mt-1">Ready: {fileName}</p>}
         </div>
       )}
+
+      <div>
+        <label htmlFor="coverNote" className="block text-sm font-medium text-gray-300 mb-1">
+          Cover note (optional)
+        </label>
+        <textarea
+          id="coverNote"
+          value={coverNote}
+          onChange={(e) => setCoverNote(e.target.value.slice(0, 140))}
+          rows={2}
+          maxLength={140}
+          placeholder="A short note attached to this fax (max 140 chars)…"
+          className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-amber-500 transition"
+        />
+        <p className="text-right text-[10px] text-gray-500 mt-1">{coverNote.length}/140</p>
+      </div>
 
       {error && (
         <div className="p-3 bg-red-900/30 border border-red-700 rounded text-red-400 text-sm">
