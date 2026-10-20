@@ -7,6 +7,7 @@ import { createWalletClient, createPublicClient, custom, http, decodeEventLog, k
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { gnosis, GNO_REGISTRARS } from '../utils/chains';
 import NamespaceRegistrarABI from '../abi/NamespaceRegistrar.json';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 type MintStep = 'idle' | 'minting' | 'done' | 'error';
 type MintMode = 'gasless' | 'wallet';
@@ -249,7 +250,7 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
     setClaimStepC('minting');
     setError(null);
     try {
-      const res = await fetch('/api/claim-sovereign', {
+      const res = await workerFetch('/api/claim-sovereign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,7 +278,7 @@ export function MintNFTMail({ initialName }: { initialName?: string } = {}) {
     setClaimStep('minting');
     setError(null);
     try {
-      const res = await fetch('/api/claim-sovereign', {
+      const res = await workerFetch('/api/claim-sovereign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

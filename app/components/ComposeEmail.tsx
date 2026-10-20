@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+import { workerFetch } from '@/app/lib/worker-fetch';
 type NftmailTier = 'free' | 'pro' | 'premium';
 
 interface ComposeEmailProps {
@@ -153,7 +154,7 @@ export function ComposeEmail({
       
       // Send to each recipient
       for (const recipient of recipients) {
-        const res = await fetch('/api/send-email', {
+        const res = await workerFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 

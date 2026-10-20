@@ -1,7 +1,7 @@
 /// POST /api/send-email
 /// Send email on behalf of a label@nftmail.box address.
 ///
-/// Auth: ownerWallet in body (verified against KV-registered controller)
+/// Auth: verified caller (Quick Auth / Privy token) must own the label (caller-auth.ts)
 ///
 /// Tier gate: basic = receive-only. lite/premium/ghost = send via Mailgun.
 ///
@@ -12,6 +12,7 @@
 ///     Detected by zoho-seat KV flag set during upgrade provisioning.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCaller, callerOwnsInbox } from '../../lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -187,15 +188,21 @@ export async function POST(req: NextRequest) {
       replyToMessageId?: string;
     };
 
-    const { label, domain, ownerWallet, to, subject, cc, bcc } = body;
+    const { label, domain, to, subject, cc, bcc } = body;
     const mailBody = body.body || '';
     const fromDomain = domain || 'nftmail.box';
 
     if (!label || typeof label !== 'string') {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'ownerWallet required for auth' }, { status: 401 });
+    // ownerWallet in the body is a claim anyone can make; the verified caller
+    // (Quick Auth / Privy token) must own the sending inbox.
+    const caller = await verifyCaller(req);
+    if (!caller) {
+      return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+    }
+    if (!(await callerOwnsInbox(caller, label))) {
+      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
     }
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
@@ -219,11 +226,6 @@ export async function POST(req: NextRequest) {
 
     if (!resolved?.exists) {
       return NextResponse.json({ error: 'This address does not exist' }, { status: 404 });
-    }
-
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (controller && controller !== ownerWallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
     }
 
     const accountTier = (resolved.accountTier as string | undefined) || 'basic';

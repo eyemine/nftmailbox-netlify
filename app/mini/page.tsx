@@ -6,6 +6,7 @@ import { sdk } from '@farcaster/miniapp-sdk';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
 import { ChatView } from '../components/ChatView';
 
+import { workerFetch } from '@/app/lib/worker-fetch';
 const WORKER_URL = '/api/mini-worker';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 const TREASURY = '0xeD0B0694953158dd54D0c36D320b391f44cd67f3';
@@ -335,7 +336,7 @@ export default function MiniApp() {
         setUpgrading(false);
         return;
       }
-      const res = await fetch('/api/mini-upgrade', {
+      const res = await workerFetch('/api/mini-upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fid, agentName, txHash: result.send.transaction, currentTier: inboxTier, targetTier: upgradeToTier }),
@@ -378,7 +379,7 @@ export default function MiniApp() {
       const [fidResult, nftResults] = await Promise.allSettled([
         // FID check — idempotent, returns already_provisioned if account exists
         userFid
-          ? fetch(WORKER_URL, {
+          ? workerFetch(WORKER_URL, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
@@ -388,7 +389,7 @@ export default function MiniApp() {
         verifiedAddrs.length > 0
           ? Promise.all(
               verifiedAddrs.map(addr =>
-                fetch(WORKER_URL, {
+                workerFetch(WORKER_URL, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ action: 'listNftmailByController', controller: addr }),
@@ -454,7 +455,7 @@ export default function MiniApp() {
     if (!fid) { setError('No FID detected — open this in Warpcast.'); setStep('error'); return; }
     setStep('provisioning');
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await workerFetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -502,17 +503,17 @@ export default function MiniApp() {
     try {
       // Fetch inbox, sentbox, and quota in parallel for accurate sendsRemaining
       const [inboxRes, sentboxRes, quotaRes] = await Promise.all([
-        fetch(WORKER_URL, {
+        workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getInbox', localPart: name }),
         }),
-        fetch(WORKER_URL, {
+        workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getSentbox', localPart: name }),
         }).catch(() => null), // non-fatal if sentbox fails
-        fetch(WORKER_URL, {
+        workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'checkSendLimit', agentName: name }),
@@ -524,7 +525,7 @@ export default function MiniApp() {
       const fidTier = data.tier || 'free';
       let sovereignTier = fidTier;
       try {
-        const sovereignRes = await fetch(WORKER_URL, {
+        const sovereignRes = await workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getAgentProfile', agentName: name }),
@@ -592,7 +593,7 @@ export default function MiniApp() {
       // Load forwarding config for premium users
       if (normaliseTier(effectiveTier) === 'premium') {
         try {
-          const fwdRes = await fetch(WORKER_URL, {
+          const fwdRes = await workerFetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'getForwardingConfig', agentName: name }),
@@ -621,7 +622,7 @@ export default function MiniApp() {
   const sendTest = useCallback(async () => {
     setStep('sending');
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await workerFetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'sendTestEmail', agentName }),
@@ -672,7 +673,7 @@ export default function MiniApp() {
     try {
       // Send to each recipient
       for (const recipient of recipients) {
-        const res = await fetch(WORKER_URL, {
+        const res = await workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -709,7 +710,7 @@ export default function MiniApp() {
         return inboxTier === 'premium' ? next : next.slice(0, 10);
       });
       // Persist to worker (non-blocking)
-      fetch(WORKER_URL, {
+      workerFetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'saveSentMessage', localPart: agentName, message: newSent }),
@@ -893,7 +894,7 @@ export default function MiniApp() {
       setSigninError('');
       try {
         // Check if account exists and get profile
-        const res = await fetch(WORKER_URL, {
+        const res = await workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'getAgentProfile', agentName: label }),
@@ -1071,7 +1072,7 @@ export default function MiniApp() {
                     throw new Error(d.error || `Send failed (${res.status})`);
                   }
                   const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
-                  fetch(WORKER_URL, {
+                  workerFetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1092,14 +1093,14 @@ export default function MiniApp() {
                 onDeleteThread={async (_contact, inboxIds, sentIds) => {
                   const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
                   await Promise.all(inboxIds.map(id =>
-                    fetch(WORKER_URL, {
+                    workerFetch(WORKER_URL, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
                     }).catch(() => {})
                   ));
                   await Promise.all(sentIds.map(id =>
-                    fetch(WORKER_URL, {
+                    workerFetch(WORKER_URL, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),
@@ -1142,7 +1143,7 @@ export default function MiniApp() {
                             e.stopPropagation();
                             if (confirm('Delete this email?')) {
                               try {
-                                await fetch(WORKER_URL, {
+                                await workerFetch(WORKER_URL, {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: msg.id }),
@@ -1218,7 +1219,7 @@ export default function MiniApp() {
                               e.stopPropagation();
                               if (confirm('Delete this sent email?')) {
                                 // Delete from worker (non-blocking)
-                                fetch(WORKER_URL, {
+                                workerFetch(WORKER_URL, {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ action: 'deleteSentMessage', localPart: agentName, messageId: msg.id }),
@@ -1548,7 +1549,7 @@ export default function MiniApp() {
         } catch {
           // SIWF may not be available in all clients — proceed without (worker validates tier)
         }
-        const res = await fetch(WORKER_URL, {
+        const res = await workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

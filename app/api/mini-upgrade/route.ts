@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCaller, callerOwnsInbox } from '../../lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -116,11 +117,21 @@ export async function POST(req: NextRequest) {
     targetTier?: string;
   };
 
-  const { fid, agentName, txHash, currentTier = 'basic', targetTier } = body;
+  const { agentName, txHash, currentTier = 'basic', targetTier } = body;
 
-  if (!fid || !agentName || !txHash) {
+  if (!agentName || !txHash) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
+  // linkWallet below binds the payer's wallet to this inbox, so the FID must be
+  // proven (Quick Auth) and must control the inbox — never taken from the body.
+  const caller = await verifyCaller(req);
+  if (!caller || caller.via !== 'farcaster' || !caller.fid) {
+    return NextResponse.json({ error: 'Farcaster sign-in required' }, { status: 401 });
+  }
+  if (!(await callerOwnsInbox(caller, agentName))) {
+    return NextResponse.json({ error: 'Not your inbox' }, { status: 403 });
+  }
+  const fid = caller.fid;
 
   // Determine new tier based on current tier and target tier
   let newTier: string;

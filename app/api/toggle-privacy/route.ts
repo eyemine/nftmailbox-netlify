@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCaller, callerOwnsInbox } from '../../lib/caller-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -19,6 +20,14 @@ export async function POST(req: NextRequest) {
         { error: 'Missing name, enabled (boolean), or walletAddress' },
         { status: 400 }
       );
+    }
+
+    const caller = await verifyCaller(req);
+    if (!caller) {
+      return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+    }
+    if (!(await callerOwnsInbox(caller, name))) {
+      return NextResponse.json({ error: 'Not your inbox' }, { status: 403 });
     }
 
     const res = await fetch(WORKER_URL, {

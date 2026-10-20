@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+import { workerFetch } from '@/app/lib/worker-fetch';
 interface TogglePrivacyProps {
   name: string;
   walletAddress: string;
@@ -36,7 +37,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
     setToggleError('');
     try {
       const newState = !privacyEnabled;
-      const res = await fetch('/api/toggle-privacy', {
+      const res = await workerFetch('/api/toggle-privacy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

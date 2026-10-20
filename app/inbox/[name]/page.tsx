@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
 
+import { workerFetch } from '@/app/lib/worker-fetch';
 // Tier normalisation: convert various tier names to standard NftmailTier
 type NftmailTier = 'free' | 'pro' | 'premium';
 function normaliseTier(tier: string | undefined): NftmailTier {
@@ -351,7 +352,7 @@ export default function InboxPage() {
     if (!name) return;
     (async () => {
       try {
-        const res = await fetch(WORKER_URL, {
+        const res = await workerFetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'resolveAddress', name }),
@@ -422,7 +423,7 @@ export default function InboxPage() {
         const siteDomain = typeof window !== 'undefined' ? window.location.hostname : '';
         const inboxMailDomain = siteDomain.includes('ghostmail') ? 'ghostmail' : 'nftmail';
         try {
-          const kvRes = await fetch(WORKER_URL, {
+          const kvRes = await workerFetch(WORKER_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'getInbox', localPart: name, ...(inboxMailDomain === 'ghostmail' ? { domain: 'ghostmail' } : {}) }),
@@ -455,7 +456,7 @@ export default function InboxPage() {
         return;
       }
 
-      const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}${isOwner && user?.wallet?.address ? `&ownerWallet=${encodeURIComponent(user.wallet.address)}` : ''}`);
+      const res = await workerFetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}${isOwner && user?.wallet?.address ? `&ownerWallet=${encodeURIComponent(user.wallet.address)}` : ''}`);
       const data = await res.json() as { error?: string; messages?: any[]; [key: string]: any };
       if (data.error && !data.messages) {
         setError(data.error);
@@ -492,7 +493,7 @@ export default function InboxPage() {
     if (!name || !resolved?.exists) return;
     setLoadingSent(true);
     try {
-      const res = await fetch(WORKER_URL, {
+      const res = await workerFetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'getSentbox', localPart: name }),
@@ -583,7 +584,7 @@ export default function InboxPage() {
     const nextTier = privacyTier === 'exposed' ? 'private' : 'exposed';
     setTogglingPrivacy(true);
     try {
-      await fetch('/api/inbox-action', {
+      await workerFetch('/api/inbox-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'setPrivacy', localPart: agentName, tier: nextTier, ownerWallet: user?.wallet?.address }),
@@ -597,7 +598,7 @@ export default function InboxPage() {
     if (!confirm('Delete this message permanently?')) return;
     setDeletingId(messageId);
     try {
-      const res = await fetch('/api/inbox-action', {
+      const res = await workerFetch('/api/inbox-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId, ownerWallet: user?.wallet?.address }),
@@ -1029,7 +1030,7 @@ export default function InboxPage() {
                           <button
                             onClick={async () => {
                               if (!confirm('Delete this message permanently?')) return;
-                              await fetch('/api/inbox-action', {
+                              await workerFetch('/api/inbox-action', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: item.id, ownerWallet: user?.wallet?.address }),
@@ -1707,7 +1708,7 @@ export default function InboxPage() {
                         <code className="text-[8px] font-mono text-[var(--muted)] break-all">{dm.contentHash?.slice(0, 24)}...</code>
                         <button
                           onClick={async () => {
-                            await fetch('/api/inbox-action', {
+                            await workerFetch('/api/inbox-action', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId: dm.id }),

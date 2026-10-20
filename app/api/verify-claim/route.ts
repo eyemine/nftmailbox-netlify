@@ -8,13 +8,18 @@ const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
+    // Only the claim-code lookup; anything else would ride on WORKER_SECRET.
+    const parsed = (() => { try { return JSON.parse(body) as Record<string, unknown>; } catch { return null; } })();
+    if (!parsed || parsed.action !== 'verifyClaim' || typeof parsed.claimCode !== 'string') {
+      return NextResponse.json({ error: 'Action not permitted' }, { status: 403 });
+    }
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Worker-Secret': WORKER_SECRET,
       },
-      body,
+      body: JSON.stringify({ action: 'verifyClaim', claimCode: parsed.claimCode }),
     });
     const data = await res.text();
     return new NextResponse(data, {

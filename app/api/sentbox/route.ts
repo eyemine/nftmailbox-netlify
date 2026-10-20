@@ -3,6 +3,7 @@
 /// Messages stored by send-email API with full body content.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { mayReadInboxes } from '../../lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -11,6 +12,9 @@ export async function GET(req: NextRequest) {
   const label = req.nextUrl.searchParams.get('label');
   if (!label || !/^[a-z0-9_.-]+$/.test(label)) {
     return NextResponse.json({ error: 'Missing or invalid label' }, { status: 400 });
+  }
+  if (!(await mayReadInboxes(req, [label]))) {
+    return NextResponse.json({ error: 'Authentication required to view this sentbox' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
   }
 
   try {

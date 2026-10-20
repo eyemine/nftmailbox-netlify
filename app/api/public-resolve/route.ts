@@ -17,6 +17,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { mayReadInboxes, inboxRefs } from '../../lib/caller-auth';
+
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
@@ -29,6 +31,7 @@ const READ_ONLY_ACTIONS = new Set([
   'checkSendLimit',
   'getStats',
 ]);
+const CONTENT_ACTIONS = new Set(['getInbox', 'getSentbox', 'getBlindInbox']);
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,6 +40,11 @@ export async function POST(req: NextRequest) {
 
     if (!action || !READ_ONLY_ACTIONS.has(action)) {
       return NextResponse.json({ error: 'Action not permitted via public proxy' }, { status: 403 });
+    }
+    // Message content is only public for agent (_) and `exposed` inboxes;
+    // private inboxes need the verified owner.
+    if (CONTENT_ACTIONS.has(action) && !(await mayReadInboxes(req, inboxRefs(body)))) {
+      return NextResponse.json({ error: 'This inbox is private' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
     }
 
     const res = await fetch(WORKER_URL, {

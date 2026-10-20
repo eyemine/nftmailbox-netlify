@@ -103,11 +103,6 @@ async function callWorker(action: string, params: Record<string, unknown>) {
   return res.json();
 }
 
-async function sendEmail(params: any) {
-  // Use the worker's sendA2A or direct email action
-  return callWorker('sendEmail', params);
-}
-
 async function queryInbox(agentName: string, limit = 20, unreadOnly = false) {
   return callWorker('getInbox', { 
     localPart: agentName + '_',
@@ -164,10 +159,12 @@ export async function POST(req: NextRequest) {
         const { name, arguments: args } = params;
         
         switch (name) {
-          case 'send_encrypted_email':
-            result = await sendEmail(args);
-            break;
           case 'query_inbox':
+            // Only the public agent inbox (`name_`); a bare label keeps callers
+            // from reaching any other inbox through the secret-bearing worker call.
+            if (typeof args?.agentName !== 'string' || !/^[a-z0-9.-]+$/.test(args.agentName)) {
+              return NextResponse.json({ jsonrpc: '2.0', id, error: { code: -32602, message: 'agentName must be a bare label' } }, { status: 400 });
+            }
             result = await queryInbox(args.agentName, args.limit, args.unreadOnly);
             break;
           case 'resolve_email':
@@ -176,6 +173,8 @@ export async function POST(req: NextRequest) {
           case 'check_privacy_status':
             result = await checkPrivacyStatus(args.agentName);
             break;
+          // Sending was an unauthenticated relay with a caller-chosen `from`.
+          case 'send_encrypted_email':
           case 'provision_inbox':
           case 'upgrade_tier':
             result = { 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCaller } from '../../lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -27,7 +28,7 @@ async function sendWelcomeEmail(claimedEmail: string, keyType: string): Promise<
     `Read inbox:   ${inboxUrl}`,
     `Dashboard:    https://nftmail.box/dashboard`,
     ``,
-    `Your inbox is privacy-first — messages are encrypted at rest`,
+    `Your inbox is private: only you can read it from your dashboard`,
     `and only you can read them with your connected wallet.`,
     ``,
     `Free tier includes:`,
@@ -85,6 +86,12 @@ export async function POST(req: NextRequest) {
 
     if (!claimedEmail.endsWith('@nftmail.box')) {
       return NextResponse.json({ error: 'claimedEmail must end with @nftmail.box' }, { status: 400 });
+    }
+
+    // The inbox is bound to ownerAddress, so the caller must prove that wallet.
+    const caller = await verifyCaller(req);
+    if (!caller || !caller.wallets.includes(ownerAddress.toLowerCase())) {
+      return NextResponse.json({ error: 'Sign in with the owning wallet' }, { status: 401 });
     }
 
     const res = await fetch(WORKER_URL, {

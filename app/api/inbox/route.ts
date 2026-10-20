@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { mayReadInboxes } from '../../lib/caller-auth';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
@@ -24,13 +25,11 @@ export async function GET(req: NextRequest) {
     // (e.g. ghostagent_) stays distinct from the human inbox (ghostagent).
     const localPart = email.split('@')[0];
     const agentName = localPart;
-    const isAgentAddress = localPart.endsWith('_');
 
     // ── Auth gate: non-agent (human) inboxes are private ──
     // Agent addresses (trailing _) are publicly readable.
-    // All others require the caller to supply their ownerWallet, which must
-    // match the controller recorded in the worker's KV.
-    const ownerWalletParam = req.nextUrl.searchParams.get('ownerWallet')?.toLowerCase() || '';
+    // All others require a verified caller (Quick Auth / Privy token) who
+    // owns the inbox — see mayReadInboxes below.
 
     // Always fetch from Worker KV (all streams store here)
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
@@ -51,36 +50,16 @@ export async function GET(req: NextRequest) {
           body: JSON.stringify({ action: 'resolveAddress', name: agentName }),
         }),
       ]);
-
-      let controller = '';
-      let onChainOwner = '';
-      let safe = '';
-      let privacyTier = 'exposed';
       if (resolveRes.ok) {
         const rd = await resolveRes.json() as Record<string, any>;
         accountTier = rd.accountTier || null;
-        privacyTier = (rd.privacyTier || 'exposed').toLowerCase();
-        controller = (rd.controller || '').toLowerCase();
-        onChainOwner = (rd.onChainOwner || '').toLowerCase();
-        safe = (rd.safe || '').toLowerCase();
       }
 
-      // Enforce auth gate for human accounts (no trailing _) unless explicitly public
-      if (!isAgentAddress && privacyTier !== 'exposed') {
-        if (!ownerWalletParam) {
-          return NextResponse.json({ error: 'Authentication required to view this inbox', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
-        }
-        // If owner addresses are recorded, verify the caller matches one of them
-        const hasOwnerRecord = !!(controller || onChainOwner || safe);
-        if (hasOwnerRecord) {
-          const isAuthorized = 
-            (controller && ownerWalletParam === controller) ||
-            (onChainOwner && ownerWalletParam === onChainOwner) ||
-            (safe && ownerWalletParam === safe);
-          if (!isAuthorized) {
-            return NextResponse.json({ error: 'Wallet address does not match inbox owner', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
-          }
-        }
+      // Human inboxes are private unless the owner chose `exposed`; agent (_)
+      // inboxes are public. Private ones need a verified caller who owns the
+      // inbox — the ownerWallet query param is a claim, not proof.
+      if (!(await mayReadInboxes(req, [email]))) {
+        return NextResponse.json({ error: 'Authentication required to view this inbox', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
       }
 
       if (workerRes.ok) {

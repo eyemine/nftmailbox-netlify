@@ -16,6 +16,7 @@ import PgpKeySetup from '../components/PgpKeySetup';
 import PgpDecrypt from '../components/PgpDecrypt';
 import PgpOnchainSetup from '../components/PgpOnchainSetup';
 import { signWithWallet } from '@/app/lib/wallet-sign';
+import { workerFetch } from '@/app/lib/worker-fetch';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
 // app (fax.nftmail.box). Hidden in the mailbox console.
 // import FaxChainComposer from '../components/FaxChainComposer';
@@ -212,7 +213,7 @@ function DashboardContent() {
     if (!selectedName?.email) return;
     const label = selectedName.email.replace('@nftmail.box', '');
     try {
-      await fetch('/api/delete-message', {
+      await workerFetch('/api/delete-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId }),
@@ -274,7 +275,7 @@ function DashboardContent() {
     setLoadingInbox(true);
     try {
       const ownerParam = walletAddress ? `&ownerWallet=${encodeURIComponent(walletAddress)}` : '';
-      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
+      const inboxRes = await workerFetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
@@ -331,7 +332,7 @@ function DashboardContent() {
     setLoadingSent(true);
     try {
       const label = selectedName.email.replace('@nftmail.box', '');
-      const res = await fetch(`/api/sentbox?label=${encodeURIComponent(label)}`);
+      const res = await workerFetch(`/api/sentbox?label=${encodeURIComponent(label)}`);
       const data = await res.json() as { error?: string; messages?: any[] };
       if (!res.ok) throw new Error(data.error || 'Failed to fetch sentbox');
       setSentMessages(data.messages || []);
@@ -371,7 +372,7 @@ function DashboardContent() {
     const fromLabel = selectedName.label;
     for (const recipient of recipients) {
       try {
-        const res = await fetch('/api/send-email', {
+        const res = await workerFetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -417,7 +418,7 @@ function DashboardContent() {
         params: [message, preferredWallet.address],
       });
 
-      const res = await fetch(WORKER_URL, {
+      const res = await workerFetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -833,7 +834,7 @@ function DashboardContent() {
                         }
                         // Store to KV so it appears in the Sent tab (non-fatal)
                         const label = selectedName.email.replace('@nftmail.box', '');
-                        fetch(WORKER_URL, {
+                        workerFetch(WORKER_URL, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -856,7 +857,7 @@ function DashboardContent() {
                         const label = selectedName.email.replace('@nftmail.box', '');
                         // Delete inbox messages
                         await Promise.all(inboxIds.map(id =>
-                          fetch(WORKER_URL, {
+                          workerFetch(WORKER_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
@@ -864,7 +865,7 @@ function DashboardContent() {
                         ));
                         // Delete sent messages
                         await Promise.all(sentIds.map(id =>
-                          fetch(WORKER_URL, {
+                          workerFetch(WORKER_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),

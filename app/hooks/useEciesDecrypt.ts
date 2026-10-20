@@ -1,5 +1,6 @@
 'use client';
 
+import { workerFetch } from '@/app/lib/worker-fetch';
 /// useEciesDecrypt — React hook for browser-side ECIES decryption of blind inbox messages.
 ///
 /// Flow:
@@ -96,7 +97,7 @@ export function useEciesDecrypt(agentName: string | null): UseEciesDecryptReturn
   const loadBlindInbox = useCallback(async () => {
     if (!agentName) return;
     try {
-      const res = await fetch(PUBLIC_RESOLVE_URL, {
+      const res = await workerFetch(PUBLIC_RESOLVE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'getBlindInbox', localPart: agentName }),
@@ -204,7 +205,7 @@ export function useEciesDecrypt(agentName: string | null): UseEciesDecryptReturn
       setPrivKey(kp.privateKey);
 
       // Register public key with the worker KV under the base identity via proxy
-      await fetch(MINI_WORKER_URL, {
+      await workerFetch(MINI_WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
