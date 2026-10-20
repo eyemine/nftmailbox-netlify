@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export async function POST(req: NextRequest) {
   try {

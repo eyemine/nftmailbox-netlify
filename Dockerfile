@@ -6,7 +6,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -24,6 +24,7 @@ ARG NEXT_PUBLIC_BASE_RPC
 ARG NEXT_PUBLIC_WORKER_URL
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_GHOSTAGENT_PROXY_URL
+ARG BUILD_VERSION=1
 
 RUN npm run build
 

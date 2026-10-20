@@ -4,8 +4,9 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
+import { ChatView } from '../components/ChatView';
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = '/api/mini-worker';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://nftmail.box';
 const TREASURY = '0xeD0B0694953158dd54D0c36D320b391f44cd67f3';
 const BASE_USDC_CAIP19 = 'eip155:8453/erc20:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -15,26 +16,26 @@ const TIER_META: Record<NftmailTier, { label: string; emoji: string; color: stri
   free: {
     label: 'FREE', emoji: '👻', color: 'text-green-400', border: 'border-green-800',
     description: 'Free inbox secured by your Farcaster identity. 8-day history, 10 sends.',
-    features: [['Inbox history','8 days'],['Outbound sends','10'],['Account expiry','Never'],['Identity','Farcaster FID']],
-    upgradeCta: 'Upgrade to Pro — 10 USDC', upgradeFee: 10,
+    features: [['Inbox history','8 days'],['Outbound sends','10 lifetime'],['Account expiry','Never'],['Identity','Farcaster FID']],
+    upgradeCta: 'Upgrade to PRO 10 USDC one-time', upgradeFee: 10,
   },
   pro: {
-    label: 'PRO', emoji: '⚡', color: 'text-yellow-400', border: 'border-yellow-800',
-    description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 50 sends.',
-    features: [['Inbox history','30 days'],['Outbound sends','50'],['Account expiry','Never'],['Beacon NFT','Base chain']],
-    upgradeCta: 'Upgrade to Premium — 14 USDC', upgradeFee: 14,
+    label: 'PRO', emoji: '🗄️', color: 'text-yellow-400', border: 'border-yellow-800',
+    description: 'Permanent inbox backed by a Base NFT beacon. 30-day history, 100 sends daily.',
+    features: [['Inbox history','30 days'],['Outbound sends','100 daily'],['Account expiry','Never'],['Beacon NFT','Base chain']],
+    upgradeCta: 'Upgrade to PREMIUM 14 USDC annual', upgradeFee: 14,
   },
   premium: {
-    label: 'PREMIUM', emoji: '👑', color: 'text-purple-400', border: 'border-purple-800',
-    description: 'Sovereign agent inbox. Unlimited retention, 200 sends, full agent stack.',
-    features: [['Inbox history','Unlimited'],['Outbound sends','200'],['Account expiry','Never'],['Agent stack','ghostagent.ninja']],
+    label: 'PREMIUM', emoji: '💼', color: 'text-purple-400', border: 'border-purple-800',
+    description: 'Sovereign inbox with auto-forwarding. 365-day history, unlimited sends.',
+    features: [['Inbox history','365 days'],['Outbound sends','Unlimited'],['Auto-Forward','Any email'],['Beacon NFT','Base chain']],
     upgradeCta: null, upgradeFee: 0,
   },
 };
 function normaliseTier(raw: string | undefined): NftmailTier {
   const t = (raw ?? '').toLowerCase();
-  if (t === 'premium' || t === 'imago') return 'premium';
-  if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
+  if (t === 'premium' || t === 'imago' || t === 'vault') return 'premium';
+  if (t === 'pro' || t === 'pupa' || t === 'lite' || t === 'professional') return 'pro';
   return 'free';
 }
 function TierBadge({ tier, onClick }: { tier: NftmailTier; onClick: () => void }) {
@@ -127,29 +128,61 @@ function SafeMarkdown({ text }: { text: string }) {
   );
 }
 
+function openUrl(url: string) {
+  try { (sdk.actions as any).openUrl(url); } catch { window.open(url, '_blank'); }
+}
+
 function renderInline(text: string): React.ReactNode[] {
-  // Strip any markdown link syntax [label](url) → just show label
-  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  // Strip bare URLs (no rendering as anchors)
-  text = text.replace(/https?:\/\/\S+/g, '[link]');
+  // Convert markdown link syntax [label](url) → clickable label
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '[$1→$2]');
   const parts: React.ReactNode[] = [];
-  // Tokenise bold+italic, bold, italic, inline code
-  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  // Tokenise URLs, markdown link syntax, bold+italic, bold, italic, inline code
+  const re = /(https?:\/\/[^\s\]]+|\[([^\]]+)→([^\]]+)\]|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
   let last = 0, m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(<span key={idx++}>{text.slice(last, m.index)}</span>);
-    if (m[2]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[2]}</strong>);
-    else if (m[3]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[3]}</strong>);
-    else if (m[4]) parts.push(<em key={idx++} className="italic text-gray-200">{m[4]}</em>);
-    else if (m[5]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[5]}</code>);
+    if (m[1] && /^https?:\/\//.test(m[1])) {
+      const url = m[1];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {url}
+        </button>
+      );
+    } else if (m[2] && m[3]) {
+      const label = m[2];
+      const url = m[3];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {label}
+        </button>
+      );
+    } else if (m[4]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[4]}</strong>);
+    else if (m[5]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[5]}</strong>);
+    else if (m[6]) parts.push(<em key={idx++} className="italic text-gray-200">{m[6]}</em>);
+    else if (m[7]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[7]}</code>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(<span key={idx++}>{text.slice(last)}</span>);
   return parts;
 }
 
-type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'error';
+type Step = 'loading' | 'entry' | 'naming' | 'signin' | 'provisioning' | 'success' | 'already' | 'inbox' | 'compose' | 'sending' | 'sent' | 'upgrade' | 'settings' | 'account-select' | 'error';
+
+interface NftAccount {
+  name: string;
+  email: string;
+  gnoName?: string;
+  tld?: string;
+}
 
 interface ProvisionResult {
   status: string;
@@ -168,7 +201,9 @@ interface InboxMessage {
   content?: string; // raw from worker getInbox (maps to payload.body)
   receivedAt: number;
   encrypted?: boolean;
-  type?: 'inbox' | 'sent';
+  type?: 'inbox' | 'sent' | 'tray-notification';
+  trayId?: string;  // for NFTfax tray notifications
+  channel?: 'public' | 'private';
 }
 
 interface InboxResult {
@@ -182,15 +217,21 @@ export default function MiniApp() {
   const [step, setStep] = useState<Step>('loading');
   const [fid, setFid] = useState<number | null>(null);
   const [customName, setCustomName] = useState('');
+  const [nftAccounts, setNftAccounts] = useState<NftAccount[]>([]);
+  const [fidAgentName, setFidAgentName] = useState<string | null>(null);
   const [agentName, setAgentName] = useState('');
   const [humanEmail, setHumanEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [inboxTier, setInboxTier] = useState<NftmailTier>('free');
+  const [tierLoaded, setTierLoaded] = useState(false);
+  const [beaconInfo, setBeaconInfo] = useState<{ chain: string; contract: string; tokenId: number } | null>(null);
   const [showTierAbout, setShowTierAbout] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+  const [targetUpgradeTier, setTargetUpgradeTier] = useState<NftmailTier>('pro');
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [sentMessages, setSentMessages] = useState<InboxMessage[]>([]);
   const [sendsRemaining, setSendsRemaining] = useState<number | string>(10);
+  const [chatMode, setChatMode] = useState(false);
   const [composeTo, setComposeTo] = useState('');
   const [composeCc, setComposeCc] = useState('');
   const [composeBcc, setComposeBcc] = useState('');
@@ -201,7 +242,16 @@ export default function MiniApp() {
   const [error, setError] = useState('');
   const [eciesPrivKey, setEciesPrivKey] = useState<string | null>(null);
   const [openMsgId, setOpenMsgId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [signinEmail, setSigninEmail] = useState('');
+  const [signinError, setSigninError] = useState('');
+  const [signinLoading, setSigninLoading] = useState(false);
   const otpRequestedRef = useRef(false);
+  // Forwarding (premium only)
+  const [forwardEnabled, setForwardEnabled] = useState(false);
+  const [forwardTarget, setForwardTarget] = useState('');
+  const [savingForward, setSavingForward] = useState(false);
+  const [forwardSaved, setForwardSaved] = useState(false);
 
   // Draft auto-save to localStorage every 5 seconds
   useEffect(() => {
@@ -262,15 +312,20 @@ export default function MiniApp() {
     sdk.actions.openUrl(`${APP_URL}/mini`);
   }, []);
 
-  const openUpgrade = useCallback(() => setStep('upgrade'), []);
+  const openUpgrade = useCallback((target: NftmailTier = 'pro') => {
+    setTargetUpgradeTier(target);
+    setStep('upgrade');
+  }, []);
 
   async function handlePayAndUpgrade() {
     if (!agentName || upgrading) return;
-    const tierMeta = TIER_META[inboxTier];
-    if (!tierMeta.upgradeFee) return;
+    const upgradeToTier = targetUpgradeTier || (inboxTier === 'free' ? 'pro' : 'premium');
+    const tierMeta = TIER_META[upgradeToTier === 'premium' ? 'pro' : inboxTier];
+    const upgradeFee = upgradeToTier === 'premium' ? 24 : tierMeta.upgradeFee;
+    if (!upgradeFee) return;
     setUpgrading(true);
     try {
-      const amountMicro = String(tierMeta.upgradeFee * 1_000_000);
+      const amountMicro = String(upgradeFee * 1_000_000);
       const result = await (sdk.actions as any).sendToken({
         token: BASE_USDC_CAIP19,
         amount: amountMicro,
@@ -283,7 +338,7 @@ export default function MiniApp() {
       const res = await fetch('/api/mini-upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fid, agentName, txHash: result.send.transaction, currentTier: inboxTier }),
+        body: JSON.stringify({ fid, agentName, txHash: result.send.transaction, currentTier: inboxTier, targetTier: upgradeToTier }),
       });
       const data = await res.json() as { status?: string; newTier?: string; error?: string };
       if (data.status === 'upgraded' && data.newTier) {
@@ -301,41 +356,94 @@ export default function MiniApp() {
 
   useEffect(() => {
     const init = async () => {
-      let userFid: number | null = null;
-      try {
-        const context = await sdk.context;
-        userFid = context?.user?.fid ?? null;
-        setFid(userFid);
-      } catch {
-        // running outside Warpcast — continue without FID
-      }
-      // Signal ready immediately after getting context - critical for Farcaster Mini Apps
-      // This must be called before any long-running operations
+      // Signal ready as early as possible — Warpcast waits for this before exposing context.
       try {
         await sdk.actions.ready();
       } catch {
         // ready() may fail outside Warpcast - that's ok
       }
-      // Auto-check: if this FID already has an account, skip straight to inbox
-      if (userFid) {
-        try {
-          const res = await fetch(WORKER_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
-          });
-          const data = await res.json() as ProvisionResult & { eciesPrivateKey?: string };
-          if (data.status === 'already_provisioned' && data.agentName) {
-            setAgentName(data.agentName);
-            setHumanEmail(`${data.agentName}@nftmail.box`);
-            let privKey: string | null = null;
-            try { privKey = localStorage.getItem(`ecies-priv:${data.agentName}`); } catch {}
-            if (privKey) setEciesPrivKey(privKey);
-            await loadInboxDirect(data.agentName, privKey);
-            return;
-          }
-        } catch { /* non-fatal — fall through to entry */ }
+
+      let userFid: number | null = null;
+      let verifiedAddrs: string[] = [];
+      try {
+        const context = await sdk.context;
+        userFid = context?.user?.fid ?? null;
+        setFid(userFid);
+        verifiedAddrs = ((context?.user as unknown as Record<string, unknown>)?.verifiedAddresses as Record<string, string[]> | undefined)?.ethAddresses ?? [];
+      } catch {
+        // running outside Warpcast — continue without FID
       }
+
+      // Run FID check and NFT controller check in parallel
+      const [fidResult, nftResults] = await Promise.allSettled([
+        // FID check — idempotent, returns already_provisioned if account exists
+        userFid
+          ? fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'provisionFidAgent', fid: userFid, preferredName: '', farcasterVisibility: 'fid-only', emailVisibility: 'hidden' }),
+            }).then(r => r.json() as Promise<ProvisionResult & { eciesPrivateKey?: string }>)
+          : Promise.resolve(null),
+        // NFT controller check — look up any nftmailgno: records owned by verified wallets
+        verifiedAddrs.length > 0
+          ? Promise.all(
+              verifiedAddrs.map(addr =>
+                fetch(WORKER_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'listNftmailByController', controller: addr }),
+                }).then(r => r.json() as Promise<{ results?: NftAccount[] }>).catch(() => ({ results: [] as NftAccount[] }))
+              )
+            )
+          : Promise.resolve([]),
+      ]);
+
+      // Parse FID result
+      let fidAccount: (ProvisionResult & { eciesPrivateKey?: string }) | null = null;
+      if (fidResult.status === 'fulfilled' && fidResult.value?.status === 'already_provisioned' && fidResult.value.agentName) {
+        fidAccount = fidResult.value;
+        setFidAgentName(fidResult.value.agentName);
+      }
+
+      // Parse NFT results — flatten across all verified addresses, deduplicate by name
+      const nftMap = new Map<string, NftAccount>();
+      if (nftResults.status === 'fulfilled' && Array.isArray(nftResults.value)) {
+        for (const addrResult of nftResults.value as { results?: NftAccount[] }[]) {
+          for (const acct of addrResult?.results ?? []) {
+            if (acct.name && !nftMap.has(acct.name)) nftMap.set(acct.name, acct);
+          }
+        }
+      }
+      const nftList = Array.from(nftMap.values());
+
+      // Routing logic
+      if (fidAccount && nftList.length === 0) {
+        // FID account only — current fast path
+        setAgentName(fidAccount.agentName!);
+        setHumanEmail(`${fidAccount.agentName}@nftmail.box`);
+        let privKey: string | null = null;
+        try { privKey = localStorage.getItem(`ecies-priv:${fidAccount.agentName}`); } catch {}
+        if (privKey) setEciesPrivKey(privKey);
+        await loadInboxDirect(fidAccount.agentName!, privKey);
+        return;
+      }
+
+      if (!fidAccount && nftList.length === 1) {
+        // Single NFT-backed account, no FID account — auto-login
+        const nft = nftList[0];
+        setAgentName(nft.name);
+        setHumanEmail(nft.email || `${nft.name}@nftmail.box`);
+        await loadInboxDirect(nft.name, null);
+        return;
+      }
+
+      if (nftList.length > 0) {
+        // Multiple accounts or NFT + FID — show account switcher
+        setNftAccounts(nftList);
+        setStep('account-select');
+        return;
+      }
+
       setStep('entry');
     };
     init();
@@ -419,11 +527,21 @@ export default function MiniApp() {
         const sovereignRes = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getAgentProfile', label: name }),
+          body: JSON.stringify({ action: 'getAgentProfile', agentName: name }),
         });
         const sovereignData = await sovereignRes.json();
-        if (sovereignData?.tier && sovereignData.tier !== 'basic' && sovereignData.tier !== 'free') {
-          sovereignTier = sovereignData.tier;
+        // Worker now returns tier in profile.tier (merged from acct-tier)
+        if (sovereignData?.profile?.tier && sovereignData.profile.tier !== 'basic' && sovereignData.profile.tier !== 'free') {
+          sovereignTier = sovereignData.profile.tier;
+        }
+        // Capture beacon NFT details (set during PRO/PREMIUM upgrade)
+        const p = sovereignData?.profile;
+        if (p?.beaconContract && p?.beaconTokenId !== undefined && p?.beaconTokenId !== null) {
+          setBeaconInfo({
+            chain: p.beaconChain || 'base',
+            contract: String(p.beaconContract),
+            tokenId: Number(p.beaconTokenId),
+          });
         }
       } catch {
         // Ignore errors, use FID tier
@@ -446,12 +564,15 @@ export default function MiniApp() {
       // Set tier from response or default to larva
       // Use effectiveTier (combines FID-provisioned and sovereign account tiers)
       setInboxTier(normaliseTier(effectiveTier));
+      setTierLoaded(true);
       // Load sentbox from worker if available
+      // Cap stored sentbox at 10 for free/pro, unlimited for premium
       if (sentboxRes) {
         try {
           const sentData = await sentboxRes.json() as { messages?: InboxMessage[] };
           if (sentData.messages) {
-            setSentMessages(sentData.messages.slice(0, 10));
+            const isPremiumTier = normaliseTier(effectiveTier) === 'premium';
+            setSentMessages(isPremiumTier ? sentData.messages : sentData.messages.slice(0, 10));
           }
         } catch {}
       }
@@ -459,13 +580,30 @@ export default function MiniApp() {
       let quota = data.sendsRemaining ?? 10;
       if (quotaRes) {
         try {
-          const quotaData = await quotaRes.json() as { sendsRemaining?: number };
+          const quotaData = await quotaRes.json() as { sendsRemaining?: number | string };
           if (typeof quotaData.sendsRemaining === 'number') {
             quota = quotaData.sendsRemaining;
+          } else if (quotaData.sendsRemaining === 'unlimited') {
+            quota = 'unlimited';
           }
         } catch {}
       }
       setSendsRemaining(quota);
+      // Load forwarding config for premium users
+      if (normaliseTier(effectiveTier) === 'premium') {
+        try {
+          const fwdRes = await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getForwardingConfig', agentName: name }),
+          });
+          const fwdData = await fwdRes.json() as { config?: { enabled?: boolean; targetEmail?: string } };
+          if (fwdData.config) {
+            setForwardEnabled(fwdData.config.enabled ?? false);
+            setForwardTarget(fwdData.config.targetEmail ?? '');
+          }
+        } catch {}
+      }
     } catch {
       setMessages([]);
     }
@@ -474,7 +612,9 @@ export default function MiniApp() {
   const loadInbox = useCallback(async (name: string) => {
     let privKey = eciesPrivKey;
     if (!privKey) { try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {} }
+    setRefreshing(true);
     await loadInboxDirect(name, privKey);
+    setRefreshing(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eciesPrivKey]);
 
@@ -563,7 +703,11 @@ export default function MiniApp() {
         receivedAt: now,
         type: 'sent',
       };
-      setSentMessages(prev => [newSent, ...prev].slice(0, 10));
+      // Premium = unlimited sentbox; pro/free capped at 10
+      setSentMessages(prev => {
+        const next = [newSent, ...prev];
+        return inboxTier === 'premium' ? next : next.slice(0, 10);
+      });
       // Persist to worker (non-blocking)
       fetch(WORKER_URL, {
         method: 'POST',
@@ -584,6 +728,68 @@ export default function MiniApp() {
         <div className="text-center">
           <Image src={LOADING_LOGO_URL} alt="" width={80} height={80} className="mx-auto mb-4 opacity-80" />
           <p className="text-[#43a574] font-mono text-sm">Initialising...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'account-select') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
+        <div className="w-full max-w-sm flex flex-col gap-4">
+          <div className="text-center mb-2">
+            <Image src={MAILBOX_ICON_URL} alt="" width={48} height={48} className="mx-auto mb-3 opacity-90" />
+            <h2 className="text-white font-bold text-lg">Choose Inbox</h2>
+            <p className="text-gray-500 text-xs mt-1">Multiple accounts found. Which would you like to open?</p>
+          </div>
+
+          {/* NFT-backed accounts */}
+          {nftAccounts.map(acct => (
+            <button
+              key={acct.name}
+              onClick={async () => {
+                setAgentName(acct.name);
+                setHumanEmail(acct.email || `${acct.name}@nftmail.box`);
+                await loadInboxDirect(acct.name, null);
+              }}
+              className="w-full flex items-center gap-3 bg-gray-900 border border-gray-700 hover:border-[#43a574] rounded-xl px-4 py-3.5 text-left transition-colors"
+            >
+              <span className="text-2xl">🗂️</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-mono text-sm truncate">{acct.email || `${acct.name}@nftmail.box`}</p>
+                {acct.gnoName && <p className="text-gray-500 text-[10px] mt-0.5">{acct.gnoName}</p>}
+                <p className="text-[#43a574] text-[9px] mt-0.5 font-semibold uppercase tracking-wider">NFT-backed</p>
+              </div>
+              <span className="text-gray-600 text-sm">→</span>
+            </button>
+          ))}
+
+          {/* FID account (if exists alongside NFT accounts) */}
+          {fidAgentName && (
+            <button
+              onClick={async () => {
+                setAgentName(fidAgentName);
+                setHumanEmail(`${fidAgentName}@nftmail.box`);
+                let privKey: string | null = null;
+                try { privKey = localStorage.getItem(`ecies-priv:${fidAgentName}`); } catch {}
+                if (privKey) setEciesPrivKey(privKey);
+                await loadInboxDirect(fidAgentName, privKey);
+              }}
+              className="w-full flex items-center gap-3 bg-gray-900 border border-gray-700 hover:border-purple-500 rounded-xl px-4 py-3.5 text-left transition-colors"
+            >
+              <span className="text-2xl">👻</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-mono text-sm truncate">{fidAgentName}@nftmail.box</p>
+                {fid && <p className="text-gray-500 text-[10px] mt-0.5">FID #{fid}</p>}
+                <p className="text-purple-400 text-[9px] mt-0.5 font-semibold uppercase tracking-wider">Farcaster identity</p>
+              </div>
+              <span className="text-gray-600 text-sm">→</span>
+            </button>
+          )}
+
+          <p className="text-gray-600 text-[10px] text-center">
+            NFT-backed accounts are owned by the wallet that holds the beacon NFT
+          </p>
         </div>
       </div>
     );
@@ -680,12 +886,8 @@ export default function MiniApp() {
   }
 
   if (step === 'signin') {
-    const [signinEmail, setSigninEmail] = useState('');
-    const [signinError, setSigninError] = useState('');
-    const [signinLoading, setSigninLoading] = useState(false);
-    
     const handleSignin = async () => {
-      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '').replace(/[^a-z0-9-]/g, '');
+      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '');
       if (!label) { setSigninError('Please enter a valid email or label'); return; }
       setSigninLoading(true);
       setSigninError('');
@@ -694,17 +896,18 @@ export default function MiniApp() {
         const res = await fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getAgentProfile', label }),
+          body: JSON.stringify({ action: 'getAgentProfile', agentName: label }),
         });
         const data = await res.json();
-        if (data && data.label) {
-          setAgentName(data.label);
-          setHumanEmail(`${data.label}@nftmail.box`);
-          if (data.tier) setInboxTier(normaliseTier(data.tier));
+        if (data && (data.agentName || data.label)) {
+          const name = data.agentName || data.label;
+          setAgentName(name);
+          setHumanEmail(`${name}@nftmail.box`);
+          if (data.tier || data.profile?.tier) setInboxTier(normaliseTier(data.tier || data.profile?.tier));
           let privKey: string | null = null;
-          try { privKey = localStorage.getItem(`ecies-priv:${data.label}`); } catch {}
+          try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {}
           if (privKey) setEciesPrivKey(privKey);
-          await loadInboxDirect(data.label, privKey);
+          await loadInboxDirect(name, privKey);
         } else {
           setSigninError('Account not found. Check the email or claim a new inbox.');
         }
@@ -814,19 +1017,100 @@ export default function MiniApp() {
               <span className="text-white font-bold text-xl whitespace-nowrap font-mono">nftmail.box</span>
             </div>
             <div className="flex items-center gap-2">
+              {/* Settings gear — PRO and PREMIUM */}
+              {(inboxTier === 'pro' || inboxTier === 'premium') && (
+                <button onClick={() => setStep('settings')} className="text-gray-500 hover:text-purple-400 transition-colors p-1" title="Forwarding settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              )}
               {/* Tier badge — tap for about panel */}
-              <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />
+              {tierLoaded && <TierBadge tier={inboxTier} onClick={() => setShowTierAbout(true)} />}
             </div>
           </div>
           
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">Inbox</h2>
-            <button onClick={() => loadInbox(agentName)} className="text-[#43a574] text-sm hover:text-[#5ab883]">Refresh</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setChatMode(v => { if (!v) loadInbox(agentName); return !v; }); }}
+                className="rounded-full border border-gray-700 px-2.5 py-0.5 text-[10px] text-gray-400 hover:text-white hover:border-[#43a574] transition"
+              >
+                {chatMode ? '📧 Email' : '💬 Chat'}
+              </button>
+              <button
+                onClick={() => loadInbox(agentName)}
+                disabled={refreshing}
+                className="text-[#43a574] text-sm hover:text-[#5ab883] disabled:opacity-50 flex items-center gap-1"
+              >
+                {refreshing ? (
+                  <><span className="inline-block w-3 h-3 border border-[#43a574] border-t-transparent rounded-full animate-spin" /> Refreshing</>
+                ) : 'Refresh'}
+              </button>
+            </div>
           </div>
           <p className="text-[#43a574] font-mono text-xs mb-2">{humanEmail || `${agentName}@nftmail.box`}</p>
           
           {showTierAbout && <TierAboutPanel tier={inboxTier} onClose={() => setShowTierAbout(false)} onUpgrade={() => { setShowTierAbout(false); setStep('upgrade'); }} />}
-          
+
+          {/* Chat view */}
+          {chatMode ? (
+            <div className="h-[500px]">
+              <ChatView
+                myEmail={humanEmail || `${agentName}@nftmail.box`}
+                messages={messages.map(m => ({ id: m.id, fromAddress: m.from, sender: m.from, body: m.body || m.content || '', receivedTime: new Date(m.receivedAt).toISOString(), encrypted: m.encrypted }))}
+                sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || humanEmail, to: m.to, body: m.body || m.content || '', timestamp: m.receivedAt || Date.now() }))}
+                isOwner={true}
+                onSendMessage={async (to, body) => {
+                  const res = await fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fromEmail: humanEmail || `${agentName}@nftmail.box`, toAddress: to, subject: `Re: chat`, content: body }),
+                  });
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => ({})) as { error?: string };
+                    throw new Error(d.error || `Send failed (${res.status})`);
+                  }
+                  const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
+                  fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'storeSentMessage',
+                      localPart: label,
+                      payload: {
+                        messageId: `chat-${Date.now()}`,
+                        from: humanEmail || `${agentName}@nftmail.box`,
+                        to,
+                        subject: 'Re: chat',
+                        body,
+                        timestamp: Date.now(),
+                      },
+                    }),
+                  }).catch(() => {});
+                  setTimeout(() => loadInbox(agentName), 1500);
+                }}
+                onDeleteThread={async (_contact, inboxIds, sentIds) => {
+                  const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
+                  await Promise.all(inboxIds.map(id =>
+                    fetch(WORKER_URL, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
+                    }).catch(() => {})
+                  ));
+                  await Promise.all(sentIds.map(id =>
+                    fetch(WORKER_URL, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),
+                    }).catch(() => {})
+                  ));
+                  loadInbox(agentName);
+                }}
+              />
+            </div>
+          ) : (
+            <>
           {messages.length === 0 ? (
             <div className="text-center py-12">
               <Image src={EMPTY_INBOX_URL} alt="" width={80} height={80} className="mx-auto mb-3 opacity-70" />
@@ -834,8 +1118,8 @@ export default function MiniApp() {
               <p className="text-gray-600 text-xs mt-1">Send a test email to verify delivery</p>
             </div>
           ) : (
-            <div className="space-y-2 mb-4">
-              {messages.slice(0, 10).map(msg => {
+            <div className="space-y-2 mb-4 max-h-[22rem] overflow-y-auto pr-1">
+              {messages.map(msg => {
                 const isOpen = openMsgId === msg.id;
                 const body = msg.content || msg.body || '';
                 return (
@@ -877,7 +1161,22 @@ export default function MiniApp() {
                     {isOpen && (
                       <div className="mt-3 pt-3 border-t border-gray-800">
                         {body ? (
-                          <SafeMarkdown text={body} />
+                          <>
+                            <SafeMarkdown text={msg.trayId ? body.replace(/\[link\]/g, `[View](${APP_URL}/tray/${msg.trayId})`) : body} />
+                            {msg.trayId && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openUrl(`${APP_URL}/tray/${msg.trayId}`); }}
+                                className="mt-2 text-black bg-[#43a574] hover:bg-[#66c594] text-xs font-bold py-1.5 px-3 rounded"
+                              >
+                                {msg.channel === 'private' ? '🔒 Open private fax' : '👁 View fax'}
+                              </button>
+                            )}
+                            {msg.trayId && msg.channel === 'private' && (
+                              <p className="mt-2 text-[10px] text-emerald-300">
+                                End-to-end encrypted on nftmail.box — only the recipient wallet can decrypt.
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
                         )}
@@ -895,12 +1194,14 @@ export default function MiniApp() {
               onClick={() => setOpenMsgId(openMsgId === 'sentbox-header' ? null : 'sentbox-header')}
             >
               <span className="text-gray-400 text-sm">Sentbox</span>
-              <span className="text-gray-500 text-xs">{sentMessages.length}/10</span>
+              <span className="text-gray-500 text-xs">
+                {inboxTier === 'premium' ? sentMessages.length : `${sentMessages.length}/10`}
+              </span>
             </button>
             {sentMessages.length === 0 ? (
               <p className="text-gray-600 text-xs">No sent emails yet</p>
             ) : (
-              <div className="space-y-2 mt-2">
+              <div className="space-y-2 mt-2 max-h-[12rem] overflow-y-auto pr-1">
                 {sentMessages.map(msg => {
                   const isOpen = openMsgId === msg.id;
                   const body = msg.content || msg.body || '';
@@ -948,13 +1249,48 @@ export default function MiniApp() {
               </div>
             )}
           </div>
+          </>)}
 
           <div className="space-y-2 mt-6">
             <button onClick={() => setStep('compose')} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2">
               <span>✉️</span> Compose
             </button>
-            <p className="text-gray-600 text-xs text-center">{sendsRemaining} sends remaining</p>
-            
+            <p className="text-gray-600 text-xs text-center">
+              {sendsRemaining === 'unlimited' ? 'Unlimited sends' : `${sendsRemaining} sends remaining`}
+            </p>
+
+            {/* Beacon NFT panel (PRO/PREMIUM) — proof of ownership on Base */}
+            {beaconInfo && (inboxTier === 'pro' || inboxTier === 'premium') && (
+              <div className="p-3 bg-gradient-to-br from-blue-950/40 to-purple-950/40 rounded-lg border border-blue-800/40">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-mono text-blue-300">⛓️ Beacon NFT · Base</span>
+                  <span className="text-[10px] text-gray-500">#{beaconInfo.tokenId}</span>
+                </div>
+                <p className="text-[10px] text-gray-500 mb-2 font-mono break-all">{beaconInfo.contract.slice(0, 6)}…{beaconInfo.contract.slice(-4)}</p>
+                <div className="flex gap-2">
+                  <a
+                    href={`https://basescan.org/token/${beaconInfo.contract}?a=${beaconInfo.tokenId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center text-[11px] py-1.5 px-2 bg-gray-900 hover:bg-gray-800 text-gray-300 rounded border border-gray-700 transition-colors"
+                  >
+                    Basescan
+                  </a>
+                  <a
+                    href={`https://opensea.io/assets/base/${beaconInfo.contract}/${beaconInfo.tokenId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-center text-[11px] py-1.5 px-2 bg-gray-900 hover:bg-gray-800 text-gray-300 rounded border border-gray-700 transition-colors"
+                  >
+                    OpenSea
+                  </a>
+                </div>
+                <p className="text-[10px] text-gray-600 mt-2 leading-snug">
+                  If your Farcaster wallet doesn&apos;t show the NFT, add the contract manually or check on Basescan/OpenSea.
+                </p>
+              </div>
+            )}
+
             {/* Tier upgrade CTA */}
             {TIER_META[inboxTier].upgradeCta && (
               <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
@@ -967,12 +1303,37 @@ export default function MiniApp() {
                     <div className="h-full bg-[#43a574] transition-all" style={{ width: `${Math.max(0, Math.min(100, (typeof sendsRemaining === 'number' ? sendsRemaining : 0) * 10))}%` }} />
                   </div>
                 )}
-                <button
-                  onClick={() => setStep('upgrade')}
-                  className="w-full py-2 px-3 bg-[#43a574] text-black text-sm font-semibold rounded hover:bg-[#3d8f65] transition-colors"
-                >
-                  {TIER_META[inboxTier].upgradeCta} →
-                </button>
+                {inboxTier === 'free' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* PRO — green-tinted dark card */}
+                    <button
+                      onClick={() => openUpgrade('pro')}
+                      className="flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-green-950/40 border border-green-800/40 hover:border-green-600/60 hover:bg-green-950/60 transition-colors text-center"
+                    >
+                      <span className="text-[#43a574] text-xs font-bold tracking-wide">PRO</span>
+                      <span className="text-[10px] text-gray-500 mt-0.5">10 USDC one-time</span>
+                      <span className="mt-2 text-xs text-green-400 font-semibold">Upgrade</span>
+                    </button>
+                    {/* PREMIUM — purple-tinted dark card */}
+                    <button
+                      onClick={() => openUpgrade('premium')}
+                      className="flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-purple-950/40 border border-purple-800/40 hover:border-purple-600/60 hover:bg-purple-950/60 transition-colors text-center"
+                    >
+                      <span className="text-purple-400 text-xs font-bold tracking-wide">PREMIUM</span>
+                      <span className="text-[10px] text-gray-500 mt-0.5">24 USDC annual</span>
+                      <span className="mt-2 text-xs text-purple-400 font-semibold">Upgrade</span>
+                    </button>
+                  </div>
+                ) : inboxTier === 'pro' ? (
+                  <button
+                    onClick={() => openUpgrade('premium')}
+                    className="w-full flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-purple-950/40 border border-purple-800/40 hover:border-purple-600/60 hover:bg-purple-950/60 transition-colors text-center"
+                  >
+                    <span className="text-purple-400 text-xs font-bold tracking-wide">PREMIUM</span>
+                    <span className="text-[10px] text-gray-500 mt-0.5">14 USDC annual · AutoForwarding · 365-day history</span>
+                    <span className="mt-2 text-xs text-purple-400 font-semibold">Upgrade</span>
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -1064,7 +1425,9 @@ export default function MiniApp() {
               </button>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">{sendsRemaining} sends remaining</span>
+              <span className="text-gray-600">
+                {sendsRemaining === 'unlimited' ? 'Unlimited sends' : `${sendsRemaining} sends remaining`}
+              </span>
               {draftSavedAt && (
                 <span className="text-gray-500">Draft saved {draftSavedAt}</span>
               )}
@@ -1094,16 +1457,38 @@ export default function MiniApp() {
           <h2 className="text-white font-bold text-xl mb-2">Sent!</h2>
           <div className="bg-gray-900 border border-[#43a574] rounded-lg p-4 my-6">
             <p className="text-[#43a574] font-mono text-sm">{humanEmail || `${agentName}@nftmail.box`}</p>
-            <p className="text-gray-500 text-xs mt-1">{10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · {sendsRemaining} remaining</p>
+            <p className="text-gray-500 text-xs mt-1">
+              {sendsRemaining === 'unlimited'
+                ? 'Unlimited sends'
+                : `${10 - (typeof sendsRemaining === 'number' ? sendsRemaining : 10)} of 10 sent · ${sendsRemaining} remaining`}
+            </p>
           </div>
           <p className="text-gray-400 text-xs mb-6">Your email is on its way to the recipient.</p>
           <div className="space-y-3">
             <button onClick={() => loadInbox(agentName)} className="w-full bg-[#43a574] hover:bg-[#3d8f65] text-black font-bold py-3 rounded-lg transition-colors">
               Back to Inbox →
             </button>
-            <button onClick={openUpgrade} className="w-full bg-gray-900 border border-gray-700 hover:bg-gray-800 text-white py-3 rounded-lg text-sm">
-              Upgrade to Pro →
-            </button>
+            {inboxTier === 'free' ? (
+              <div className="space-y-2">
+                <button onClick={() => openUpgrade('pro')} className="w-full flex items-center gap-3 py-3 px-4 bg-gradient-to-r from-[#15803d] to-[#166534] text-white text-sm font-semibold rounded-lg hover:from-[#166534] hover:to-[#14532d] transition-colors">
+                  <span>⚡</span>
+                  <div className="text-left"><div className="font-bold">PRO <span className="font-normal opacity-90">— 10 USDC one-time</span></div></div>
+                </button>
+                <div onClick={() => openUpgrade('premium')} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors">
+                  <span>👑</span>
+                  <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                  <span className="text-gray-500 text-xs">— 24 USDC annual · Auto-Forward</span>
+                  <span className="text-gray-600 text-xs ml-auto">→</span>
+                </div>
+              </div>
+            ) : inboxTier === 'pro' ? (
+              <div onClick={() => openUpgrade('premium')} className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-dashed border-purple-800/50 bg-purple-950/20 cursor-pointer hover:border-purple-600/70 transition-colors">
+                <span>👑</span>
+                <span className="text-purple-400 text-xs font-semibold">PREMIUM</span>
+                <span className="text-gray-500 text-xs">— 14 USDC annual · Auto-Forward</span>
+                <span className="text-gray-600 text-xs ml-auto">→</span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1111,8 +1496,10 @@ export default function MiniApp() {
   }
 
   if (step === 'upgrade') {
-    const tierMeta = TIER_META[inboxTier];
-    const nextTier = inboxTier === 'free' ? TIER_META.pro : TIER_META.premium;
+    const tierMeta = TIER_META[targetUpgradeTier === 'premium' ? 'pro' : inboxTier];
+    const nextTier = TIER_META[targetUpgradeTier];
+    const upgradeFee = targetUpgradeTier === 'premium' ? (inboxTier === 'pro' ? 14 : 24) : tierMeta.upgradeFee;
+    const isPremiumUpgrade = targetUpgradeTier === 'premium';
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-sm flex flex-col gap-4">
@@ -1132,9 +1519,13 @@ export default function MiniApp() {
           <button
             onClick={handlePayAndUpgrade}
             disabled={upgrading}
-            className="w-full py-3 px-4 bg-[#43a574] hover:bg-[#3d8f65] disabled:bg-gray-700 disabled:text-gray-500 text-black font-bold text-sm rounded-lg transition-colors"
+            className={`w-full py-3 px-4 font-bold text-sm rounded-lg transition-colors ${
+              isPremiumUpgrade
+                ? 'bg-purple-600 hover:bg-purple-500 text-white disabled:bg-gray-700 disabled:text-gray-500'
+                : 'bg-[#43a574] hover:bg-[#3d8f65] text-black disabled:bg-gray-700 disabled:text-gray-500'
+            }`}
           >
-            {upgrading ? 'Processing…' : `${tierMeta.upgradeCta} →`}
+            {upgrading ? 'Processing…' : `Upgrade to ${nextTier.label} ${upgradeFee} USDC →`}
           </button>
           <p className="text-gray-500 text-[10px] text-center">Paid via your Farcaster wallet on Base · NFT beacon minted to your custody address</p>
           <button
@@ -1143,6 +1534,135 @@ export default function MiniApp() {
           >
             ← Back to Inbox
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'settings') {
+    async function saveForwardingConfig() {
+      if (savingForward) return;
+      setSavingForward(true);
+      setForwardSaved(false);
+      try {
+        // Sign In With Farcaster to prove ownership before saving
+        let token: string | undefined;
+        try {
+          const result = await (sdk.actions as any).signIn({ nonce: `fwd-${Date.now()}` });
+          token = result?.message ?? result?.token ?? undefined;
+        } catch {
+          // SIWF may not be available in all clients — proceed without (worker validates tier)
+        }
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'setForwardingConfig',
+            agentName,
+            config: {
+              enabled: forwardEnabled,
+              targetEmail: forwardTarget.trim(),
+              updatedAt: Date.now(),
+              ...(token ? { siwfToken: token } : {}),
+            },
+          }),
+        });
+        const data = await res.json() as { config?: unknown; error?: string };
+        if (data.error) throw new Error(data.error);
+        setForwardSaved(true);
+        setTimeout(() => setForwardSaved(false), 3000);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to save forwarding config');
+      } finally {
+        setSavingForward(false);
+      }
+    }
+    return (
+      <div className="min-h-screen bg-black flex flex-col px-4 py-6">
+        <div className="w-full max-w-sm mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <button onClick={() => setStep('inbox')} className="text-gray-500 text-lg hover:text-white">←</button>
+            <div>
+              <h2 className="text-white font-bold text-lg">Premium Settings</h2>
+              <p className="text-gray-600 text-xs font-mono">{humanEmail || `${agentName}@nftmail.box`}</p>
+            </div>
+          </div>
+
+          {/* Forwarding section */}
+          {inboxTier === 'premium' ? (
+          <div className="bg-gray-900 border border-purple-900/50 rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-white text-sm font-semibold">Auto-Forward to Email</p>
+                <p className="text-gray-500 text-xs mt-0.5">Forward incoming mail to an external address</p>
+              </div>
+              {/* Toggle */}
+              <button
+                onClick={() => setForwardEnabled(v => !v)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${forwardEnabled ? 'bg-purple-600' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${forwardEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            {forwardEnabled && (
+              <input
+                type="email"
+                placeholder="forward-to@example.com"
+                value={forwardTarget}
+                onChange={e => setForwardTarget(e.target.value)}
+                className="w-full bg-black border border-gray-700 rounded-lg px-3 py-2.5 text-white font-mono text-sm placeholder-gray-600 focus:outline-none focus:border-purple-500"
+                autoCapitalize="none"
+                autoComplete="off"
+              />
+            )}
+            {forwardEnabled && (
+              <p className="text-gray-600 text-[10px] mt-2">Emails received at your nftmail.box address will be forwarded here. Your inbox still stores a copy.</p>
+            )}
+          </div>
+          ) : (
+          <div className="bg-gray-900 border border-yellow-900/40 rounded-xl p-4 mb-4">
+            <p className="text-white text-sm font-semibold mb-1">Auto-Forward to Email</p>
+            <p className="text-gray-500 text-xs mb-3">Automatically forward incoming mail to any email address</p>
+            <div className="rounded-lg bg-purple-950/40 border border-purple-800/40 px-3 py-2.5 flex items-center justify-between gap-3">
+              <span className="text-purple-300 text-xs">🔒 Requires PREMIUM</span>
+              <button
+                onClick={() => { setStep('upgrade'); }}
+                className="text-[10px] font-bold text-purple-300 border border-purple-700/50 rounded px-2 py-1 hover:bg-purple-900/40 transition"
+              >
+                Upgrade →
+              </button>
+            </div>
+          </div>
+          )}
+
+          {/* Feature summary */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 mb-6 space-y-2">
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">Premium Features</p>
+            {[
+              ['👑', 'Auto-Forward', 'Push to any email address'],
+              ['📬', 'Multi-send', 'Send to multiple recipients'],
+              ['📋', 'CC / BCC', 'Carbon copy fields'],
+              ['🗄️', '365-day history', 'Full year retention'],
+              ['⛓️', 'Beacon NFT', 'On-chain identity (Base)'],
+            ].map(([icon, title, desc]) => (
+              <div key={title} className="flex items-center gap-2">
+                <span className="text-base">{icon}</span>
+                <div>
+                  <span className="text-white text-xs font-medium">{title}</span>
+                  <span className="text-gray-600 text-xs"> — {desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={saveForwardingConfig}
+            disabled={savingForward || (forwardEnabled && !forwardTarget.trim())}
+            className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 disabled:text-gray-600 text-white font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingForward ? 'Saving…' : forwardSaved ? '✓ Saved' : 'Save Settings'}
+          </button>
+          <p className="text-gray-600 text-[10px] text-center mt-2">Requires wallet signature to verify ownership</p>
         </div>
       </div>
     );

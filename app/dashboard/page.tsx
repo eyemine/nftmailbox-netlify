@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { usePrivy } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { WarrantCanary } from '../components/WarrantCanary';
@@ -10,6 +10,15 @@ import { ChatView } from '../components/ChatView';
 import { MoltToPrivate } from '../components/MoltToPrivate';
 import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
+import NftFax from '../components/NftFax';
+import FaxKeySetup from '../components/FaxKeySetup';
+import PgpKeySetup from '../components/PgpKeySetup';
+import PgpDecrypt from '../components/PgpDecrypt';
+import PgpOnchainSetup from '../components/PgpOnchainSetup';
+import { signWithWallet } from '@/app/lib/wallet-sign';
+// Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
+// app (fax.nftmail.box). Hidden in the mailbox console.
+// import FaxChainComposer from '../components/FaxChainComposer';
 
 function stripHtml(html: string): string {
   const s = html
@@ -53,6 +62,19 @@ function blockRemoteImagesInHtml(html: string): string {
     );
 }
 
+// NFTfax detection: received faxes arrive as inbox notifications whose body
+// carries a /tray/{id} pointer and a NFTfax-prefixed subject. We surface these
+// in a dedicated FaxTray instead of the normal message list.
+const TRAY_ID_RE = /\/tray\/([a-z0-9]+)/i;
+function parseTrayId(msg: { body?: string; summary?: string }): string | null {
+  const src = `${msg.body || ''} ${msg.summary || ''}`;
+  const m = src.match(TRAY_ID_RE);
+  return m ? m[1] : null;
+}
+function isFaxMessage(msg: { type?: string; subject?: string; body?: string; summary?: string }): boolean {
+  return (msg.type === 'tray-notification') || /^NFTfax\b/i.test(msg.subject || '') || parseTrayId(msg) !== null;
+}
+
 interface NftMailName {
   tokenId: number;
   label: string;
@@ -67,17 +89,19 @@ interface InboxMessage {
   sender: string;
   fromAddress: string;
   receivedTime: string;
+  receivedAt?: string | number;
   summary: string;
   body: string;
   bodyHtml?: string;
   encrypted: boolean;
+  pgpEncrypted?: boolean;
   isRead: boolean;
   hasAttachment: boolean;
   decayPct: number;
   expiresAt: string;
 }
 
-type Tab = 'inbox' | 'sentbox' | 'compose' | 'killswitch';
+type Tab = 'inbox' | 'sentbox' | 'compose' | 'fax' | 'killswitch';
 type ViewMode = 'text' | 'html' | 'headers' | 'source';
 const WORKER_URL = '/api/mini-worker';
 
@@ -85,7 +109,8 @@ const WORKER_URL = '/api/mini-worker';
 function DashboardContent() {
   const searchParams = useSearchParams();
   const emailParam = searchParams?.get('email') || null;
-  const { authenticated, login, logout, ready, user } = usePrivy();
+  const { user, ready, authenticated, login, logout, signMessage } = usePrivy();
+  const { wallets } = useWallets();
   const [names, setNames] = useState<NftMailName[]>([]);
   const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
@@ -97,6 +122,7 @@ function DashboardContent() {
   const [tab, setTab] = useState<Tab>('inbox');
   const [chatMode, setChatMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [faxTrayCollapsed, setFaxTrayCollapsed] = useState(false);
   const [showForwarding, setShowForwarding] = useState(false);
   const [forwardingConfig, setForwardingConfig] = useState<{ enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } | undefined>();
   const [savingForwarding, setSavingForwarding] = useState(false);
@@ -141,7 +167,11 @@ function DashboardContent() {
   const linkedWallets = (user?.linkedAccounts as any[])?.filter((a: any) => a?.type === 'wallet' && a?.address) || [];
   const embeddedWallet = user?.wallet?.address;
   const walletAddress = linkedWallets[0]?.address || embeddedWallet || null;
-  const preferredWallet = walletAddress ? { address: walletAddress, getEthereumProvider: async () => (window as any).ethereum } : null;
+  // Use the actual Privy wallet object so signing goes to the correct provider/account.
+  const preferredWallet = React.useMemo(() => {
+    if (!walletAddress) return null;
+    return wallets.find(w => typeof w.address === 'string' && w.address.toLowerCase() === walletAddress.toLowerCase()) || null;
+  }, [wallets, walletAddress]);
   // All wallets tied to this Privy session — used to RESOLVE NFTMail names so that
   // toggling between embedded (Privy) and external (web3) wallets never hides accounts
   // owned by the wallet that is no longer "preferred".
@@ -243,7 +273,7 @@ function DashboardContent() {
     if (!selectedName) return;
     setLoadingInbox(true);
     try {
-      const ownerParam = preferredWallet?.address ? `&ownerWallet=${encodeURIComponent(preferredWallet.address)}` : '';
+      const ownerParam = walletAddress ? `&ownerWallet=${encodeURIComponent(walletAddress)}` : '';
       const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
@@ -414,22 +444,18 @@ function DashboardContent() {
 
   // Save email forwarding config — requires wallet signature per /api/forwarding/[name] contract
   const handleSaveForwarding = useCallback(async (config: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' }) => {
-    if (!selectedName || !preferredWallet) throw new Error('No wallet connected');
+    if (!selectedName || !walletAddress) throw new Error('No wallet connected');
     setSavingForwarding(true);
     try {
-      const provider = await preferredWallet.getEthereumProvider();
       const signedAt = Date.now();
       const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
-      const signature = await provider.request({
-        method: 'personal_sign',
-        params: [statement, preferredWallet.address],
-      });
+      const signature = await signWithWallet(statement, walletAddress, wallets, signMessage);
       const res = await fetch(`/api/forwarding/${selectedName.label}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
-          ownerAddress: preferredWallet.address,
+          ownerAddress: walletAddress,
           signature,
           signedAt,
           statement,
@@ -441,14 +467,30 @@ function DashboardContent() {
     } finally {
       setSavingForwarding(false);
     }
-  }, [selectedName, preferredWallet]);
+  }, [selectedName, walletAddress, wallets, signMessage]);
 
-  const formatTimeAgo = (ts: string) => {
-    const raw = parseInt(ts, 10);
-    // Unix seconds if < 1e11 (year ~5138), else treat as ms or ISO string
-    const epoch = !isNaN(raw) ? (raw < 1e11 ? raw * 1000 : raw) : (Date.parse(ts) || Date.now());
+  const formatTimeAgo = (ts: string | number | undefined, fallbackTs?: string | number) => {
+    const candidate = ts ?? fallbackTs;
+    if (candidate == null || candidate === '') return '—';
+    let epoch: number;
+    if (typeof candidate === 'number') {
+      // Unix seconds if < 1e11 (year ~5138), else already milliseconds.
+      epoch = candidate < 1e11 ? candidate * 1000 : candidate;
+    } else {
+      const s = String(candidate).trim();
+      if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        epoch = n < 1e11 ? n * 1000 : n;
+      } else {
+        // ISO / date string — parseInt() would truncate to the year, so use Date.parse.
+        epoch = Date.parse(s);
+      }
+    }
+    if (!epoch || isNaN(epoch) || epoch <= 0) return '—';
     const ms = Date.now() - epoch;
+    if (ms < 0) return 'now';
     const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
@@ -470,8 +512,15 @@ function DashboardContent() {
     return 'free';
   })();
   const canSend = !isAgent && (normalisedTier === 'pro' || normalisedTier === 'premium');
+  const canFax = !isAgent;
   const isPremium = normalisedTier === 'premium';
   const isPro = normalisedTier === 'pro';
+
+  // Split received faxes out of the main inbox list into the FaxTray.
+  // Fax is disabled for agent accounts — agents don't need a fax in-tray
+  // (PIPES will be the preferred agent comms channel once shipped).
+  const faxMessages = isAgent ? [] : messages.filter(isFaxMessage);
+  const inboxMessages = messages.filter((m) => !isFaxMessage(m));
 
   if (!ready) return null;
 
@@ -553,7 +602,7 @@ function DashboardContent() {
                       .sort((a, b) => a.email.localeCompare(b.email))
                       .map((n: NftMailName) => (
                         <option key={n.tokenId} value={n.label} className="bg-black text-white">
-                          {n.walletType === 'privy' ? '🔒 ' : '🔗 '}{n.email}
+                          {n.label.endsWith('_') ? '⻤ ' : ''}{n.email}
                         </option>
                       ))}
                   </select>
@@ -569,22 +618,38 @@ function DashboardContent() {
                   {isPremium ? 'PREMIUM' : isPro ? 'PRO' : 'FREE'}
                 </span>
               )}
-              <button
-                onClick={() => setShowSettings(v => !v)}
-                title="Account settings"
-                aria-label="Account settings"
-                className={`ml-auto flex h-7 w-7 items-center justify-center rounded-lg border transition ${showSettings ? 'border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.1)] text-[rgb(160,220,255)]' : 'border-[var(--border)] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)]'}`}
-              >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
-                </svg>
-              </button>
+              {!isAgent && (
+                <button
+                  onClick={() => setShowSettings(v => !v)}
+                  title="Account settings"
+                  aria-label="Account settings"
+                  className={`ml-auto flex h-7 w-7 items-center justify-center rounded-lg border transition ${showSettings ? 'border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.1)] text-[rgb(160,220,255)]' : 'border-[var(--border)] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)]'}`}
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* Settings panel — image privacy (all tiers) + forwarding (premium, non-agent) */}
             {showSettings && (
               <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-5">
+                {selectedName && walletAddress && (
+                  <FaxKeySetup local={selectedName.label} walletAddress={walletAddress} />
+                )}
+                {selectedName && walletAddress && (
+                  <PgpKeySetup local={selectedName.label} walletAddress={walletAddress} />
+                )}
+                {selectedName && walletAddress && (
+                  <PgpOnchainSetup
+                    agentName={selectedName.label}
+                    walletAddress={walletAddress}
+                    tokenId={selectedName.tokenId}
+                    fingerprint={undefined}
+                  />
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-white">Block Remote Images (Anti-Tracking)</h3>
@@ -610,7 +675,7 @@ function DashboardContent() {
                   </div>
                 )}
                 {!isPremium && (
-                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding.</p>
+                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and NFTfax.</p>
                 )}
               </div>
             )}
@@ -633,7 +698,7 @@ function DashboardContent() {
                 onClick={() => setTab('inbox')}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
               >
-                Inbox{messages.length > 0 ? ` (${messages.length})` : ''}
+                Inbox{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}
               </button>
               <button
                 onClick={() => setTab('sentbox')}
@@ -649,6 +714,13 @@ function DashboardContent() {
                 Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : 'PRO+'}</span>
               </button>
               <button
+                onClick={() => canFax && setTab('fax')}
+                title={!canFax ? 'NFTfax is unavailable for agent mailboxes' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'fax' ? 'bg-amber-500/12 text-amber-300' : canFax ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+              >
+                Fax{faxMessages.length > 0 ? ` (${faxMessages.length})` : ''} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : isPro ? 'PRO' : '2 FREE/MO'}</span>
+              </button>
+              <button
                 onClick={() => setTab('killswitch')}
                 className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
               >
@@ -662,7 +734,7 @@ function DashboardContent() {
                 {/* Toolbar */}
                 <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{messages.length > 0 ? ` (${messages.length})` : ''}</span>
+                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}</span>
                     {!isPremium && messages.length > 0 && (
                       <div className="hidden sm:flex items-center gap-3">
                         {[['bg-emerald-500','Fresh'],['bg-amber-500','Aging'],['bg-red-500','Expiring']].map(([c,l]) => (
@@ -695,6 +767,49 @@ function DashboardContent() {
                 {inboxNote && (
                   <div className="border-b border-[var(--border)] bg-amber-500/5 px-4 py-2">
                     <p className="text-xs text-amber-300">{inboxNote}</p>
+                  </div>
+                )}
+
+                {/* ── FaxTray: received NFTfax transmissions ── */}
+                {!chatMode && faxMessages.length > 0 && (
+                  <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">
+                    <button
+                      onClick={() => setFaxTrayCollapsed(v => !v)}
+                      className="flex w-full items-center gap-2 px-4 py-2 hover:bg-amber-500/[0.08] transition"
+                    >
+                      <svg className="h-3.5 w-3.5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                      <span className="text-[10px] font-semibold tracking-wider text-amber-300">FAXTRAY ({faxMessages.length})</span>
+                      <span className="text-[9px] text-[var(--muted)]">Secure NFTfax transmissions</span>
+                      <svg className={`ml-auto h-3 w-3 text-[var(--muted)] transition-transform ${faxTrayCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                    {!faxTrayCollapsed && (
+                    <div className="divide-y divide-[var(--border)]">
+                      {faxMessages.map((msg: InboxMessage) => {
+                        const trayId = parseTrayId(msg);
+                        return (
+                          <div key={msg.messageId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-amber-500/10 text-amber-300">
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs text-white">{msg.sender || msg.fromAddress || 'Unknown sender'}</p>
+                                <p className="truncate text-[10px] text-[var(--muted)]">{trayId ? `T/#${trayId.slice(0, 4).toUpperCase()}` : (msg.subject || 'NFTfax')} · {formatTimeAgo(msg.receivedTime, msg.receivedAt)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {trayId && (
+                                <a href={`/tray/${trayId}`} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
+                              )}
+                              <button onClick={() => handleDelete(msg.messageId)} title="Delete fax" className="rounded p-1.5 text-red-400/50 hover:text-red-400 transition">
+                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    )}
                   </div>
                 )}
 
@@ -767,14 +882,14 @@ function DashboardContent() {
                 {!chatMode && <div className="flex" style={{ minHeight: '460px' }}>
                   {/* Left: message list */}
                   <div className={`flex flex-col border-r border-[var(--border)] ${selectedMessage ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
-                    {loadingInbox && messages.length === 0 ? (
+                    {loadingInbox && inboxMessages.length === 0 ? (
                       <div className="flex flex-1 items-center justify-center py-12">
                         <div className="flex items-center gap-3">
                           <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
                           <span className="text-sm text-[var(--muted)]">Loading...</span>
                         </div>
                       </div>
-                    ) : messages.length === 0 ? (
+                    ) : inboxMessages.length === 0 ? (
                       <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
                         <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
@@ -784,7 +899,7 @@ function DashboardContent() {
                       </div>
                     ) : (
                       <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
-                        {messages.map((msg: InboxMessage) => {
+                        {inboxMessages.map((msg: InboxMessage) => {
                           const isRead = readIds.has(msg.messageId) || msg.isRead;
                           const isSelected = selectedMessage?.messageId === msg.messageId;
                           return (
@@ -796,16 +911,29 @@ function DashboardContent() {
                               <div className="flex items-start gap-2">
                                 <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${!isRead ? 'bg-[rgb(0,163,255)]' : 'bg-transparent'}`} />
                                 <div className="flex-1 min-w-0">
-                                  <p className={`truncate text-xs ${!isRead ? 'font-semibold text-white' : 'text-zinc-300'}`}>{msg.subject || '(no subject)'}</p>
+                                  <p className={`truncate text-xs ${!isRead ? 'font-semibold text-white' : 'text-zinc-300'}`}>
+                                    {msg.pgpEncrypted && <span className="text-violet-400 mr-1" title="PGP encrypted">🔒</span>}
+                                    {msg.subject || '(no subject)'}
+                                  </p>
                                   <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">{msg.sender}</p>
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
                                     <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
-                                    {!isPremium && (
-                                      <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
-                                        <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
-                                      </div>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {!isPremium && (
+                                        <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
+                                          <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
+                                        </div>
+                                      )}
+                                      <span
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(msg.messageId); }}
+                                        title="Delete"
+                                        role="button"
+                                        className="rounded p-1 text-red-400/40 transition hover:text-red-400"
+                                      >
+                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -894,6 +1022,12 @@ function DashboardContent() {
                               <p className="text-sm text-violet-300">End-to-end encrypted</p>
                               <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
                             </div>
+                          ) : selectedMessage.pgpEncrypted ? (
+                            <PgpDecrypt
+                              armoredMessage={selectedMessage.body}
+                              agentName={selectedName?.label || ''}
+                              walletAddress={walletAddress || ''}
+                            />
                           ) : viewMode === 'text' ? (
                             <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
                           ) : viewMode === 'html' ? (
@@ -1079,6 +1213,23 @@ function DashboardContent() {
                   </div>
                   {sendResult && <p className={`text-xs ${sendResult.startsWith('Sent') ? 'text-emerald-400' : 'text-red-400'}`}>{sendResult}</p>}
                 </div>
+              </div>
+            )}
+
+            {/* ── FAX TAB ── */}
+            {tab === 'fax' && (
+              <div className="space-y-4">
+                {selectedName && walletAddress ? (
+                  <>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+                      <NftFax fromLabel={selectedName.label} ownerWallet={walletAddress} />
+                    </div>
+                    {/* Chain-letter lab reserved for the standalone NFTfax app (fax.nftmail.box).
+                    <FaxChainComposer fromLabel={selectedName.label} ownerWallet={walletAddress} /> */}
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Select a mailbox to send an NFTfax.</div>
+                )}
               </div>
             )}
 

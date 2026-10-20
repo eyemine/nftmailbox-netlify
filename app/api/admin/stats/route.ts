@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedNftmailCount } from '../../../utils/getNftmailCount';
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 export async function GET(request: NextRequest) {

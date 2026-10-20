@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify claim code and get inbox name
-    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     
     // First verify the claim
     const verifyRes = await fetch(workerUrl, {

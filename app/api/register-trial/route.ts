@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Check if name already exists in KV
-    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     const checkRes = await fetch(workerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },

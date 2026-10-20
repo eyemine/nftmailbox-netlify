@@ -128,22 +128,47 @@ function SafeMarkdown({ text }: { text: string }) {
   );
 }
 
+function openUrl(url: string) {
+  try { (sdk.actions as any).openUrl(url); } catch { window.open(url, '_blank'); }
+}
+
 function renderInline(text: string): React.ReactNode[] {
-  // Strip any markdown link syntax [label](url) → just show label
-  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  // Strip bare URLs (no rendering as anchors)
-  text = text.replace(/https?:\/\/\S+/g, '[link]');
+  // Convert markdown link syntax [label](url) → clickable label
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '[$1→$2]');
   const parts: React.ReactNode[] = [];
-  // Tokenise bold+italic, bold, italic, inline code
-  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+  // Tokenise URLs, markdown link syntax, bold+italic, bold, italic, inline code
+  const re = /(https?:\/\/[^\s\]]+|\[([^\]]+)→([^\]]+)\]|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
   let last = 0, m: RegExpExecArray | null;
   let idx = 0;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) parts.push(<span key={idx++}>{text.slice(last, m.index)}</span>);
-    if (m[2]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[2]}</strong>);
-    else if (m[3]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[3]}</strong>);
-    else if (m[4]) parts.push(<em key={idx++} className="italic text-gray-200">{m[4]}</em>);
-    else if (m[5]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[5]}</code>);
+    if (m[1] && /^https?:\/\//.test(m[1])) {
+      const url = m[1];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {url}
+        </button>
+      );
+    } else if (m[2] && m[3]) {
+      const label = m[2];
+      const url = m[3];
+      parts.push(
+        <button
+          key={idx++}
+          onClick={() => openUrl(url)}
+          className="text-[#43a574] hover:text-[#66c594] underline text-xs"
+        >
+          {label}
+        </button>
+      );
+    } else if (m[4]) parts.push(<strong key={idx++} className="font-bold italic text-white">{m[4]}</strong>);
+    else if (m[5]) parts.push(<strong key={idx++} className="font-semibold text-white">{m[5]}</strong>);
+    else if (m[6]) parts.push(<em key={idx++} className="italic text-gray-200">{m[6]}</em>);
+    else if (m[7]) parts.push(<code key={idx++} className="bg-gray-800 text-green-300 px-1 rounded text-[10px] font-mono">{m[7]}</code>);
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(<span key={idx++}>{text.slice(last)}</span>);
@@ -176,7 +201,9 @@ interface InboxMessage {
   content?: string; // raw from worker getInbox (maps to payload.body)
   receivedAt: number;
   encrypted?: boolean;
-  type?: 'inbox' | 'sent';
+  type?: 'inbox' | 'sent' | 'tray-notification';
+  trayId?: string;  // for NFTfax tray notifications
+  channel?: 'public' | 'private';
 }
 
 interface InboxResult {
@@ -329,6 +356,13 @@ export default function MiniApp() {
 
   useEffect(() => {
     const init = async () => {
+      // Signal ready as early as possible — Warpcast waits for this before exposing context.
+      try {
+        await sdk.actions.ready();
+      } catch {
+        // ready() may fail outside Warpcast - that's ok
+      }
+
       let userFid: number | null = null;
       let verifiedAddrs: string[] = [];
       try {
@@ -338,12 +372,6 @@ export default function MiniApp() {
         verifiedAddrs = ((context?.user as unknown as Record<string, unknown>)?.verifiedAddresses as Record<string, string[]> | undefined)?.ethAddresses ?? [];
       } catch {
         // running outside Warpcast — continue without FID
-      }
-      // Signal ready immediately after getting context - critical for Farcaster Mini Apps
-      try {
-        await sdk.actions.ready();
-      } catch {
-        // ready() may fail outside Warpcast - that's ok
       }
 
       // Run FID check and NFT controller check in parallel
@@ -859,7 +887,7 @@ export default function MiniApp() {
 
   if (step === 'signin') {
     const handleSignin = async () => {
-      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '').replace(/[^a-z0-9-]/g, '');
+      const label = signinEmail.trim().toLowerCase().replace(/@nftmail\.box$/, '');
       if (!label) { setSigninError('Please enter a valid email or label'); return; }
       setSigninLoading(true);
       setSigninError('');
@@ -871,14 +899,15 @@ export default function MiniApp() {
           body: JSON.stringify({ action: 'getAgentProfile', agentName: label }),
         });
         const data = await res.json();
-        if (data && data.label) {
-          setAgentName(data.label);
-          setHumanEmail(`${data.label}@nftmail.box`);
-          if (data.tier) setInboxTier(normaliseTier(data.tier));
+        if (data && (data.agentName || data.label)) {
+          const name = data.agentName || data.label;
+          setAgentName(name);
+          setHumanEmail(`${name}@nftmail.box`);
+          if (data.tier || data.profile?.tier) setInboxTier(normaliseTier(data.tier || data.profile?.tier));
           let privKey: string | null = null;
-          try { privKey = localStorage.getItem(`ecies-priv:${data.label}`); } catch {}
+          try { privKey = localStorage.getItem(`ecies-priv:${name}`); } catch {}
           if (privKey) setEciesPrivKey(privKey);
-          await loadInboxDirect(data.label, privKey);
+          await loadInboxDirect(name, privKey);
         } else {
           setSigninError('Account not found. Check the email or claim a new inbox.');
         }
@@ -1132,7 +1161,17 @@ export default function MiniApp() {
                     {isOpen && (
                       <div className="mt-3 pt-3 border-t border-gray-800">
                         {body ? (
-                          <SafeMarkdown text={body} />
+                          <>
+                            <SafeMarkdown text={msg.trayId ? body.replace(/\[link\]/g, `[View](${APP_URL}/tray/${msg.trayId})`) : body} />
+                            {msg.trayId && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openUrl(`${APP_URL}/tray/${msg.trayId}`); }}
+                                className="mt-2 text-black bg-[#43a574] hover:bg-[#66c594] text-xs font-bold py-1.5 px-3 rounded"
+                              >
+                                {msg.channel === 'private' ? '🔒 Open private fax' : '👁 View fax'}
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <p className="text-gray-600 text-xs italic">(no body — message may be encrypted without a local key)</p>
                         )}

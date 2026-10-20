@@ -1,0 +1,1252 @@
+'use client';
+
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import Link from 'next/link';
+import Image from 'next/image';
+import { WarrantCanary } from '../components/WarrantCanary';
+import { ChatView } from '../components/ChatView';
+import { MoltToPrivate } from '../components/MoltToPrivate';
+import { TogglePrivacy } from '../components/TogglePrivacy';
+import ForwardingSetup from '../components/ForwardingSetup';
+import NftFax from '../components/NftFax';
+import FaxKeySetup from '../components/FaxKeySetup';
+import { signWithWallet } from '@/app/lib/wallet-sign';
+// Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
+// app (fax.nftmail.box). Hidden in the mailbox console.
+// import FaxChainComposer from '../components/FaxChainComposer';
+
+function stripHtml(html: string): string {
+  const s = html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br[\s\S]*?\/>/gi, ' ')
+    .replace(/<br>/gi, ' ')
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote)>/gi, ' ')
+    .replace(/<[\s\S]*?>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Drop CSS/style artifact tokens
+  return s.split(' ').filter(t => {
+    if (!t) return false;
+    if (/[{}]/.test(t)) return false;
+    if (/^[.#][a-zA-Z0-9_-]/.test(t)) return false;
+    return true;
+  }).join(' ').trim();
+}
+
+// Strip remote <img> sources and CSS background-image url()s that point off-domain.
+// Tracking pixels rely on the browser fetching a remote resource the instant the HTML
+// renders — an iframe `sandbox` attribute does NOT block this, so we neutralize the
+// source at the markup level instead. Local/inline (data:) images are left untouched.
+function blockRemoteImagesInHtml(html: string): string {
+  const isRemote = (url: string) => /^(https?:)?\/\//i.test(url.trim());
+  return html
+    .replace(/<img\b([^>]*?)\ssrc=(["'])((?:https?:)?\/\/[^"']+)\2([^>]*)>/gi, (_m, pre, q, src, post) =>
+      `<img${pre} data-blocked-src=${q}${src}${q} src=${q}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==${q}${post}>`
+    )
+    .replace(/style=(["'])([^"']*)\1/gi, (m, q, css) =>
+      `style=${q}${css.replace(/url\(\s*['"]?((?:https?:)?\/\/[^'")]+)['"]?\s*\)/gi, (u: string, url: string) => isRemote(url) ? 'none' : u)}${q}`
+    )
+    .replace(/<style([^>]*)>([\s\S]*?)<\/style>/gi, (m, attrs, css) =>
+      `<style${attrs}>${css.replace(/url\(\s*['"]?((?:https?:)?\/\/[^'")]+)['"]?\s*\)/gi, (u: string, url: string) => isRemote(url) ? 'none' : u)}</style>`
+    );
+}
+
+// NFTfax detection: received faxes arrive as inbox notifications whose body
+// carries a /tray/{id} pointer and a NFTfax-prefixed subject. We surface these
+// in a dedicated FaxTray instead of the normal message list.
+const TRAY_ID_RE = /\/tray\/([a-z0-9]+)/i;
+function parseTrayId(msg: { body?: string; summary?: string }): string | null {
+  const src = `${msg.body || ''} ${msg.summary || ''}`;
+  const m = src.match(TRAY_ID_RE);
+  return m ? m[1] : null;
+}
+function isFaxMessage(msg: { type?: string; subject?: string; body?: string; summary?: string }): boolean {
+  return (msg.type === 'tray-notification') || /^NFTfax\b/i.test(msg.subject || '') || parseTrayId(msg) !== null;
+}
+
+interface NftMailName {
+  tokenId: number;
+  label: string;
+  email: string;
+  gnoName: string;
+  walletType?: 'privy' | 'web3';
+}
+
+interface InboxMessage {
+  messageId: string;
+  subject: string;
+  sender: string;
+  fromAddress: string;
+  receivedTime: string;
+  receivedAt?: string | number;
+  summary: string;
+  body: string;
+  bodyHtml?: string;
+  encrypted: boolean;
+  isRead: boolean;
+  hasAttachment: boolean;
+  decayPct: number;
+  expiresAt: string;
+}
+
+type Tab = 'inbox' | 'sentbox' | 'compose' | 'fax' | 'killswitch';
+type ViewMode = 'text' | 'html' | 'headers' | 'source';
+const WORKER_URL = '/api/mini-worker';
+
+// Wrapper component to handle useSearchParams with Suspense
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const emailParam = searchParams?.get('email') || null;
+  const { user, ready, authenticated, login, logout, signMessage } = usePrivy();
+  const { wallets } = useWallets();
+  const [names, setNames] = useState<NftMailName[]>([]);
+  const [selectedName, setSelectedName] = useState<NftMailName | null>(null);
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [inboxTier, setInboxTier] = useState<string>('');
+  const [inboxNote, setInboxNote] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [loadingInbox, setLoadingInbox] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('inbox');
+  const [chatMode, setChatMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showForwarding, setShowForwarding] = useState(false);
+  const [forwardingConfig, setForwardingConfig] = useState<{ enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } | undefined>();
+  const [savingForwarding, setSavingForwarding] = useState(false);
+  const [blockRemoteImages, setBlockRemoteImages] = useState(true);
+  const [imagesRevealedFor, setImagesRevealedFor] = useState<Set<string>>(new Set());
+
+  // Reading pane state
+  const [selectedMessage, setSelectedMessage] = useState<InboxMessage | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('text');
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  // Sentbox state
+  const [sentMessages, setSentMessages] = useState<any[]>([]);
+  const [loadingSent, setLoadingSent] = useState(false);
+  const [selectedSent, setSelectedSent] = useState<any | null>(null);
+
+  // Compose state
+  const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeBcc, setComposeBcc] = useState('');
+  const [showCcBcc, setShowCcBcc] = useState(false);
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
+
+  // Domain selection state
+  const [availableDomains, setAvailableDomains] = useState<string[]>([]);
+  const [selectedFromDomain, setSelectedFromDomain] = useState<string>('nftmail.box');
+
+  // Kill-switch state
+  const [burning, setBurning] = useState(false);
+  const [burnResult, setBurnResult] = useState<string | null>(null);
+
+  // Privacy toggle state
+  const [privacyEnabled, setPrivacyEnabled] = useState(false);
+  const [privacyTier, setPrivacyTier] = useState<string>('exposed');
+
+  // Derive wallet address safely from Privy session (avoids useWallets() crash)
+  // Prioritize linked external wallets over embedded wallet for SIGNING (sends/burns/
+  // forwarding all need a single wallet to sign with; external/web3 wallet wins when connected).
+  const linkedWallets = (user?.linkedAccounts as any[])?.filter((a: any) => a?.type === 'wallet' && a?.address) || [];
+  const embeddedWallet = user?.wallet?.address;
+  const walletAddress = linkedWallets[0]?.address || embeddedWallet || null;
+  // Use the actual Privy wallet object so signing goes to the correct provider/account.
+  const preferredWallet = React.useMemo(() => {
+    if (!walletAddress) return null;
+    return wallets.find(w => typeof w.address === 'string' && w.address.toLowerCase() === walletAddress.toLowerCase()) || null;
+  }, [wallets, walletAddress]);
+  // All wallets tied to this Privy session — used to RESOLVE NFTMail names so that
+  // toggling between embedded (Privy) and external (web3) wallets never hides accounts
+  // owned by the wallet that is no longer "preferred".
+  const allWalletAddresses = Array.from(new Set(
+    [...linkedWallets.map((w: any) => w.address), embeddedWallet]
+      .filter(Boolean)
+      .map((a: string) => a.toLowerCase())
+  ));
+
+  // Debug: log detected wallets
+  console.log('Detected wallets:', { linkedWallets, embeddedWallet, allWalletAddresses });
+
+  // Load persisted read IDs + privacy preferences from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('nftmail:readIds');
+      if (stored) setReadIds(new Set(JSON.parse(stored) as string[]));
+      const blockImages = localStorage.getItem('nftmail:blockRemoteImages');
+      if (blockImages !== null) setBlockRemoteImages(blockImages === 'true');
+    } catch {}
+  }, []);
+
+  const toggleBlockRemoteImages = useCallback((next: boolean) => {
+    setBlockRemoteImages(next);
+    try { localStorage.setItem('nftmail:blockRemoteImages', String(next)); } catch {}
+  }, []);
+
+  const markRead = useCallback((messageId: string) => {
+    setReadIds(prev => {
+      const next = new Set(prev);
+      next.add(messageId);
+      try { localStorage.setItem('nftmail:readIds', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleDelete = useCallback(async (messageId: string) => {
+    if (!selectedName?.email) return;
+    const label = selectedName.email.replace('@nftmail.box', '');
+    try {
+      await fetch('/api/delete-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId }),
+      });
+      setMessages(prev => prev.filter(m => m.messageId !== messageId));
+      if (selectedMessage?.messageId === messageId) setSelectedMessage(null);
+    } catch {}
+  }, [selectedName, selectedMessage]);
+
+  // Resolve NFTMail names across ALL wallets tied to this session (embedded + linked
+  // external), merged by email, so switching preferred wallet never hides accounts.
+  const resolveNames = useCallback(async () => {
+    if (allWalletAddresses.length === 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const results = await Promise.all(
+        allWalletAddresses.map(addr => {
+          const isPrivy = addr.toLowerCase() === embeddedWallet?.toLowerCase();
+          return fetch(`/api/resolve-nftmail?address=${addr}`)
+            .then(r => r.json())
+            .then((data: { names?: NftMailName[] }) => ({
+              names: (data.names || []).map((n: NftMailName) => ({
+                ...n,
+                walletType: isPrivy ? 'privy' as const : 'web3' as const
+              }))
+            }))
+            .catch(() => ({ names: [] as NftMailName[] }));
+        })
+      ) as { error?: string; names?: NftMailName[] }[];
+
+      const merged = new Map<string, NftMailName>();
+      for (const data of results) {
+        for (const n of data.names || []) {
+          merged.set(n.email.toLowerCase(), n);
+        }
+      }
+      const resolved = Array.from(merged.values());
+      if (resolved.length === 0) {
+        const firstError = results.find(r => r.error)?.error;
+        if (firstError) throw new Error(firstError);
+      }
+      setNames(resolved);
+      if (resolved.length > 0 && !selectedName) {
+        // If ?email= param matches one of the resolved names, pre-select it
+        const match = emailParam ? resolved.find(n => n.email === emailParam) : null;
+        setSelectedName(match || resolved[0]);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resolve NFTMail names');
+    } finally {
+      setLoading(false);
+    }
+  }, [allWalletAddresses.join(','), selectedName, embeddedWallet]);
+
+  // Fetch inbox for selected name
+  const fetchInbox = useCallback(async () => {
+    if (!selectedName) return;
+    setLoadingInbox(true);
+    try {
+      const ownerParam = walletAddress ? `&ownerWallet=${encodeURIComponent(walletAddress)}` : '';
+      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
+      const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
+      if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
+      setMessages(data.messages || []);
+      setInboxNote(data.note || '');
+      setInboxTier(data.accountTier || data.tier || '');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch inbox');
+    } finally {
+      setLoadingInbox(false);
+    }
+  }, [selectedName, preferredWallet?.address]);
+
+  useEffect(() => {
+    if (authenticated && allWalletAddresses.length > 0) {
+      resolveNames();
+    }
+  }, [authenticated, allWalletAddresses.join(','), resolveNames]);
+
+  // Extract unique domains from user's names for domain selection.
+  // PREMIUM mailboxes can also send from ghostmail.box.
+  useEffect(() => {
+    if (names.length > 0) {
+      const domains = [...new Set(names.map(n => {
+        const parts = n.email.split('@');
+        return parts.length === 2 ? parts[1] : 'nftmail.box';
+      }))];
+      const t = (inboxTier || '').toLowerCase();
+      const isPremiumTier = t === 'premium' || t === 'imago' || t === 'ghost';
+      if (isPremiumTier && !domains.includes('ghostmail.box')) {
+        domains.push('ghostmail.box');
+      }
+      setAvailableDomains(domains);
+      // Set default domain from selected name if available
+      if (selectedName) {
+        const selectedDomain = selectedName.email.split('@')[1] || 'nftmail.box';
+        setSelectedFromDomain(selectedDomain);
+      }
+    }
+  }, [names, selectedName, inboxTier]);
+
+  useEffect(() => {
+    if (selectedName) {
+      fetchInbox();
+      setSelectedMessage(null);
+      // Clear sentbox when switching accounts
+      setSentMessages([]);
+      setSelectedSent(null);
+    }
+  }, [selectedName, fetchInbox]);
+
+  // Fetch sentbox from Mailgun Events API
+  const fetchSentbox = useCallback(async () => {
+    if (!selectedName) return;
+    setLoadingSent(true);
+    try {
+      const label = selectedName.email.replace('@nftmail.box', '');
+      const res = await fetch(`/api/sentbox?label=${encodeURIComponent(label)}`);
+      const data = await res.json() as { error?: string; messages?: any[] };
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch sentbox');
+      setSentMessages(data.messages || []);
+    } catch {
+      // Silent — sentbox is non-critical
+    } finally {
+      setLoadingSent(false);
+    }
+  }, [selectedName]);
+
+  useEffect(() => {
+    if (selectedName && tab === 'sentbox') {
+      fetchSentbox();
+    }
+  }, [selectedName, tab, fetchSentbox]);
+
+  useEffect(() => {
+    const t = (inboxTier || '').toLowerCase();
+    const isPrem = t === 'premium' || t === 'imago' || t === 'ghost';
+    const isAgt = selectedName?.label.endsWith('_') ?? false;
+    if (!selectedName || !isPrem || isAgt) { setShowForwarding(false); setForwardingConfig(undefined); return; }
+    fetch(`/api/forwarding/${selectedName.label}`)
+      .then(r => r.json())
+      .then((d: unknown) => {
+        const rd = d as { config?: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } };
+        if (rd?.config) setForwardingConfig(rd.config);
+      })
+      .catch(() => {});
+  }, [selectedName, inboxTier]);
+
+  // Send email — uses /api/send-email with ownerWallet auth + CC/BCC + multisend
+  const handleSend = async () => {
+    if (!selectedName || !composeTo || !preferredWallet) return;
+    setSending(true);
+    setSendResult(null);
+    const recipients = composeTo.split(',').map(r => r.trim()).filter(Boolean);
+    const fromLabel = selectedName.label;
+    for (const recipient of recipients) {
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label: fromLabel,
+            domain: selectedFromDomain,
+            ownerWallet: preferredWallet.address,
+            to: recipient,
+            cc: composeCc || undefined,
+            bcc: composeBcc || undefined,
+            subject: composeSubject,
+            body: composeBody,
+          }),
+        });
+        const data = await res.json() as { error?: string; success?: boolean };
+        if (!res.ok) throw new Error(data.error || 'Failed to send');
+      } catch (err: any) {
+        setSendResult(err?.message || 'Send failed');
+        setSending(false);
+        return;
+      }
+    }
+    setSendResult(`Sent to ${composeTo}`);
+    setComposeTo('');
+    setComposeCc('');
+    setComposeBcc('');
+    setShowCcBcc(false);
+    setComposeSubject('');
+    setComposeBody('');
+    setSending(false);
+  };
+
+  // Sovereign Kill-Switch: burn all encrypted history
+  const handleBurn = async () => {
+    if (!selectedName || !preferredWallet) return;
+    setBurning(true);
+    setBurnResult(null);
+    try {
+      // Request signature from wallet to authorise the burn
+      const provider = await preferredWallet.getEthereumProvider();
+      const message = `SOVEREIGN BURN: Permanently delete all inbox data for ${selectedName.email} at ${new Date().toISOString()}`;
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [message, preferredWallet.address],
+      });
+
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'purgeInbox',
+          localPart: selectedName.label,
+          signature,
+        }),
+      });
+      const data = await res.json() as { error?: string; messagesDeleted?: number };
+      if (!res.ok) throw new Error(data.error || 'Burn failed');
+      setBurnResult(`Purged ${data.messagesDeleted} messages. Sovereign burn complete.`);
+      setMessages([]);
+      setSelectedMessage(null);
+    } catch (err: any) {
+      if (err?.code === 4001) {
+        setBurnResult('Signature rejected — burn cancelled.');
+      } else {
+        setBurnResult(err?.message || 'Burn failed');
+      }
+    } finally {
+      setBurning(false);
+    }
+  };
+
+  // Save email forwarding config — requires wallet signature per /api/forwarding/[name] contract
+  const handleSaveForwarding = useCallback(async (config: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' }) => {
+    if (!selectedName || !walletAddress) throw new Error('No wallet connected');
+    setSavingForwarding(true);
+    try {
+      const signedAt = Date.now();
+      const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
+      const signature = await signWithWallet(statement, walletAddress, wallets, signMessage);
+      const res = await fetch(`/api/forwarding/${selectedName.label}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          ownerAddress: walletAddress,
+          signature,
+          signedAt,
+          statement,
+        }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Failed to save forwarding settings');
+      setForwardingConfig(config);
+    } finally {
+      setSavingForwarding(false);
+    }
+  }, [selectedName, walletAddress, wallets, signMessage]);
+
+  const formatTimeAgo = (ts: string | number | undefined, fallbackTs?: string | number) => {
+    const candidate = ts ?? fallbackTs;
+    if (candidate == null || candidate === '') return '—';
+    let epoch: number;
+    if (typeof candidate === 'number') {
+      // Unix seconds if < 1e11 (year ~5138), else already milliseconds.
+      epoch = candidate < 1e11 ? candidate * 1000 : candidate;
+    } else {
+      const s = String(candidate).trim();
+      if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        epoch = n < 1e11 ? n * 1000 : n;
+      } else {
+        // ISO / date string — parseInt() would truncate to the year, so use Date.parse.
+        epoch = Date.parse(s);
+      }
+    }
+    if (!epoch || isNaN(epoch) || epoch <= 0) return '—';
+    const ms = Date.now() - epoch;
+    if (ms < 0) return 'now';
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  const decayBarColor = (pct: number) => {
+    if (pct < 50) return 'bg-emerald-500';
+    if (pct < 75) return 'bg-amber-500';
+    return 'bg-red-500';
+  };
+
+  const isAgent = selectedName?.label.endsWith('_') ?? false;
+  const normalisedTier = (() => {
+    const t = (inboxTier || '').toLowerCase();
+    if (t === 'premium' || t === 'imago' || t === 'ghost') return 'premium';
+    if (t === 'pro' || t === 'pupa' || t === 'lite') return 'pro';
+    return 'free';
+  })();
+  const canSend = !isAgent && (normalisedTier === 'pro' || normalisedTier === 'premium');
+  const canFax = !isAgent;
+  const isPremium = normalisedTier === 'premium';
+  const isPro = normalisedTier === 'pro';
+
+  // Split received faxes out of the main inbox list into the FaxTray.
+  // Fax is disabled for agent accounts — agents don't need a fax in-tray
+  // (PIPES will be the preferred agent comms channel once shipped).
+  const faxMessages = isAgent ? [] : messages.filter(isFaxMessage);
+  const inboxMessages = messages.filter((m) => !isFaxMessage(m));
+
+  if (!ready) return null;
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(0,163,255,0.16),transparent_45%),radial-gradient(900px_circle_at_90%_10%,rgba(124,77,255,0.14),transparent_40%),linear-gradient(180deg,var(--background),#03040a)]">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-4 py-8 md:px-6">
+        <WarrantCanary />
+
+        {/* Header */}
+        <header className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition shrink-0">
+            <Image src="/nftmail-logo.png" alt="NFTMail" width={40} height={40} className="opacity-95" />
+            <span style={{ fontFamily: "'Ayuthaya', serif", color: '#d8d4cf' }} className="text-base tracking-wide">nftmail.box</span>
+          </Link>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-end">
+            {authenticated && selectedName && isAgent && (
+              <a href={`/inbox/${encodeURIComponent(selectedName.email.replace('@nftmail.box', ''))}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[rgba(0,163,255,0.25)] bg-[rgba(0,163,255,0.06)] px-3 py-1.5 text-[10px] font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.14)] whitespace-nowrap">View Public Inbox ↗</a>
+            )}
+            {authenticated && preferredWallet && (
+              <span className="text-xs text-[var(--muted)]">{preferredWallet.address.slice(0, 6)}...{preferredWallet.address.slice(-4)}</span>
+            )}
+            {authenticated ? (
+              <button onClick={logout} className="rounded-lg border border-[var(--border)] bg-black/20 px-3 py-1.5 text-xs text-[var(--muted)] transition hover:border-red-500/30 hover:text-red-400">Disconnect</button>
+            ) : (
+              <button onClick={login} className="rounded-lg border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-4 py-2 text-xs font-semibold text-[rgb(160,220,255)] transition hover:bg-[rgba(0,163,255,0.16)]">Connect Wallet</button>
+            )}
+          </div>
+        </header>
+
+        {!authenticated && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-6">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">NFTmail Dashboard</h1>
+              <p className="mt-2 text-sm text-[var(--muted)]">Connect your wallet holding the governing NFT to access your account</p>
+            </div>
+            <button onClick={login} className="rounded-xl border border-[rgba(0,163,255,0.35)] bg-[rgba(0,163,255,0.08)] px-8 py-4 text-sm font-semibold text-[rgb(160,220,255)] transition-all hover:bg-[rgba(0,163,255,0.16)] hover:shadow-[0_0_32px_rgba(0,163,255,0.12)]">Connect Wallet</button>
+            <p className="text-[10px] text-[var(--muted)]">Supports Privy email login, MetaMask, Rabby, or any injected wallet holding NFTMail.gno</p>
+          </div>
+        )}
+
+        {authenticated && loading && (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="flex items-center gap-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
+              <span className="text-sm text-[var(--muted)]">Resolving NFTMail names...</span>
+            </div>
+          </div>
+        )}
+
+        {authenticated && !loading && names.length === 0 && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold">No NFTMail names found</h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">This wallet doesn&apos;t hold any NFTMail.gno NFTs.</p>
+            </div>
+            <Link href="/nftmail" className="rounded-xl border border-emerald-500/35 bg-emerald-500/8 px-6 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/16">Mint NFTMail Address</Link>
+          </div>
+        )}
+
+        {/* ── Dashboard ── */}
+        {authenticated && !loading && names.length > 0 && (
+          <>
+            {/* Account selector + tier badge */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-4 py-2.5">
+                <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                {names.length === 1 ? (
+                  <span className="text-sm font-medium text-emerald-300">{selectedName?.email}</span>
+                ) : (
+                  <select
+                    value={selectedName?.label || ''}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const n = names.find((n: NftMailName) => n.label === e.target.value);
+                      if (n) setSelectedName(n);
+                    }}
+                    className="bg-transparent text-sm font-medium text-emerald-300 outline-none"
+                  >
+                    {[...names]
+                      .sort((a, b) => a.email.localeCompare(b.email))
+                      .map((n: NftMailName) => (
+                        <option key={n.tokenId} value={n.label} className="bg-black text-white">
+                          {n.label.endsWith('_') ? '⻤ ' : ''}{n.email}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+              <span className="text-[10px] text-[var(--muted)]">{selectedName?.gnoName}</span>
+              {inboxTier && (
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ring-1 ${
+                  isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20'
+                    : isPro ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20'
+                    : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'
+                }`}>
+                  {isPremium ? 'PREMIUM' : isPro ? 'PRO' : 'FREE'}
+                </span>
+              )}
+              {!isAgent && (
+                <button
+                  onClick={() => setShowSettings(v => !v)}
+                  title="Account settings"
+                  aria-label="Account settings"
+                  className={`ml-auto flex h-7 w-7 items-center justify-center rounded-lg border transition ${showSettings ? 'border-[rgba(0,163,255,0.4)] bg-[rgba(0,163,255,0.1)] text-[rgb(160,220,255)]' : 'border-[var(--border)] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)]'}`}
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Settings panel — image privacy (all tiers) + forwarding (premium, non-agent) */}
+            {showSettings && (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-5">
+                {selectedName && walletAddress && (
+                  <FaxKeySetup local={selectedName.label} walletAddress={walletAddress} />
+                )}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Block Remote Images (Anti-Tracking)</h3>
+                    <p className="text-xs text-[var(--muted)] mt-0.5">Blocks tracking pixels &amp; remote images in HTML mail until you choose to load them per-message.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggleBlockRemoteImages(!blockRemoteImages)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${blockRemoteImages ? 'bg-blue-600' : 'bg-gray-600'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blockRemoteImages ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+                {isPremium && !isAgent && selectedName && (
+                  <div className="border-t border-[var(--border)] pt-5">
+                    <ForwardingSetup
+                      agentName={selectedName.label}
+                      ownerAddress={preferredWallet?.address || ''}
+                      currentConfig={forwardingConfig}
+                      onSave={handleSaveForwarding}
+                    />
+                  </div>
+                )}
+                {!isPremium && (
+                  <p className="text-[10px] text-[var(--muted)] border-t border-[var(--border)] pt-4">Upgrade to PREMIUM to unlock email forwarding and NFTfax.</p>
+                )}
+              </div>
+            )}
+
+            {/* Privacy toggle — agent accounts only */}
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
+              <TogglePrivacy
+                name={selectedName.label}
+                walletAddress={preferredWallet.address}
+                onPrivacyChange={(enabled: boolean) => { setPrivacyEnabled(enabled); setPrivacyTier(enabled ? 'private' : 'exposed'); }}
+              />
+            )}
+            {selectedName && preferredWallet && selectedName.label.endsWith('_') && (
+              <MoltToPrivate name={selectedName.label} walletAddress={preferredWallet.address} onMolted={() => setPrivacyEnabled(true)} />
+            )}
+
+            {/* Tabs */}
+            <div className="flex gap-1 rounded-lg border border-[var(--border)] bg-black/20 p-1">
+              <button
+                onClick={() => setTab('inbox')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'inbox' ? 'bg-[rgba(0,163,255,0.12)] text-[rgb(160,220,255)]' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Inbox{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}
+              </button>
+              <button
+                onClick={() => setTab('sentbox')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'sentbox' ? 'bg-amber-500/12 text-amber-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Sent{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}
+              </button>
+              <button
+                onClick={() => canSend && setTab('compose')}
+                title={!canSend ? 'Upgrade to PRO to unlock sending' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'compose' ? 'bg-violet-500/12 text-violet-300' : canSend ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+              >
+                Compose <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-violet-500/10 text-violet-300 ring-violet-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : 'PRO+'}</span>
+              </button>
+              <button
+                onClick={() => canFax && setTab('fax')}
+                title={!canFax ? 'NFTfax is unavailable for agent mailboxes' : undefined}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'fax' ? 'bg-amber-500/12 text-amber-300' : canFax ? 'text-[var(--muted)] hover:text-white/60' : 'cursor-not-allowed opacity-40 text-[var(--muted)]'}`}
+              >
+                Fax{faxMessages.length > 0 ? ` (${faxMessages.length})` : ''} <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[9px] ring-1 ${isPremium ? 'bg-amber-500/10 text-amber-300 ring-amber-500/20' : 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/20'}`}>{isPremium ? 'PREMIUM' : isPro ? 'PRO' : '2 FREE/MO'}</span>
+              </button>
+              <button
+                onClick={() => setTab('killswitch')}
+                className={`flex-1 rounded-md px-4 py-2 text-xs font-semibold transition ${tab === 'killswitch' ? 'bg-red-500/12 text-red-300' : 'text-[var(--muted)] hover:text-white/60'}`}
+              >
+                Burn
+              </button>
+            </div>
+
+            {/* ── INBOX TAB ── */}
+            {tab === 'inbox' && (
+              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+                {/* Toolbar */}
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">INBOX{inboxMessages.length > 0 ? ` (${inboxMessages.length})` : ''}</span>
+                    {!isPremium && messages.length > 0 && (
+                      <div className="hidden sm:flex items-center gap-3">
+                        {[['bg-emerald-500','Fresh'],['bg-amber-500','Aging'],['bg-red-500','Expiring']].map(([c,l]) => (
+                          <div key={l} className="flex items-center gap-1"><div className={`h-1.5 w-1.5 rounded-full ${c}`} /><span className="text-[9px] text-[var(--muted)]">{l}</span></div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setChatMode(v => { if (!v) fetchSentbox(); return !v; }); }}
+                    className="rounded-full border border-[var(--border)] px-2.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-white hover:border-[rgba(0,163,255,0.4)] transition"
+                  >
+                    {chatMode ? '📧 Email' : '💬 Chat'}
+                  </button>
+                  <button
+                    onClick={fetchInbox}
+                    disabled={loadingInbox}
+                    className="flex items-center gap-1.5 text-[10px] text-[rgb(160,220,255)] hover:text-white transition disabled:opacity-40"
+                    title="Refresh inbox"
+                  >
+                    <svg className={`h-3 w-3 ${loadingInbox ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                    </svg>
+                    {loadingInbox ? 'Loading...' : 'Refresh'}
+                  </button>
+                  </div>
+                </div>
+
+                {inboxNote && (
+                  <div className="border-b border-[var(--border)] bg-amber-500/5 px-4 py-2">
+                    <p className="text-xs text-amber-300">{inboxNote}</p>
+                  </div>
+                )}
+
+                {/* ── FaxTray: received NFTfax transmissions ── */}
+                {!chatMode && faxMessages.length > 0 && (
+                  <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">
+                    <div className="flex items-center gap-2 px-4 py-2">
+                      <svg className="h-3.5 w-3.5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                      <span className="text-[10px] font-semibold tracking-wider text-amber-300">FAXTRAY ({faxMessages.length})</span>
+                      <span className="text-[9px] text-[var(--muted)]">Secure NFTfax transmissions</span>
+                    </div>
+                    <div className="divide-y divide-[var(--border)]">
+                      {faxMessages.map((msg: InboxMessage) => {
+                        const trayId = parseTrayId(msg);
+                        return (
+                          <div key={msg.messageId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-amber-500/10 text-amber-300">
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-xs text-white">{msg.sender || msg.fromAddress || 'Unknown sender'}</p>
+                                <p className="truncate text-[10px] text-[var(--muted)]">{trayId ? `T/#${trayId.slice(0, 4).toUpperCase()}` : (msg.subject || 'NFTfax')} · {formatTimeAgo(msg.receivedTime, msg.receivedAt)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {trayId && (
+                                <a href={`/tray/${trayId}`} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition">View</a>
+                              )}
+                              <button onClick={() => handleDelete(msg.messageId)} title="Delete fax" className="rounded p-1.5 text-red-400/50 hover:text-red-400 transition">
+                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Chat view */}
+                {chatMode && selectedName && (
+                  <div className="p-4">
+                    <ChatView
+                      myEmail={selectedName.email}
+                      messages={messages.map(m => ({ id: m.messageId, fromAddress: m.fromAddress, sender: m.sender, body: m.body, summary: m.summary, receivedTime: m.receivedTime, encrypted: m.encrypted }))}
+                      sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || selectedName.email, to: m.to, body: m.body, timestamp: m.timestamp }))}
+                      isOwner={true}
+                      onSendMessage={async (to, body) => {
+                        const res = await fetch('/api/send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Re: chat`, content: body }),
+                        });
+                        if (!res.ok) {
+                          const d = await res.json().catch(() => ({})) as { error?: string };
+                          throw new Error(d.error || `Send failed (${res.status})`);
+                        }
+                        // Store to KV so it appears in the Sent tab (non-fatal)
+                        const label = selectedName.email.replace('@nftmail.box', '');
+                        fetch(WORKER_URL, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            action: 'storeSentMessage',
+                            localPart: label,
+                            payload: {
+                              messageId: `chat-${Date.now()}`,
+                              from: selectedName.email,
+                              to,
+                              subject: 'Re: chat',
+                              body,
+                              timestamp: Date.now(),
+                            },
+                          }),
+                        }).catch(() => {});
+                        // Refresh sentbox so the thread shows the new message
+                        setTimeout(fetchSentbox, 1500);
+                      }}
+                      onDeleteThread={async (_contact, inboxIds, sentIds) => {
+                        const label = selectedName.email.replace('@nftmail.box', '');
+                        // Delete inbox messages
+                        await Promise.all(inboxIds.map(id =>
+                          fetch(WORKER_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId: id }),
+                          }).catch(() => {})
+                        ));
+                        // Delete sent messages
+                        await Promise.all(sentIds.map(id =>
+                          fetch(WORKER_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'deleteSentMessage', localPart: label, messageId: id }),
+                          }).catch(() => {})
+                        ));
+                        // Refresh both after delete
+                        fetchInbox();
+                        fetchSentbox();
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Split pane */}
+                {!chatMode && <div className="flex" style={{ minHeight: '460px' }}>
+                  {/* Left: message list */}
+                  <div className={`flex flex-col border-r border-[var(--border)] ${selectedMessage ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
+                    {loadingInbox && inboxMessages.length === 0 ? (
+                      <div className="flex flex-1 items-center justify-center py-12">
+                        <div className="flex items-center gap-3">
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" />
+                          <span className="text-sm text-[var(--muted)]">Loading...</span>
+                        </div>
+                      </div>
+                    ) : inboxMessages.length === 0 ? (
+                      <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
+                        <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
+                        </svg>
+                        <p className="text-sm text-[var(--muted)]">Inbox empty</p>
+                        <p className="text-[10px] text-[var(--muted)] text-center">Send a test email to <span className="text-emerald-300">{selectedName?.email}</span></p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
+                        {inboxMessages.map((msg: InboxMessage) => {
+                          const isRead = readIds.has(msg.messageId) || msg.isRead;
+                          const isSelected = selectedMessage?.messageId === msg.messageId;
+                          return (
+                            <button
+                              key={msg.messageId}
+                              onClick={() => { setSelectedMessage(msg); markRead(msg.messageId); setViewMode('text'); }}
+                              className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${isSelected ? 'bg-[rgba(0,163,255,0.08)] border-l-2 border-[rgb(0,163,255)]' : 'border-l-2 border-transparent'}`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${!isRead ? 'bg-[rgb(0,163,255)]' : 'bg-transparent'}`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`truncate text-xs ${!isRead ? 'font-semibold text-white' : 'text-zinc-300'}`}>{msg.subject || '(no subject)'}</p>
+                                  <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">{msg.sender}</p>
+                                  {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
+                                  <div className="flex items-center justify-between mt-1.5">
+                                    <span className="text-[9px] text-[var(--muted)]">{formatTimeAgo(msg.receivedTime)}</span>
+                                    <div className="flex items-center gap-2">
+                                      {!isPremium && (
+                                        <div className="h-0.5 w-8 overflow-hidden rounded-full bg-white/5">
+                                          <div className={`h-full rounded-full ${decayBarColor(msg.decayPct)}`} style={{ width: `${100 - msg.decayPct}%` }} />
+                                        </div>
+                                      )}
+                                      <span
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(msg.messageId); }}
+                                        title="Delete"
+                                        role="button"
+                                        className="rounded p-1 text-red-400/40 transition hover:text-red-400"
+                                      >
+                                        <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: reading pane */}
+                  <div className={`flex-1 flex flex-col ${selectedMessage ? 'flex' : 'hidden md:flex'}`}>
+                    {selectedMessage ? (
+                      <>
+                        {/* Mobile back button */}
+                        <button onClick={() => setSelectedMessage(null)} className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2 text-[10px] text-[var(--muted)] hover:text-white transition md:hidden">
+                          ← Back to inbox
+                        </button>
+
+                        {/* Message header */}
+                        <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
+                          <p className="text-sm font-semibold text-white">{selectedMessage.subject || '(no subject)'}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedMessage.sender}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedName?.email}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Date</span> {formatTimeAgo(selectedMessage.receivedTime)}</p>
+                        </div>
+
+                        {/* View mode bar + action buttons */}
+                        <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
+                          <div className="flex items-center gap-0.5">
+                            {(['text','html','headers','source'] as ViewMode[]).map(m => (
+                              <button key={m} onClick={() => setViewMode(m)} className={`rounded px-2.5 py-1 text-[10px] font-medium transition capitalize ${viewMode === m ? 'bg-white/10 text-white' : 'text-[var(--muted)] hover:text-white'}`}>{m}</button>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            {/* Reply */}
+                            <button
+                              disabled={!canSend}
+                              title={!canSend ? 'PRO+ required to reply' : 'Reply'}
+                              onClick={() => { if (!canSend) return; setComposeTo(selectedMessage.fromAddress || selectedMessage.sender); setComposeSubject(`Re: ${selectedMessage.subject}`); setTab('compose'); }}
+                              className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" /></svg>
+                            </button>
+                            {/* Forward */}
+                            <button
+                              disabled={!canSend}
+                              title={!canSend ? 'PRO+ required to forward' : 'Forward'}
+                              onClick={() => { if (!canSend) return; setComposeSubject(`Fwd: ${selectedMessage.subject}`); setComposeBody(`\n\n-------- Forwarded Message --------\nFrom: ${selectedMessage.sender}\nSubject: ${selectedMessage.subject}\n\n${selectedMessage.body || selectedMessage.summary}`); setTab('compose'); }}
+                              className="rounded p-1.5 text-[var(--muted)] transition hover:text-white disabled:opacity-30"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 17 20 12 15 7" /><path d="M4 18v-2a4 4 0 014-4h12" /></svg>
+                            </button>
+                            {/* Download */}
+                            <button
+                              title="Download as .txt"
+                              onClick={() => {
+                                const content = `From: ${selectedMessage.sender}\nTo: ${selectedName?.email}\nSubject: ${selectedMessage.subject}\nDate: ${selectedMessage.receivedTime}\n\n${selectedMessage.body || selectedMessage.summary}`;
+                                const blob = new Blob([content], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a'); a.href = url; a.download = `${selectedMessage.messageId}.txt`; a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                              className="rounded p-1.5 text-[var(--muted)] transition hover:text-white"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                            </button>
+                            {/* Delete */}
+                            <button
+                              title="Delete message"
+                              onClick={() => handleDelete(selectedMessage.messageId)}
+                              className="rounded p-1.5 text-red-400/50 transition hover:text-red-400"
+                            >
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Message body */}
+                        <div className="flex-1 overflow-y-auto px-5 py-4" style={{ maxHeight: '380px' }}>
+                          {selectedMessage.encrypted ? (
+                            <div className="flex flex-col items-center gap-3 py-8">
+                              <svg className="h-8 w-8 text-violet-400 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
+                              </svg>
+                              <p className="text-sm text-violet-300">End-to-end encrypted</p>
+                              <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
+                            </div>
+                          ) : viewMode === 'text' ? (
+                            <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
+                          ) : viewMode === 'html' ? (
+                            selectedMessage.bodyHtml ? (
+                              <div className="space-y-2">
+                                {blockRemoteImages && !imagesRevealedFor.has(selectedMessage.messageId) && (
+                                  <div className="flex items-center justify-between rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2">
+                                    <span className="text-[11px] text-amber-300">Remote images blocked to prevent tracking pixels.</span>
+                                    <button
+                                      onClick={() => setImagesRevealedFor(prev => new Set(prev).add(selectedMessage.messageId))}
+                                      className="rounded-md border border-amber-500/30 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/16 transition"
+                                    >
+                                      Load images
+                                    </button>
+                                  </div>
+                                )}
+                                <iframe
+                                  srcDoc={blockRemoteImages && !imagesRevealedFor.has(selectedMessage.messageId) ? blockRemoteImagesInHtml(selectedMessage.bodyHtml) : selectedMessage.bodyHtml}
+                                  sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                  className="w-full border-0 bg-white rounded"
+                                  style={{ minHeight: '320px' }}
+                                  title="email-html"
+                                />
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[var(--muted)] py-4 text-center">No HTML content available for this message.</p>
+                            )
+                          ) : viewMode === 'headers' ? (
+                            <div className="space-y-1.5 font-mono text-[11px]">
+                              {[['Message-ID', selectedMessage.messageId],['From', selectedMessage.sender],['To', selectedName?.email || ''],['Subject', selectedMessage.subject],['Date', selectedMessage.receivedTime],['Decay', `${selectedMessage.decayPct}%`],['Expires', selectedMessage.expiresAt || 'never']].map(([k,v]) => (
+                                <div key={k} className="flex gap-2"><span className="text-zinc-500 w-24 flex-shrink-0">{k}</span><span className="text-zinc-300 break-all">{v}</span></div>
+                              ))}
+                            </div>
+                          ) : (
+                            <pre className="whitespace-pre-wrap font-mono text-[10px] text-zinc-400 leading-relaxed">{JSON.stringify(selectedMessage, null, 2)}</pre>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col flex-1 items-center justify-center gap-2 text-center py-12 px-6">
+                        <svg className="h-8 w-8 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="6" width="20" height="12" rx="2" /><path d="M22 8l-10 5L2 8" />
+                        </svg>
+                        <p className="text-sm text-[var(--muted)]">Select a message to read</p>
+                        <Link href={`/inbox/${encodeURIComponent(selectedName?.email?.replace('@nftmail.box', '') || '')}`} className="mt-1 text-[10px] text-[rgba(0,163,255,0.6)] hover:text-[rgb(160,220,255)] transition">Open full inbox →</Link>
+                      </div>
+                    )}
+                  </div>
+                </div>}
+              </div>
+            )}
+
+            {/* ── SENTBOX TAB ── */}
+            {tab === 'sentbox' && (
+              <div className="rounded-xl border border-[var(--border)] overflow-hidden">
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-black/20 px-4 py-2">
+                  <span className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SENT{sentMessages.length > 0 ? ` (${sentMessages.length})` : ''}</span>
+                  <button onClick={fetchSentbox} disabled={loadingSent} className="flex items-center gap-1.5 text-[10px] text-[rgb(160,220,255)] hover:text-white transition disabled:opacity-40">
+                    <svg className={`h-3 w-3 ${loadingSent ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>
+                    {loadingSent ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="flex" style={{ minHeight: '460px' }}>
+                  <div className={`flex flex-col border-r border-[var(--border)] ${selectedSent ? 'hidden md:flex md:w-2/5' : 'flex w-full md:w-2/5'}`}>
+                    {loadingSent && sentMessages.length === 0 ? (
+                      <div className="flex flex-1 items-center justify-center py-12"><div className="flex items-center gap-3"><div className="h-4 w-4 animate-spin rounded-full border-2 border-[rgba(0,163,255,0.4)] border-t-transparent" /><span className="text-sm text-[var(--muted)]">Loading sent messages...</span></div></div>
+                    ) : sentMessages.length === 0 ? (
+                      <div className="flex flex-col flex-1 items-center justify-center py-12 gap-3">
+                        <svg className="h-10 w-10 text-[var(--muted)] opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                        <p className="text-sm text-[var(--muted)]">No sent messages found</p>
+                        <p className="text-[10px] text-[var(--muted)]">Messages sent via this address will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[var(--border)] overflow-y-auto" style={{ maxHeight: '560px' }}>
+                        {sentMessages.map((msg: any) => (
+                          <button key={msg.id} onClick={() => setSelectedSent(msg)} className={`w-full text-left px-4 py-3 transition hover:bg-white/5 ${selectedSent?.id === msg.id ? 'bg-amber-500/8 border-l-2 border-amber-500' : 'border-l-2 border-transparent'}`}>
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate text-xs font-medium text-white">{msg.subject || '(no subject)'}</p>
+                              <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">To: {msg.to}</p>
+                              <p className="text-[9px] text-[var(--muted)] mt-1">{new Date(msg.timestamp * 1000).toLocaleDateString()}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className={`flex-1 flex flex-col ${selectedSent ? 'flex' : 'hidden md:flex'}`}>
+                    {selectedSent ? (
+                      <>
+                        <button onClick={() => setSelectedSent(null)} className="flex items-center gap-1.5 border-b border-[var(--border)] px-4 py-2 text-[10px] text-[var(--muted)] hover:text-white transition md:hidden">← Back to list</button>
+                        <div className="border-b border-[var(--border)] bg-black/20 px-5 py-4 space-y-1">
+                          <p className="text-sm font-semibold text-white">{selectedSent.subject || '(no subject)'}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">From</span> {selectedName?.email}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">To</span> {selectedSent.to}</p>
+                          <p className="text-[11px] text-[var(--muted)]"><span className="text-zinc-500 w-10 inline-block">Date</span> {new Date(selectedSent.timestamp * 1000).toLocaleString()}</p>
+                        </div>
+                        <div className="flex items-center gap-1 border-b border-[var(--border)] bg-black/10 px-3 py-1.5">
+                          <button onClick={() => { setComposeTo(selectedSent.to); setComposeSubject(`Re: ${selectedSent.subject}`); setTab('compose'); }} className="rounded p-1.5 text-[var(--muted)] transition hover:text-white" title="Reply"><svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 00-4-4H4" /></svg></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-4">
+                          {selectedSent.body ? (
+                            <div className="text-sm text-white prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: selectedSent.body }} />
+                          ) : (
+                            <p className="text-xs text-[var(--muted)] italic">—</p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col flex-1 items-center justify-center gap-2 text-center py-12 px-6">
+                        <svg className="h-8 w-8 text-[var(--muted)] opacity-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                        <p className="text-sm text-[var(--muted)]">Select a sent message to view details</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── COMPOSE TAB ── */}
+            {tab === 'compose' && (
+              <div className="space-y-4">
+                {!canSend && (
+                  <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-500/20">FREE</span>
+                      <span className="text-sm text-violet-300">Compose &amp; Send requires a PRO or PREMIUM mailbox</span>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--muted)]">Molt your inbox on the <Link href="/nftmail" className="text-violet-300 hover:underline">mint page</Link> to unlock sending.</p>
+                  </div>
+                )}
+                <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 space-y-4 ${!canSend ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <div>
+                    <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">FROM</label>
+                    <div className="mt-1 flex rounded-lg border border-[var(--border)] bg-black/20 overflow-hidden">
+                      <div className="flex-1 px-3 py-2 text-sm text-emerald-300">{selectedName?.label}</div>
+                      <div className="border-l border-[var(--border)] bg-black/10">
+                        {availableDomains.length > 1 ? (
+                          <select
+                            value={selectedFromDomain}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedFromDomain(e.target.value)}
+                            className="h-full bg-transparent px-3 py-2 text-sm text-emerald-300 outline-none cursor-pointer"
+                          >
+                            {availableDomains.map(domain => (
+                              <option key={domain} value={domain} className="bg-black text-white">@{domain}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="flex items-center h-full px-3 text-sm text-emerald-300/70">@{selectedFromDomain}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">TO</label>
+                      <button onClick={() => setShowCcBcc(v => !v)} className="text-[10px] text-[var(--muted)] hover:text-white transition">{showCcBcc ? 'Hide CC/BCC' : 'CC/BCC'}</button>
+                    </div>
+                    <input type="email" value={composeTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeTo(e.target.value)} placeholder="recipient@example.com (comma-separated for multiple)" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                  </div>
+                  {showCcBcc && (
+                    <>
+                      <div>
+                        <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">CC</label>
+                        <input type="email" value={composeCc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeCc(e.target.value)} placeholder="cc@example.com" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">BCC</label>
+                        <input type="email" value={composeBcc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeBcc(e.target.value)} placeholder="bcc@example.com" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SUBJECT</label>
+                    <input type="text" value={composeSubject} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setComposeSubject(e.target.value)} placeholder="Subject" className="mt-1 w-full rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">MESSAGE</label>
+                    <textarea value={composeBody} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setComposeBody(e.target.value)} placeholder="Write your message..." rows={8} className="mt-1 w-full resize-none rounded-lg border border-[var(--border)] bg-black/40 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-[rgba(0,163,255,0.5)]" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-[var(--muted)]">Attachments coming soon</p>
+                    <button onClick={handleSend} disabled={sending || !composeTo} className="rounded-lg border border-violet-500/35 bg-violet-500/8 px-5 py-2 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/16 disabled:cursor-not-allowed disabled:opacity-40">{sending ? 'Sending...' : 'Send'}</button>
+                  </div>
+                  {sendResult && <p className={`text-xs ${sendResult.startsWith('Sent') ? 'text-emerald-400' : 'text-red-400'}`}>{sendResult}</p>}
+                </div>
+              </div>
+            )}
+
+            {/* ── FAX TAB ── */}
+            {tab === 'fax' && (
+              <div className="space-y-4">
+                {selectedName && walletAddress ? (
+                  <>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+                      <NftFax fromLabel={selectedName.label} ownerWallet={walletAddress} />
+                    </div>
+                    {/* Chain-letter lab reserved for the standalone NFTfax app (fax.nftmail.box).
+                    <FaxChainComposer fromLabel={selectedName.label} ownerWallet={walletAddress} /> */}
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--muted)]">Select a mailbox to send an NFTfax.</div>
+                )}
+              </div>
+            )}
+
+            {/* ── BURN TAB ── */}
+            {tab === 'killswitch' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><line x1="9" y1="9" x2="15" y2="15" /><line x1="15" y1="9" x2="9" y2="15" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-red-300">Sovereign Kill-Switch</h3>
+                  </div>
+                  <p className="text-xs text-[var(--muted)] mb-4">Permanently burn all encrypted inbox history. This action is <strong className="text-red-400">irreversible</strong>. All messages for <span className="text-emerald-300">{selectedName?.email}</span> will be deleted.</p>
+                  <button onClick={handleBurn} disabled={burning} className="w-full rounded-lg border border-red-500/35 bg-red-500/8 px-5 py-3 text-xs font-semibold text-red-300 transition hover:bg-red-500/16 hover:shadow-[0_0_24px_rgba(239,68,68,0.12)] disabled:cursor-not-allowed disabled:opacity-40">
+                    {burning ? 'Signing & Burning...' : 'Sign & Burn All Messages'}
+                  </button>
+                  {burnResult && <p className={`mt-3 text-xs ${burnResult.includes('complete') ? 'text-emerald-400' : 'text-red-400'}`}>{burnResult}</p>}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
+        )}
+
+        <footer className="mt-auto flex items-center justify-center gap-3 text-xs text-[var(--muted)]">
+          <span>nftmail.box dashboard — privacy-first email</span>
+          {!isPremium && (
+            <Link href="/nftmail" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20 transition whitespace-nowrap">
+              Upgrade to Premium →
+            </Link>
+          )}
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[var(--bg)] flex items-center justify-center text-[var(--muted)]">Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
+  );
+}

@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
 
     // ─── Register sovereign inbox in nftmail-email-worker KV ───
     // agentName is the nftmail.gno label — write nftmailgno:{label} + privacy:{label}
-    const nftmailWorkerUrl = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+    const nftmailWorkerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     const webhookSecret = process.env.NFTMAIL_WEBHOOK_SECRET;
     let kvRegistered = false;
     if (webhookSecret) {

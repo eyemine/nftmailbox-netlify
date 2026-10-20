@@ -10,7 +10,7 @@
 import { createPublicClient, http, parseEther, parseUnits, type Hex, type Log } from 'viem';
 import { gnosis, base } from 'viem/chains';
 
-const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://nftmail-email-worker.richard-159.workers.dev';
+const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || '';
 
 // Treasury Safe on Gnosis — receives all tier upgrade payments
