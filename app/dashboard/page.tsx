@@ -15,6 +15,7 @@ import FaxKeySetup from '../components/FaxKeySetup';
 import PgpKeySetup from '../components/PgpKeySetup';
 import PgpDecrypt from '../components/PgpDecrypt';
 import PgpOnchainSetup from '../components/PgpOnchainSetup';
+import { AttachmentSettings } from '../components/AttachmentSettings';
 import { signWithWallet } from '@/app/lib/wallet-sign';
 import { workerFetch } from '@/app/lib/worker-fetch';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
@@ -664,6 +665,14 @@ function DashboardContent() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blockRemoteImages ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
+
+                {(isPro || isPremium) && selectedName && walletAddress && (
+                  <AttachmentSettings
+                    label={selectedName.label}
+                    ownerWallet={walletAddress}
+                    tier={inboxTier}
+                  />
+                )}
 
                 {isPremium && !isAgent && selectedName && (
                   <div className="border-t border-[var(--border)] pt-5">

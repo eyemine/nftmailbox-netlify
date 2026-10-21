@@ -11,3 +11,6 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Foundry build cache
+cache/

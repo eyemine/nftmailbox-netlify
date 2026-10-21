@@ -1,277 +1,176 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useMemo } from 'react';
-import { formatEther, createPublicClient, http, parseAbiItem } from 'viem';
-import { gnosis } from '../utils/chains';
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
 
-interface AuditData {
-  xdaiBalance: bigint | null;
-  storyIpCount: number;
-  lastTxTimestamp: number | null;
-  lastTxHash: string | null;
+function isHexAddress(value: string) {
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
 
-interface AgentAuditCardProps {
-  tbaAddress: string;
-  agentName?: string;
-  namespace?: string;
-  registrar?: string;
-}
+type SafeBalanceResponse = {
+  safeAddress: string;
+  chainId: number;
+  balanceWei: string;
+  balanceXdai: string;
+};
 
-export default function AgentAuditCard({ tbaAddress, agentName, namespace, registrar }: AgentAuditCardProps) {
-  const publicClient = useMemo(() => createPublicClient({
-    chain: gnosis,
-    transport: http(),
-  }), []);
+type AgentAuditCardProps = {
+  safeAddress: string;
+  assets?: string[];
+};
 
-  const [audit, setAudit] = useState<AuditData>({
-    xdaiBalance: null,
-    storyIpCount: 0,
-    lastTxTimestamp: null,
-    lastTxHash: null,
-  });
+export default function AgentAuditCard({ safeAddress, assets }: AgentAuditCardProps) {
+  const [scanning, setScanning] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [telemetry, setTelemetry] = useState<{
-    surgeScore: number;
-    inbox: { count: number };
-    heartbeat: { isActive: boolean; lastBeat?: number };
-  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<SafeBalanceResponse | null>(null);
 
-  // Determine alive status
-  const isAlive = !loading && (
-    (audit.xdaiBalance !== null && audit.xdaiBalance > BigInt(0)) ||
-    (audit.lastTxTimestamp !== null && (Date.now() - audit.lastTxTimestamp) < 7 * 24 * 60 * 60 * 1000) ||
-    telemetry?.heartbeat.isActive === true
-  );
+  const ipAssets = useMemo(() => assets ?? ["ghostagent.ip", "openclaw.gno"], [assets]);
 
   useEffect(() => {
-    if (!tbaAddress || tbaAddress === '0x0000000000000000000000000000000000000000') return;
+    const t = window.setTimeout(() => setScanning(false), 1500);
+    return () => window.clearTimeout(t);
+  }, []);
 
-    async function fetchAudit() {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
       setLoading(true);
-      const data: AuditData = {
-        xdaiBalance: null,
-        storyIpCount: 0,
-        lastTxTimestamp: null,
-        lastTxHash: null,
-      };
+      setError(null);
 
-      // 1. xDAI balance
       try {
-        data.xdaiBalance = await publicClient.getBalance({
-          address: tbaAddress as `0x${string}`,
-        });
-      } catch {}
+        const res = await fetch(`/api/safe-balance?safeAddress=${encodeURIComponent(safeAddress)}`);
+        const json = (await res.json()) as SafeBalanceResponse | { error: string };
 
-      // 2. Story IP count — query SubnameMinted events where this TBA was created
-      //    (counts how many IPA registrations this agent has)
-      if (registrar) {
-        try {
-          const tbaEvent = parseAbiItem(
-            'event TokenboundAccountCreated(address indexed account, address indexed tokenContract, uint256 indexed tokenId)'
-          );
-          const logs = await publicClient.getLogs({
-            address: registrar as `0x${string}`,
-            event: tbaEvent,
-            args: { account: tbaAddress as `0x${string}` },
-            fromBlock: 'earliest',
-            toBlock: 'latest',
-          });
-          data.storyIpCount = logs.length;
-        } catch {}
+        if (!res.ok) {
+          const message = "error" in json ? json.error : "Failed to fetch balance";
+          throw new Error(message);
+        }
+
+        if (!cancelled) setData(json as SafeBalanceResponse);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Unknown error");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    }
 
-      // 3. Last tx timestamp — get latest block's tx count for this address
-      try {
-        const txCount = await publicClient.getTransactionCount({
-          address: tbaAddress as `0x${string}`,
-        });
-        if (txCount > 0) {
-          // Get the latest block to approximate last activity
-          const block = await publicClient.getBlock({ blockTag: 'latest' });
-          // Check recent blocks for transactions from this address
-          const currentBlock = Number(block.number);
-          for (let i = 0; i < 1000 && i < currentBlock; i += 100) {
-            try {
-              const logs = await publicClient.getLogs({
-                address: tbaAddress as `0x${string}`,
-                fromBlock: BigInt(currentBlock - i - 100),
-                toBlock: BigInt(currentBlock - i),
-              });
-              if (logs.length > 0) {
-                const lastLog = logs[logs.length - 1];
-                const logBlock = await publicClient.getBlock({ blockNumber: lastLog.blockNumber });
-                data.lastTxTimestamp = Number(logBlock.timestamp) * 1000;
-                data.lastTxHash = lastLog.transactionHash;
-                break;
-              }
-            } catch {}
-          }
-        }
-      } catch {}
+    const normalized = safeAddress.trim();
+    const isValid = isHexAddress(normalized);
+    const isZero = normalized.toLowerCase() === "0x0000000000000000000000000000000000000000";
 
-      setAudit(data);
+    if (!normalized) {
       setLoading(false);
+      setData(null);
+      setError("Enter a Safe address to run an audit.");
+      return () => {
+        cancelled = true;
+      };
     }
 
-    fetchAudit();
-  }, [tbaAddress, registrar, publicClient]);
-
-  // Fetch telemetry from CF worker
-  useEffect(() => {
-    if (!agentName) return;
-    async function fetchTelemetry() {
-      try {
-        const res = await fetch('/api/inbox', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ agentName }),
-        });
-        if (res.ok) {
-          const data = await res.json() as Record<string, any>;
-          setTelemetry({
-            surgeScore: data.surgeScore || 0,
-            inbox: data.inbox || { count: 0 },
-            heartbeat: data.heartbeat || { isActive: false },
-          });
-        }
-      } catch {}
+    if (!isValid || isZero) {
+      setLoading(false);
+      setData(null);
+      setError("Enter a valid non-zero Safe address.");
+      return () => {
+        cancelled = true;
+      };
     }
-    fetchTelemetry();
-  }, [agentName]);
 
-  const truncAddr = `${tbaAddress.slice(0, 6)}...${tbaAddress.slice(-4)}`;
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [safeAddress]);
+
+  const balance = useMemo(() => {
+    const raw = data?.balanceXdai ?? "0";
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  }, [data?.balanceXdai]);
+
+  const gnosisPayReady = balance > 0.1;
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-      {/* Header — alive signal */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
+    <section className="rounded-2xl border border-[rgba(0,163,255,0.32)] bg-[var(--card)]/90 p-6 shadow-[0_0_0_1px_rgba(0,163,255,0.10),0_40px_120px_rgba(0,0,0,0.60)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold tracking-[0.18em] text-[rgb(160,220,255)]">AGENT PROOF-OF-CAPITAL</div>
+          <div className="mt-2 text-sm text-[var(--muted)]">Safe: <span className="font-mono text-xs text-[rgb(180,190,210)]">{safeAddress}</span></div>
+        </div>
+
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold tracking-[0.18em] text-[var(--muted)]">AGENT AUDIT</span>
-          {agentName && namespace && (
-            <span className="text-xs text-[rgb(160,220,255)]">
-              {agentName}.{namespace}.gno
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {loading ? (
-            <span className="text-[10px] text-[var(--muted)]">scanning...</span>
-          ) : isAlive ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-500/25">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-              </span>
-              ALIVE
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 rounded-full bg-zinc-500/10 px-2.5 py-1 text-[10px] font-bold text-zinc-500 ring-1 ring-zinc-500/20">
-              <span className="h-2 w-2 rounded-full bg-zinc-600" />
-              DORMANT
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Telemetry grid */}
-      <div className="grid grid-cols-4 gap-px bg-[var(--border)]">
-        {/* xDAI Balance */}
-        <div className="bg-[var(--card)] px-4 py-4">
-          <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">xDAI BALANCE</div>
-          <div className="mt-1.5 text-xl font-bold text-white">
-            {loading ? (
-              <span className="inline-block h-6 w-16 animate-pulse rounded bg-white/5" />
-            ) : audit.xdaiBalance !== null ? (
-              Number(formatEther(audit.xdaiBalance)).toFixed(4)
-            ) : (
-              '—'
-            )}
-          </div>
-          <div className="mt-0.5 text-[10px] text-[var(--muted)]">Gnosis Chain</div>
-        </div>
-
-        {/* Story IP Count */}
-        <div className="bg-[var(--card)] px-4 py-4">
-          <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">STORY IPs</div>
-          <div className="mt-1.5 text-xl font-bold text-violet-300">
-            {loading ? (
-              <span className="inline-block h-6 w-8 animate-pulse rounded bg-white/5" />
-            ) : (
-              audit.storyIpCount
-            )}
-          </div>
-          <div className="mt-0.5 text-[10px] text-[var(--muted)]">IP Assets</div>
-        </div>
-
-        {/* Last Tx */}
-        <div className="bg-[var(--card)] px-4 py-4">
-          <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">LAST TX</div>
-          <div className="mt-1.5 text-sm font-bold">
-            {loading ? (
-              <span className="inline-block h-6 w-12 animate-pulse rounded bg-white/5" />
-            ) : audit.lastTxTimestamp ? (
-              <span className="text-emerald-300">{formatTimeAgo(audit.lastTxTimestamp)}</span>
-            ) : (
-              <span className="text-[var(--muted)]">none</span>
-            )}
-          </div>
-          {audit.lastTxHash && (
-            <a
-              href={`https://gnosisscan.io/tx/${audit.lastTxHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-0.5 block text-[10px] text-[rgb(160,220,255)] hover:underline"
-            >
-              view ↗
-            </a>
-          )}
-        </div>
-
-        {/* SURGE / Heartbeat */}
-        <div className="bg-[var(--card)] px-4 py-4">
-          <div className="text-[10px] font-semibold tracking-wider text-[var(--muted)]">SURGE</div>
-          <div className="mt-1.5 text-xl font-bold text-violet-300">
-            {telemetry ? telemetry.surgeScore.toFixed(1) : '0.0'}
-          </div>
-          <div className="mt-0.5 text-[10px] text-[var(--muted)]">
-            {telemetry?.inbox.count ?? 0} msgs
-          </div>
-        </div>
-      </div>
-
-      {/* Footer — TBA address */}
-      <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-2.5">
-        <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-          <span>TBA:</span>
-          <code className="text-[rgb(160,220,255)]">{truncAddr}</code>
-          <button
-            onClick={() => navigator.clipboard.writeText(tbaAddress)}
-            className="text-[var(--muted)] hover:text-white"
+          <span
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              gnosisPayReady
+                ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                : "border-white/10 bg-white/[0.03] text-[var(--muted)]"
+            }`}
           >
-            Copy
-          </button>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {gnosisPayReady ? "Gnosis Pay Ready" : "Gnosis Pay Not Ready"}
+          </span>
         </div>
-        <a
-          href={`https://gnosisscan.io/address/${tbaAddress}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[10px] text-[rgb(160,220,255)] hover:underline"
-        >
-          Gnosisscan ↗
-        </a>
       </div>
-    </div>
-  );
-}
 
-function formatTimeAgo(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+      <div className="mt-5">
+        <AnimatePresence initial={false}>
+          {scanning ? (
+            <motion.div
+              key="scan"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="rounded-2xl border border-[var(--border)] bg-black/25 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold">Scanning Blockchain...</div>
+                <div className="text-xs text-[var(--muted)]">Gnosis Chain</div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full border border-[rgba(0,163,255,0.22)] bg-black/40">
+                <motion.div
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 1.5, ease: "linear" }}
+                  className="h-full bg-[linear-gradient(90deg,rgba(0,163,255,0.15),rgba(0,163,255,0.85),rgba(124,77,255,0.55))]"
+                />
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-[rgba(0,163,255,0.22)] bg-black/20 p-5 shadow-[inset_0_0_0_1px_rgba(0,163,255,0.08)]">
+          <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">XDAI BALANCE</div>
+          <div className="mt-2 text-4xl font-semibold tracking-tight">
+            {loading ? "—" : balance.toFixed(4)}
+            <span className="ml-2 text-base font-semibold text-[var(--muted)]">xDAI</span>
+          </div>
+          {error ? <div className="mt-2 text-xs text-red-300">{error}</div> : null}
+          {!error && !loading ? (
+            <div className="mt-2 text-xs text-[var(--muted)]">Native balance read via Safe Protocol Kit</div>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-[var(--border)] bg-black/20 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-semibold tracking-[0.18em] text-[var(--muted)]">IP ASSETS</div>
+            <div className="text-xs text-[var(--muted)]">{ipAssets.length}</div>
+          </div>
+          <div className="mt-3 max-h-40 overflow-auto rounded-xl border border-[rgba(255,255,255,0.08)] bg-black/30">
+            <ul className="divide-y divide-[rgba(255,255,255,0.08)]">
+              {ipAssets.map((a) => (
+                <li key={a} className="px-4 py-3 text-sm">
+                  <span className="font-mono text-[rgb(180,190,210)]">{a}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }

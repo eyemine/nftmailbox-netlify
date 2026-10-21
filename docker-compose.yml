@@ -16,3 +16,10 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    # worker.nftmail.box has no public DNS record — it is only an nginx
+    # server_name on this host. Map it to the host gateway so the container
+    # can reach the Bun worker (via nginx:443, which holds the TLS cert).
+    # Without this, /api/resolve-nftmail cannot list KV-held NFT accounts and
+    # falls back to an empty on-chain scan (only social/embedded wallets show).
+    extra_hosts:
+      - "worker.nftmail.box:host-gateway"

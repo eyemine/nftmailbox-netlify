@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
     const workerUrl = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
     let kvMessages: any[] = [];
     let accountTier: string | null = null;
+    let canSendAttachments = false;
+    let canReceiveAttachments = false;
 
     let workerError = '';
     try {
@@ -53,6 +55,8 @@ export async function GET(req: NextRequest) {
       if (resolveRes.ok) {
         const rd = await resolveRes.json() as Record<string, any>;
         accountTier = rd.accountTier || null;
+        canSendAttachments = rd.canSendAttachments === true;
+        canReceiveAttachments = rd.canReceiveAttachments === true;
       }
 
       // Human inboxes are private unless the owner chose `exposed`; agent (_)
@@ -106,7 +110,12 @@ export async function GET(req: NextRequest) {
             body: isEnc ? '' : rawBody,
             bodyHtml: isEnc ? '' : (m.payload?.bodyHtml || ''),
             isRead: false,
-            hasAttachment: false,
+            hasAttachment: !!(m.envelope?.hasAttachment || m.attachments?.length > 0),
+            attachments: (m.envelope?.attachments || m.attachments || []).map((a: { filename: string; size: number; type: string }) => ({
+              filename: a.filename,
+              size: a.size,
+              type: a.type,
+            })),
             encrypted: isEnc,
             pgpEncrypted,
             type: m.type || '',
@@ -139,6 +148,8 @@ export async function GET(req: NextRequest) {
         total: active.length,
         tier,
         accountTier,
+        canSendAttachments,
+        canReceiveAttachments,
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
@@ -147,6 +158,8 @@ export async function GET(req: NextRequest) {
       messages: [],
       tier: 'free',
       accountTier,
+      canSendAttachments,
+      canReceiveAttachments,
       ...(workerError ? { workerError } : {}),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err: any) {
