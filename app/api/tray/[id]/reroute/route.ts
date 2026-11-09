@@ -3,13 +3,13 @@
 /// Re-route a sent fax to a new recipient after 24h with no forward from
 /// the original recipient. The sender stays in control of the chain.
 ///
-/// Body: { fromLabel, ownerWallet, to, dataBase64?, chainTrayId }
+/// Body: { fromLabel, ownerWallet, to, dataBase64? }
 ///   - fromLabel: sender's mailbox (must control the original fax)
 ///   - ownerWallet: sender's wallet (verified against on-chain owner)
 ///   - to: new recipient address
 ///   - dataBase64: optional new image to composite (if omitted, forwards
 ///     the original fax bitmap unchanged)
-///   - chainTrayId: the original fax ID being re-routed
+///   - the route's [id] is the original fax being re-routed
 ///
 /// After the new send succeeds, calls markRerouted on the original tray
 /// to disable mint for the original recipient.
@@ -34,13 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       ownerWallet?: string;
       to?: string;
       dataBase64?: string;
-      chainTrayId?: string;
     };
 
     const fromLabel = (body.fromLabel || '').toLowerCase().trim();
     const ownerWallet = (body.ownerWallet || '').toLowerCase().trim();
     const to = (body.to || '').toLowerCase().trim();
-    const chainTrayId = (body.chainTrayId || originalTrayId).trim();
 
     if (!fromLabel || !ownerWallet || !to) {
       return NextResponse.json({ error: 'Missing fromLabel, ownerWallet, or to' }, { status: 400, headers: NO_STORE });
@@ -131,15 +129,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     // 4. Send the fax to the new recipient (reuse the send flow)
+    // A re-route is a sideways move — same hop, new recipient — so the
+    // worker inherits the ORIGINAL's lineage (parent, depth, root,
+    // participants) via rerouteOf. Passing chainTrayId here put every
+    // rerouted fax one tier too deep and counted the skipped recipient
+    // as a participant. `from` is the doc's own sender value so it
+    // matches whichever address form (@fax/@nftmail.box) it recorded.
     const trayPayload: Record<string, unknown> = {
       action: 'setTrayDocument',
       secret: WEBHOOK_SECRET,
-      from: fromEmail,
+      from: docFrom,
       to,
       format: 'png',
       isMultipage: false,
       colorMode: 'greyscale',
-      chainTrayId, // continue the chain from the original fax
+      rerouteOf: originalTrayId,
     };
 
     if (body.dataBase64) {
