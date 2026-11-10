@@ -23,6 +23,63 @@ const WORKER_SECRET = process.env.WORKER_SECRET || '';
 // which is Phase D — until then, external encryption needs an explicit
 // recipientPublicKey or a client-encrypted (pgpArmored) payload.
 const INTERNAL_PGP_DOMAINS = ['nftmail.box', 'ghostmail.box'];
+
+// ─── Basic-tier monthly send quota ─────────────────────────────────────────
+// 10 sends per calendar month (UTC), matching the fax-side basic allowance
+// (MONTHLY_FREE_SENDS in app/lib/fax-credits.ts). Month-keyed worker KV — a
+// new key each month means the count resets naturally without a cron.
+const BASIC_MONTHLY_SEND_LIMIT = 10;
+const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || '';
+
+async function sendCountKvGet(key: string): Promise<string | null> {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+      body: JSON.stringify({ action: 'kvGet', key }),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { value: string | null };
+    return data.value;
+  } catch {
+    return null;
+  }
+}
+
+async function sendCountKvPut(key: string, value: string, ownerAddress: string) {
+  await fetch(WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+    body: JSON.stringify({
+      action: 'kvPut',
+      key,
+      value,
+      ownerAddress: ownerAddress.toLowerCase(),
+      webhookSecret: WEBHOOK_SECRET,
+    }),
+    cache: 'no-store',
+  });
+}
+
+/// Returns remaining monthly sends for a basic account; -1 when the counter
+/// cannot be read (caller should fail open, not block sends on quota bugs).
+async function monthlySendBudget(label: string): Promise<number> {
+  const month = new Date().toISOString().slice(0, 7);
+  const raw = await sendCountKvGet(`email-send-count:${label.toLowerCase()}:${month}`);
+  if (raw === null) return BASIC_MONTHLY_SEND_LIMIT;
+  const used = parseInt(raw, 10);
+  return isNaN(used) ? BASIC_MONTHLY_SEND_LIMIT : BASIC_MONTHLY_SEND_LIMIT - used;
+}
+
+async function recordMonthlySend(label: string, ownerAddress: string): Promise<void> {
+  const month = new Date().toISOString().slice(0, 7);
+  const key = `email-send-count:${label.toLowerCase()}:${month}`;
+  const raw = await sendCountKvGet(key);
+  const used = raw ? parseInt(raw, 10) || 0 : 0;
+  await sendCountKvPut(key, String(used + 1), ownerAddress);
+}
+
 // ─── Rate Limiting ─────────────────────────────────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX = 30; // 30 emails per hour per IP per label
@@ -364,6 +421,8 @@ export async function POST(req: NextRequest) {
     if (!(await callerOwnsInbox(caller, label))) {
       return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
     }
+    // Attribution for quota counters — a wallet proven by the caller token.
+    const verifiedWallet = caller.wallets[0] || '';
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
@@ -422,7 +481,23 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    
+
+    // ── Basic-tier monthly send quota: 10 sends/month (UTC) ────────────────
+    // Mirrors the fax-side MONTHLY_FREE_SENDS allowance. Fail-open on counter
+    // read errors — a KV hiccup must not block paying-less basic sends.
+    const isBasicTier = accountTier === 'basic' || accountTier === 'free';
+    if (isBasicTier) {
+      const remaining = await monthlySendBudget(label);
+      if (remaining <= 0) {
+        return NextResponse.json({
+          error: `Monthly send limit reached (${BASIC_MONTHLY_SEND_LIMIT}/month on basic tier). Upgrade to continue sending.`,
+          upgradeUrl: `/nftmail?upgrade=standard&label=${label}`,
+          tier: accountTier,
+          sendsRemaining: 0,
+        }, { status: 402 });
+      }
+    }
+
     // Tier-based HTML processing
     const rawHtmlBody = markdownToHtml(mailBody);
     const htmlBody = sanitizeHtmlForTier(rawHtmlBody, accountTier);
@@ -450,6 +525,7 @@ export async function POST(req: NextRequest) {
           armored: body.pgpArmored,
         });
         const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
+        if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
         try {
           await fetch(WORKER_URL, {
@@ -515,6 +591,7 @@ export async function POST(req: NextRequest) {
             recipientPublicKeysArmored: recipientKeys,
           });
           const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
+          if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
           try {
             await fetch(WORKER_URL, {
@@ -565,6 +642,7 @@ export async function POST(req: NextRequest) {
       text: textBody,
       ...(attachments.length > 0 ? { attachments } : {}),
     });
+    if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
     // Store sent message in KV for sentbox display
     try {
