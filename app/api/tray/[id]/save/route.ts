@@ -6,7 +6,11 @@
 /// Base" (the tradeable collectible). An optional Gnosis tx/tokenId is stored
 /// when an on-chain anchor exists; the persistence itself works without one.
 ///
-/// Ownership is enforced fail-CLOSED: the caller's wallet must control `local`.
+/// Ownership is derived from the caller's own inbox listing, which itself
+/// enforces the fail-closed wallet-ownership check. nftmail.box saves do NOT
+/// require forwarding first (that's an nftfax.app game mechanic). When the
+/// recipient has already forwarded the fax, the FORWARDED link
+/// (forwardedTrayId) is the document persisted — otherwise the original.
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -22,28 +26,12 @@ function workerHeaders(): Record<string, string> {
   return h;
 }
 
-async function verifyOwner(local: string, wallet: string): Promise<NextResponse | null> {
-  const resolveRes = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: workerHeaders(),
-    body: JSON.stringify({ action: 'resolveAddress', name: local }),
-    cache: 'no-store',
-  });
-  if (!resolveRes.ok) {
-    return NextResponse.json({ error: 'Could not verify mailbox ownership. Try again.' }, { status: 503, headers: NO_STORE });
-  }
-  const resolved = await resolveRes.json() as Record<string, unknown>;
-  if (resolved.exists === false) {
-    return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
-  }
-  const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-  if (!controller) {
-    return NextResponse.json({ error: 'Ownership could not be verified. Connect the controlling wallet.' }, { status: 403, headers: NO_STORE });
-  }
-  if (controller !== wallet.toLowerCase()) {
-    return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
-  }
-  return null;
+interface InboxFax {
+  id: string;
+  forwarded?: boolean;
+  forwardedTrayId?: string;
+  encrypted?: boolean;
+  channel?: string;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -64,9 +52,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const denied = await verifyOwner(local, wallet);
-    if (denied) return denied;
-
+    // Ownership is derived from the caller's own inbox listing, which itself
+    // enforces the fail-closed wallet-ownership check.
+    const listRes = await fetch(
+      `${req.nextUrl.origin}/api/tray/inbox?local=${encodeURIComponent(local)}&wallet=${encodeURIComponent(wallet)}`,
+      { cache: 'no-store' },
+    );
+    if (!listRes.ok) {
+      const err = await listRes.json().catch(() => ({})) as { error?: string };
+      return NextResponse.json({ error: err.error || 'Ownership check failed' }, { status: listRes.status, headers: NO_STORE });
+    }
+    const { faxes = [] } = await listRes.json() as { faxes?: InboxFax[] };
+    const fax = faxes.find((f) => f.id === id);
+    if (!fax) {
+      return NextResponse.json({ error: 'Fax not found in your in-tray (it may have decayed).' }, { status: 404, headers: NO_STORE });
+    }
+    if (fax.encrypted || fax.channel === 'private') {
+      return NextResponse.json({ error: 'Private (encrypted) faxes cannot be saved.' }, { status: 400, headers: NO_STORE });
+    }
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: workerHeaders(),
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         action: 'saveTrayDocument',
         secret: WEBHOOK_SECRET,
         trayId: id,
+        forwardedTrayId: fax.forwardedTrayId || undefined,
         local,
         gnosisTx: body.gnosisTx || null,
         gnosisTokenId: body.gnosisTokenId ?? null,

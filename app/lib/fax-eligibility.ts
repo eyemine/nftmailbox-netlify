@@ -50,6 +50,7 @@ async function checkDelegateForERC721(
 const COLLECTIONS: Record<string, { contract: string; chain: Chain; rpc?: string; mode?: 'balance' | 'owner' }> = {
   chonk: { contract: '0x07152bfde079b5319e5308c43fb1dbc9c76cb4f9', chain: base, rpc: 'https://mainnet.base.org', mode: 'owner' },
   deadfellaz: { contract: '0x2acab3dea77832c09420663b0e1cb386031ba17b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
+  dfz: { contract: '0x2acab3dea77832c09420663b0e1cb386031ba17b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
   normie: { contract: '0x9eb6e2025b64f340691e424b7fe7022ffde12438', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
   pow: { contract: '0x9abb7bddc43fa67c76a62d8c016513827f59be1b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
 };

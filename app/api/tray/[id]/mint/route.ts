@@ -29,6 +29,7 @@ function workerHeaders(): Record<string, string> {
 interface InboxFax {
   id: string;
   forwarded?: boolean;
+  forwardedTrayId?: string;
   encrypted?: boolean;
   channel?: string;
 }
@@ -84,6 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         action: 'markTrayMinted',
         secret: WEBHOOK_SECRET,
         trayId: id,
+        forwardedTrayId: fax.forwardedTrayId || undefined,
         local,
         baseTx: body.baseTx || null,
         baseTokenId: body.baseTokenId ?? null,
