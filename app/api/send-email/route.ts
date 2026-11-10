@@ -3,19 +3,82 @@
 ///
 /// Auth: ownerWallet in body (verified against KV-registered controller)
 ///
-/// Tier gate: basic = receive-only. lite/premium/ghost = send via Mailgun.
+/// Tier gate: basic = 10 sends, 1 recipient, no CC/BCC. lite/premium/ghost = higher limits.
 ///
 /// Send strategy:
 ///   - All tiers (lite, premium, ghost): Mailgun API, From: label@nftmail.box
 ///     True per-address sending — no relay, no ghostagent@nftmail.box in the envelope.
-///   - Imago (Zoho provisioned seat): send via Zoho directly (calendar/webmail users).
-///     Detected by zoho-seat KV flag set during upgrade provisioning.
+///   - PGP/MIME encryption when recipient key available (Phase C).
 
 import { NextRequest, NextResponse } from 'next/server';
+import * as openpgp from 'openpgp';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
+
+// Internal domains whose recipients' PGP keys are resolvable via the worker
+// registry (getPgpKey). External recipients require WKD/keyserver discovery,
+// which is Phase D — until then, external encryption needs an explicit
+// recipientPublicKey or a client-encrypted (pgpArmored) payload.
+const INTERNAL_PGP_DOMAINS = ['nftmail.box', 'ghostmail.box'];
+
+// ─── Basic-tier monthly send quota ─────────────────────────────────────────
+// 10 sends per calendar month (UTC), matching the fax-side basic allowance
+// (MONTHLY_FREE_SENDS in app/lib/fax-credits.ts). Month-keyed worker KV — a
+// new key each month means the count resets naturally without a cron.
+const BASIC_MONTHLY_SEND_LIMIT = 10;
+const WEBHOOK_SECRET = process.env.NFTMAIL_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || '';
+
+async function sendCountKvGet(key: string): Promise<string | null> {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+      body: JSON.stringify({ action: 'kvGet', key }),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { value: string | null };
+    return data.value;
+  } catch {
+    return null;
+  }
+}
+
+async function sendCountKvPut(key: string, value: string, ownerAddress: string) {
+  await fetch(WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+    body: JSON.stringify({
+      action: 'kvPut',
+      key,
+      value,
+      ownerAddress: ownerAddress.toLowerCase(),
+      webhookSecret: WEBHOOK_SECRET,
+    }),
+    cache: 'no-store',
+  });
+}
+
+/// Returns remaining monthly sends for a basic account; -1 when the counter
+/// cannot be read (caller should fail open, not block sends on quota bugs).
+async function monthlySendBudget(label: string): Promise<number> {
+  const month = new Date().toISOString().slice(0, 7);
+  const raw = await sendCountKvGet(`email-send-count:${label.toLowerCase()}:${month}`);
+  if (raw === null) return BASIC_MONTHLY_SEND_LIMIT;
+  const used = parseInt(raw, 10);
+  return isNaN(used) ? BASIC_MONTHLY_SEND_LIMIT : BASIC_MONTHLY_SEND_LIMIT - used;
+}
+
+async function recordMonthlySend(label: string, ownerAddress: string): Promise<void> {
+  const month = new Date().toISOString().slice(0, 7);
+  const key = `email-send-count:${label.toLowerCase()}:${month}`;
+  const raw = await sendCountKvGet(key);
+  const used = raw ? parseInt(raw, 10) || 0 : 0;
+  await sendCountKvPut(key, String(used + 1), ownerAddress);
+}
+
 // ─── Rate Limiting ─────────────────────────────────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX = 30; // 30 emails per hour per IP per label
@@ -38,11 +101,6 @@ function checkRateLimit(ip: string, label: string): { allowed: boolean; retryAft
   
   entry.count++;
   return { allowed: true };
-}
-
-// ─── DFZ (Data-Free Zone) Detection ─────────────────────────────────────────
-function isDfzAddress(email: string): boolean {
-  return /^dfz[.-]\d+/i.test(email.split('@')[0] || '');
 }
 
 // ─── Tier-based HTML Sanitization ───────────────────────────────────────────
@@ -77,9 +135,15 @@ function validateTierPrivileges(
   const bccCount = bcc ? bcc.split(',').filter(e => e.trim()).length : 0;
   const totalRecipients = toCount + ccCount + bccCount;
   
-  // Free/Basic tier: no sending
+  // Basic/Free tier: 1 recipient, no CC/BCC (10-send limit enforced by worker)
   if (normalizedTier === 'basic' || normalizedTier === 'free') {
-    return { allowed: false, error: 'Basic tier is receive-only' };
+    if (ccCount > 0 || bccCount > 0) {
+      return { allowed: false, error: 'Basic tier cannot use CC/BCC' };
+    }
+    if (totalRecipients > 1) {
+      return { allowed: false, error: 'Basic tier limited to 1 recipient' };
+    }
+    return { allowed: true };
   }
   
   // Lite tier: max 1 CC/BCC, max 3 total recipients
@@ -107,7 +171,6 @@ function validateTierPrivileges(
   // Premium/Imago/Ghost tier: unlimited
   return { allowed: true };
 }
-const ZOHO_MAIL_API = 'https://mail.zoho.com.au/api';
 const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
 
@@ -119,10 +182,51 @@ async function sendViaMailgun(params: {
   subject: string;
   html: string;
   text: string;
+  attachments?: Array<{ filename: string; contentType: string; data: string }>;
 }): Promise<{ messageId: string }> {
   const apiKey = process.env.MAILGUN_API_KEY;
   if (!apiKey) throw new Error('MAILGUN_API_KEY not configured');
 
+  const hasAttachments = params.attachments && params.attachments.length > 0;
+
+  if (hasAttachments) {
+    // Use multipart/form-data for attachments (Mailgun supports this)
+    const formData = new FormData();
+    formData.set('from', params.from);
+    formData.set('to', params.to);
+    if (params.cc) formData.set('cc', params.cc);
+    if (params.bcc) formData.set('bcc', params.bcc);
+    formData.set('subject', params.subject);
+    formData.set('html', params.html);
+    formData.set('text', params.text);
+
+    for (const att of params.attachments!) {
+      // Convert base64 to Blob
+      const binaryStr = atob(att.data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+      const blob = new Blob([bytes], { type: att.contentType || 'application/octet-stream' });
+      formData.append('attachment', blob, att.filename);
+    }
+
+    const res = await fetch(`${MAILGUN_API_BASE}/${MAILGUN_DOMAIN}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${btoa(`api:${apiKey}`)}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new Error(String(err.message || `Mailgun error ${res.status}`));
+    }
+
+    const data = (await res.json()) as Record<string, unknown>;
+    return { messageId: String(data.id || 'sent') };
+  }
+
+  // No attachments — use URL-encoded form (original path)
   const form = new URLSearchParams();
   form.set('from', params.from);
   form.set('to', params.to);
@@ -150,27 +254,135 @@ async function sendViaMailgun(params: {
   return { messageId: String(data.id || 'sent') };
 }
 
-async function getZohoAccessToken(): Promise<string | null> {
-  const existing = process.env.ZOHO_OAUTH_TOKEN;
-  if (existing) return existing;
-  const accountsDomain = process.env.ZOHO_ACCOUNTS_DOMAIN;
-  const refreshToken = process.env.ZOHO_REFRESH_TOKEN;
-  const clientId = process.env.ZOHO_CLIENT_ID;
-  const clientSecret = process.env.ZOHO_CLIENT_SECRET;
-  if (!accountsDomain || !refreshToken || !clientId || !clientSecret) return null;
-  const form = new URLSearchParams();
-  form.set('grant_type', 'refresh_token');
-  form.set('refresh_token', refreshToken);
-  form.set('client_id', clientId);
-  form.set('client_secret', clientSecret);
-  const res = await fetch(`https://${accountsDomain}/oauth/v2/token`, {
+// ─── PGP helpers (Phase C) ──────────────────────────────────────────────────
+
+function randomToken(bytes = 12): string {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Base64-encode a UTF-8 string and wrap at 76 chars per RFC 2045.
+function toBase64Mime(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const b64 = btoa(bin);
+  return b64.replace(/(.{76})/g, '$1\r\n');
+}
+
+// Look up a recipient's armored PGP public key from the worker registry.
+// Returns null for external recipients (pre-WKD) or when no key is registered.
+async function lookupRecipientPgpKey(to: string): Promise<string | null> {
+  const [local, domain] = to.toLowerCase().trim().split('@');
+  if (!local || !domain || !INTERNAL_PGP_DOMAINS.includes(domain)) return null;
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+      body: JSON.stringify({ action: 'getPgpKey', agentName: local }),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { hasKey?: boolean; publicKey?: string };
+    return data.hasKey && data.publicKey ? data.publicKey : null;
+  } catch {
+    return null;
+  }
+}
+
+// Encrypt a text+html body to recipient key(s) and wrap it as an RFC 3156
+// PGP/MIME (multipart/encrypted) message. Returns the raw MIME string.
+async function buildPgpMimeFromPlaintext(opts: {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  cc?: string;
+  bcc?: string;
+  recipientPublicKeysArmored: string[];
+}): Promise<string> {
+  const innerBoundary = `nftmail-inner-${randomToken(8)}`;
+  const innerMime =
+    `Content-Type: multipart/alternative; boundary="${innerBoundary}"\r\n\r\n` +
+    `--${innerBoundary}\r\n` +
+    `Content-Type: text/plain; charset=utf-8\r\n` +
+    `Content-Transfer-Encoding: base64\r\n\r\n` +
+    `${toBase64Mime(opts.text)}\r\n\r\n` +
+    `--${innerBoundary}\r\n` +
+    `Content-Type: text/html; charset=utf-8\r\n` +
+    `Content-Transfer-Encoding: base64\r\n\r\n` +
+    `${toBase64Mime(opts.html)}\r\n\r\n` +
+    `--${innerBoundary}--\r\n`;
+
+  const encryptionKeys = await Promise.all(
+    opts.recipientPublicKeysArmored.map((armoredKey) => openpgp.readKey({ armoredKey })),
+  );
+  const message = await openpgp.createMessage({ text: innerMime });
+  const armored = (await openpgp.encrypt({ message, encryptionKeys, format: 'armored' })) as string;
+
+  return wrapArmoredInPgpMime({ from: opts.from, to: opts.to, cc: opts.cc, bcc: opts.bcc, subject: opts.subject, armored });
+}
+
+// Wrap an already-armored PGP message (e.g. client-encrypted, E2EE) as a
+// PGP/MIME message. Headers (From/To/Subject) are cleartext — PGP/MIME does
+// not encrypt envelope metadata.
+function wrapArmoredInPgpMime(opts: { from: string; to: string; subject: string; armored: string; cc?: string; bcc?: string }): string {
+  const boundary = `nftmail-pgp-${randomToken(8)}`;
+  const headers = [
+    `From: ${opts.from}`,
+    `To: ${opts.to}`,
+    `Subject: ${opts.subject}`,
+  ];
+  if (opts.cc) headers.push(`Cc: ${opts.cc}`);
+  if (opts.bcc) headers.push(`Bcc: ${opts.bcc}`);
+  headers.push(
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="${boundary}"`,
+    ``,
+    `This is an OpenPGP/MIME encrypted message (RFC 3156).`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: application/pgp-encrypted`,
+    `Content-Description: PGP/MIME version identification`,
+    ``,
+    `Version: 1`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: application/octet-stream; name="encrypted.asc"`,
+    `Content-Description: OpenPGP encrypted message`,
+    `Content-Disposition: inline; filename="encrypted.asc"`,
+    ``,
+    opts.armored,
+    `--${boundary}--`,
+    ``,
+  );
+  return headers.join('\r\n');
+}
+
+// Send a raw MIME message via Mailgun's messages.mime endpoint.
+async function sendMimeViaMailgun(params: { to: string; cc?: string; bcc?: string; mime: string }): Promise<{ messageId: string }> {
+  const apiKey = process.env.MAILGUN_API_KEY;
+  if (!apiKey) throw new Error('MAILGUN_API_KEY not configured');
+
+  const form = new FormData();
+  form.set('to', params.to);
+  if (params.cc) form.set('cc', params.cc);
+  if (params.bcc) form.set('bcc', params.bcc);
+  form.append('message', new Blob([params.mime], { type: 'message/rfc822' }), 'message.mime');
+
+  const res = await fetch(`${MAILGUN_API_BASE}/${MAILGUN_DOMAIN}/messages.mime`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
+    headers: { Authorization: `Basic ${btoa(`api:${apiKey}`)}` },
+    body: form,
   });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) return null;
-  return (data.access_token as string) || null;
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(String(err.message || `Mailgun MIME error ${res.status}`));
+  }
+  const data = (await res.json()) as Record<string, unknown>;
+  return { messageId: String(data.id || 'sent') };
 }
 
 export async function POST(req: NextRequest) {
@@ -185,6 +397,11 @@ export async function POST(req: NextRequest) {
       cc?: string;
       bcc?: string;
       replyToMessageId?: string;
+      // ── PGP (Phase C) ──
+      pgpArmored?: string;        // client-encrypted armored ciphertext (true E2EE); server never sees plaintext
+      recipientPublicKey?: string; // explicit armored recipient key for server-side encryption (e.g. external)
+      disablePgp?: boolean;        // force cleartext even if a recipient key is available
+      attachments?: Array<{ filename: string; contentType: string; data: string }>; // base64-encoded attachment data
     };
 
     const { label, domain, ownerWallet, to, subject, cc, bcc } = body;
@@ -227,24 +444,31 @@ export async function POST(req: NextRequest) {
     }
 
     const accountTier = (resolved.accountTier as string | undefined) || 'basic';
-    if (accountTier === 'basic') {
-      return NextResponse.json({
-        error: 'Basic tier is receive-only. Upgrade to Standard to enable sending.',
-        upgradeUrl: `/nftmail?upgrade=standard&label=${label}`,
-        tier: 'basic',
-      }, { status: 402 });
-    }
+    const canSendAttachments = resolved.canSendAttachments === true;
 
     const fromEmail = `${label}@${fromDomain}`;
-    
-    // DFZ address restriction check
-    if (isDfzAddress(fromEmail)) {
-      return NextResponse.json(
-        { error: 'DFZ addresses are restricted from sending emails' },
-        { status: 403 }
-      );
+
+    // ── Attachment gate: only Pro/Premium with canSendAttachments enabled ──
+    const attachments = body.attachments || [];
+    if (attachments.length > 0) {
+      if (!canSendAttachments) {
+        return NextResponse.json(
+          { error: 'Attachments are not enabled for this account. Enable in Settings (Pro/Premium required).' },
+          { status: 403 }
+        );
+      }
+      // 500KB max per attachment, max 3 attachments
+      if (attachments.length > 3) {
+        return NextResponse.json({ error: 'Maximum 3 attachments per email' }, { status: 400 });
+      }
+      for (const att of attachments) {
+        const sizeBytes = Math.ceil((att.data || '').length * 3 / 4);
+        if (sizeBytes > 500000) {
+          return NextResponse.json({ error: `Attachment ${att.filename} exceeds 500KB limit` }, { status: 400 });
+        }
+      }
     }
-    
+
     // Validate tier-based CC/BCC and multi-send privileges
     const tierValidation = validateTierPrivileges(accountTier, to, cc, bcc);
     if (!tierValidation.allowed) {
@@ -253,7 +477,23 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
-    
+
+    // ── Basic-tier monthly send quota: 10 sends/month (UTC) ────────────────
+    // Mirrors the fax-side MONTHLY_FREE_SENDS allowance. Fail-open on counter
+    // read errors — a KV hiccup must not block paying-less basic sends.
+    const isBasicTier = accountTier === 'basic' || accountTier === 'free';
+    if (isBasicTier) {
+      const remaining = await monthlySendBudget(label);
+      if (remaining <= 0) {
+        return NextResponse.json({
+          error: `Monthly send limit reached (${BASIC_MONTHLY_SEND_LIMIT}/month on basic tier). Upgrade to continue sending.`,
+          upgradeUrl: `/nftmail?upgrade=standard&label=${label}`,
+          tier: accountTier,
+          sendsRemaining: 0,
+        }, { status: 402 });
+      }
+    }
+
     // Tier-based HTML processing
     const rawHtmlBody = markdownToHtml(mailBody);
     const htmlBody = sanitizeHtmlForTier(rawHtmlBody, accountTier);
@@ -261,76 +501,129 @@ export async function POST(req: NextRequest) {
       ? htmlBody // Already stripped to text for basic tier
       : mailBody;
 
-    // ── Imago path: dedicated Zoho seat (opt-in, calendar/webmail users) ────
-    const hasZohoSeat = (resolved.zohoSeat as boolean | undefined) ?? false;
-    if (hasZohoSeat) {
-      const zohoOrgId = process.env.ZOHO_ORG_ID;
-      const token = await getZohoAccessToken();
-      if (token && zohoOrgId) {
-        const accountsRes = await fetch(
-          `${ZOHO_MAIL_API}/organization/${zohoOrgId}/accounts`,
-          { headers: { Authorization: `Zoho-oauthtoken ${token}` } },
-        );
-        if (accountsRes.ok) {
-          const accountsData = (await accountsRes.json()) as Record<string, unknown>;
-          const accounts = (accountsData.data as Record<string, unknown>[]) || [];
-          const seat = accounts.find(
-            (a) =>
-              (a.primaryEmailAddress as string)?.toLowerCase() === fromEmail.toLowerCase() ||
-              (a.mailboxAddress as string)?.toLowerCase() === fromEmail.toLowerCase(),
-          );
-          if (seat) {
-            const accountId = (seat.accountId || seat.zuid) as string;
-            const sendRes = await fetch(`${ZOHO_MAIL_API}/accounts/${accountId}/messages`, {
-              method: 'POST',
-              headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-              body: JSON.stringify({
-                fromAddress: fromEmail,
-                toAddress: to,
-                subject: subject || '(no subject)',
-                content: htmlBody,
-                mailFormat: 'html',
-              }),
-            });
-            if (sendRes.ok) {
-              const sendData = (await sendRes.json()) as Record<string, unknown>;
-              const zohoMessageId = (sendData.data as Record<string, unknown>)?.messageId || 'sent';
-              
-              // Store sent message in KV for sentbox display
-              try {
-                await fetch(WORKER_URL, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
-                  body: JSON.stringify({
-                    action: 'storeSentMessage',
-                    localPart: label,
-                    payload: {
-                      messageId: zohoMessageId,
-                      from: fromEmail,
-                      to,
-                      cc: cc || undefined,
-                      bcc: bcc || undefined,
-                      subject: subject || '(no subject)',
-                      body: htmlBody,
-                      timestamp: Date.now(),
-                    },
-                  }),
-                });
-              } catch (e) {
-                console.error('[send-email] Failed to store sent message:', e);
-              }
-              
-              return NextResponse.json({
-                success: true,
-                messageId: zohoMessageId,
+    // ── PGP encryption path (Phase C) ──────────────────────────────────────
+    // Three modes:
+    //   1. pgpArmored: client already encrypted the body (true E2EE). Wrap as
+    //      PGP/MIME and send via Mailgun messages.mime.
+    //   2. Server-side encryption: recipient key available (worker registry for
+    //      internal domains, or explicit recipientPublicKey for external). Encrypt
+    //      plaintext+html as PGP/MIME, send via messages.mime.
+    //   3. Fallback: no key or PGP disabled → existing plaintext Mailgun path.
+    if (!body.disablePgp) {
+      // Mode 1: client-encrypted armored PGP ciphertext (true E2EE)
+      if (body.pgpArmored) {
+        const mime = wrapArmoredInPgpMime({
+          from: `${label} <${fromEmail}>`,
+          to,
+          cc,
+          bcc,
+          subject: subject || '(no subject)',
+          armored: body.pgpArmored,
+        });
+        const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
+        if (isBasicTier) await recordMonthlySend(label, ownerWallet);
+
+        try {
+          await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+            body: JSON.stringify({
+              action: 'storeSentMessage',
+              localPart: label,
+              payload: {
+                messageId: pgpMsgId,
                 from: fromEmail,
                 to,
-                via: 'zoho',
-              });
-            }
-          }
+                cc: cc || undefined,
+                bcc: bcc || undefined,
+                subject: subject || '(no subject)',
+                body: '[PGP encrypted message]',
+                pgpEncrypted: true,
+                timestamp: Date.now(),
+              },
+            }),
+          });
+        } catch (e) {
+          console.error('[send-email] Failed to store PGP sent message:', e);
         }
-        // Zoho seat lookup failed — fall through to Mailgun
+
+        return NextResponse.json({
+          success: true,
+          messageId: pgpMsgId,
+          from: fromEmail,
+          to,
+          via: 'mailgun-mime',
+          pgpEncrypted: true,
+        });
+      }
+
+      // Mode 2: server-side encryption using recipient's public key
+      const recipientKeys: string[] = [];
+      if (body.recipientPublicKey) {
+        recipientKeys.push(body.recipientPublicKey);
+      }
+      const toKey = await lookupRecipientPgpKey(to);
+      if (toKey) recipientKeys.push(toKey);
+
+      // Look up CC/BCC recipient keys (internal domains only)
+      const ccRecipients = cc ? cc.split(',').map(e => e.trim()).filter(Boolean) : [];
+      const bccRecipients = bcc ? bcc.split(',').map(e => e.trim()).filter(Boolean) : [];
+      const extraRecipients = [...ccRecipients, ...bccRecipients];
+      const extraKeys = await Promise.all(extraRecipients.map(r => lookupRecipientPgpKey(r)));
+      for (const k of extraKeys) {
+        if (k) recipientKeys.push(k);
+      }
+
+      if (recipientKeys.length > 0) {
+        try {
+          const mime = await buildPgpMimeFromPlaintext({
+            from: `${label} <${fromEmail}>`,
+            to,
+            cc,
+            bcc,
+            subject: subject || '(no subject)',
+            text: textBody,
+            html: htmlBody,
+            recipientPublicKeysArmored: recipientKeys,
+          });
+          const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
+          if (isBasicTier) await recordMonthlySend(label, ownerWallet);
+
+          try {
+            await fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+              body: JSON.stringify({
+                action: 'storeSentMessage',
+                localPart: label,
+                payload: {
+                  messageId: pgpMsgId,
+                  from: fromEmail,
+                  to,
+                  cc: cc || undefined,
+                  bcc: bcc || undefined,
+                  subject: subject || '(no subject)',
+                  body: '[PGP encrypted message]',
+                  pgpEncrypted: true,
+                  timestamp: Date.now(),
+                },
+              }),
+            });
+          } catch (e) {
+            console.error('[send-email] Failed to store PGP sent message:', e);
+          }
+
+          return NextResponse.json({
+            success: true,
+            messageId: pgpMsgId,
+            from: fromEmail,
+            to,
+            via: 'mailgun-mime',
+            pgpEncrypted: true,
+          });
+        } catch (pgpErr) {
+          console.error('[send-email] PGP encryption failed, falling back to plaintext:', pgpErr);
+        }
       }
     }
 
@@ -343,7 +636,9 @@ export async function POST(req: NextRequest) {
       subject: subject || '(no subject)',
       html: htmlBody,
       text: textBody,
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
+    if (isBasicTier) await recordMonthlySend(label, ownerWallet);
 
     // Store sent message in KV for sentbox display
     try {
