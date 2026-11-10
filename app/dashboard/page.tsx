@@ -12,6 +12,10 @@ import { TogglePrivacy } from '../components/TogglePrivacy';
 import ForwardingSetup from '../components/ForwardingSetup';
 import NftFax from '../components/NftFax';
 import FaxKeySetup from '../components/FaxKeySetup';
+import PgpKeySetup from '../components/PgpKeySetup';
+import PgpDecrypt from '../components/PgpDecrypt';
+import PgpOnchainSetup from '../components/PgpOnchainSetup';
+import { AttachmentSettings } from '../components/AttachmentSettings';
 import { signWithWallet } from '@/app/lib/wallet-sign';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
 // app (fax.nftmail.box). Hidden in the mailbox console.
@@ -91,6 +95,7 @@ interface InboxMessage {
   body: string;
   bodyHtml?: string;
   encrypted: boolean;
+  pgpEncrypted?: boolean;
   isRead: boolean;
   hasAttachment: boolean;
   decayPct: number;
@@ -118,6 +123,7 @@ function DashboardContent() {
   const [tab, setTab] = useState<Tab>('inbox');
   const [chatMode, setChatMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [faxTrayCollapsed, setFaxTrayCollapsed] = useState(false);
   const [showForwarding, setShowForwarding] = useState(false);
   const [forwardingConfig, setForwardingConfig] = useState<{ enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } | undefined>();
   const [savingForwarding, setSavingForwarding] = useState(false);
@@ -634,6 +640,17 @@ function DashboardContent() {
                 {selectedName && walletAddress && (
                   <FaxKeySetup local={selectedName.label} walletAddress={walletAddress} />
                 )}
+                {selectedName && walletAddress && (
+                  <PgpKeySetup local={selectedName.label} walletAddress={walletAddress} />
+                )}
+                {selectedName && walletAddress && (
+                  <PgpOnchainSetup
+                    agentName={selectedName.label}
+                    walletAddress={walletAddress}
+                    tokenId={selectedName.tokenId}
+                    fingerprint={undefined}
+                  />
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-white">Block Remote Images (Anti-Tracking)</h3>
@@ -647,6 +664,14 @@ function DashboardContent() {
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${blockRemoteImages ? 'translate-x-6' : 'translate-x-1'}`} />
                   </button>
                 </div>
+
+                {(isPro || isPremium) && selectedName && walletAddress && (
+                  <AttachmentSettings
+                    label={selectedName.label}
+                    ownerWallet={walletAddress}
+                    tier={inboxTier}
+                  />
+                )}
 
                 {isPremium && !isAgent && selectedName && (
                   <div className="border-t border-[var(--border)] pt-5">
@@ -757,11 +782,16 @@ function DashboardContent() {
                 {/* ── FaxTray: received NFTfax transmissions ── */}
                 {!chatMode && faxMessages.length > 0 && (
                   <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">
-                    <div className="flex items-center gap-2 px-4 py-2">
+                    <button
+                      onClick={() => setFaxTrayCollapsed(v => !v)}
+                      className="flex w-full items-center gap-2 px-4 py-2 hover:bg-amber-500/[0.08] transition"
+                    >
                       <svg className="h-3.5 w-3.5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
                       <span className="text-[10px] font-semibold tracking-wider text-amber-300">FAXTRAY ({faxMessages.length})</span>
                       <span className="text-[9px] text-[var(--muted)]">Secure NFTfax transmissions</span>
-                    </div>
+                      <svg className={`ml-auto h-3 w-3 text-[var(--muted)] transition-transform ${faxTrayCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                    {!faxTrayCollapsed && (
                     <div className="divide-y divide-[var(--border)]">
                       {faxMessages.map((msg: InboxMessage) => {
                         const trayId = parseTrayId(msg);
@@ -788,6 +818,7 @@ function DashboardContent() {
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 )}
 
@@ -889,7 +920,10 @@ function DashboardContent() {
                               <div className="flex items-start gap-2">
                                 <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${!isRead ? 'bg-[rgb(0,163,255)]' : 'bg-transparent'}`} />
                                 <div className="flex-1 min-w-0">
-                                  <p className={`truncate text-xs ${!isRead ? 'font-semibold text-white' : 'text-zinc-300'}`}>{msg.subject || '(no subject)'}</p>
+                                  <p className={`truncate text-xs ${!isRead ? 'font-semibold text-white' : 'text-zinc-300'}`}>
+                                    {msg.pgpEncrypted && <span className="text-violet-400 mr-1" title="PGP encrypted">🔒</span>}
+                                    {msg.subject || '(no subject)'}
+                                  </p>
                                   <p className="truncate text-[10px] text-[var(--muted)] mt-0.5">{msg.sender}</p>
                                   {msg.summary && <p className="truncate text-[10px] text-[var(--muted)] opacity-50 mt-0.5">{stripHtml(msg.summary)}</p>}
                                   <div className="flex items-center justify-between mt-1.5">
@@ -997,6 +1031,12 @@ function DashboardContent() {
                               <p className="text-sm text-violet-300">End-to-end encrypted</p>
                               <p className="text-[11px] text-[var(--muted)] text-center">This message is encrypted with your ECIES public key.</p>
                             </div>
+                          ) : selectedMessage.pgpEncrypted ? (
+                            <PgpDecrypt
+                              armoredMessage={selectedMessage.body}
+                              agentName={selectedName?.label || ''}
+                              walletAddress={walletAddress || ''}
+                            />
                           ) : viewMode === 'text' ? (
                             <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200 leading-relaxed">{selectedMessage.body || selectedMessage.summary || '(empty)'}</pre>
                           ) : viewMode === 'html' ? (
