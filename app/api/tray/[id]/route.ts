@@ -35,17 +35,12 @@ async function verifyOwner(local: string, wallet: string): Promise<NextResponse 
     return NextResponse.json({ error: 'Could not verify mailbox ownership.' }, { status: 503, headers: NO_STORE });
   }
   const resolved = await resolveRes.json() as Record<string, unknown>;
-  // Sovereign handles (e.g. @fax NFT-collection inboxes) report exists:false but
-  // sovereign:true — they have no on-chain controller to match, so mirror the
-  // inbox route: allow them through. Only fail-closed for truly unknown names.
-  if (resolved.exists === false && !resolved.sovereign) {
+  if (resolved.exists === false) {
     return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
   }
-  if (resolved.exists === true) {
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (!controller || controller !== wallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
-    }
+  const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+  if (!controller || controller !== wallet.toLowerCase()) {
+    return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
   }
   return null;
 }

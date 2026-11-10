@@ -6,12 +6,11 @@
 /// Base" (the tradeable collectible). An optional Gnosis tx/tokenId is stored
 /// when an on-chain anchor exists; the persistence itself works without one.
 ///
-/// PROPAGATION GATE (fail-CLOSED): a fax can only be saved AFTER its recipient
-/// has forwarded it onward (mirrors the mint gate). Ownership + gate are both
-/// derived from the caller's own inbox listing, which itself enforces the
-/// fail-closed wallet-ownership check. The document actually persisted is the
-/// FORWARDED link (forwardedTrayId) when one exists — the player saves the
-/// fax they sent onward, not the original inbound copy.
+/// Ownership is derived from the caller's own inbox listing, which itself
+/// enforces the fail-closed wallet-ownership check. nftmail.box saves do NOT
+/// require forwarding first (that's an nftfax.app game mechanic). When the
+/// recipient has already forwarded the fax, the FORWARDED link
+/// (forwardedTrayId) is the document persisted — otherwise the original.
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -53,8 +52,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    // Ownership + propagation gate are both derived from the caller's own inbox
-    // listing, which itself enforces the fail-closed wallet-ownership check.
+    // Ownership is derived from the caller's own inbox listing, which itself
+    // enforces the fail-closed wallet-ownership check.
     const listRes = await fetch(
       `${req.nextUrl.origin}/api/tray/inbox?local=${encodeURIComponent(local)}&wallet=${encodeURIComponent(wallet)}`,
       { cache: 'no-store' },
@@ -71,13 +70,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (fax.encrypted || fax.channel === 'private') {
       return NextResponse.json({ error: 'Private (encrypted) faxes cannot be saved.' }, { status: 400, headers: NO_STORE });
     }
-    if (!fax.forwarded) {
-      return NextResponse.json({
-        error: 'Forward this fax before saving. The chain letter must be passed on to unlock Save.',
-        code: 'FORWARD_REQUIRED',
-      }, { status: 403, headers: NO_STORE });
-    }
-
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: workerHeaders(),
