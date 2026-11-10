@@ -62,6 +62,46 @@ export async function POST(req: NextRequest) {
     }
 
     const json = (await res.json()) as { status: string; handle: string } | { error: string };
+    if (res.ok && 'status' in json) {
+      try {
+        const countRes = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'kvGet', key: 'rolofax:signup-count' }),
+          cache: 'no-store',
+        });
+        const countData = await countRes.json() as { value: string | null };
+        const signupCount = parseInt(countData.value || '0', 10);
+        if (signupCount < 100) {
+          await Promise.all([
+            fetch(WORKER_URL, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                action: 'kvPut',
+                key: `fax-credits:${handle}`,
+                value: '5',
+                ownerAddress: wallet,
+                webhookSecret: WEBHOOK_SECRET,
+              }),
+              cache: 'no-store',
+            }),
+            fetch(WORKER_URL, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                action: 'kvPut',
+                key: 'rolofax:signup-count',
+                value: String(signupCount + 1),
+                ownerAddress: wallet,
+                webhookSecret: WEBHOOK_SECRET,
+              }),
+              cache: 'no-store',
+            }),
+          ]);
+        }
+      } catch { /* non-fatal — registration already succeeded */ }
+    }
     return NextResponse.json(json, { status: res.status });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Registration failed';

@@ -5,7 +5,7 @@
 /// `local` is the address (e.g. `dfz.1234` for @fax or `name` for @nftmail.box).
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCredits, spendCredit, earnForwardCredit, clearJam } from '@/app/lib/fax-credits';
+import { getCredits, spendCredit, earnForwardCredit, clearJam, ensureCreditsAllowance } from '@/app/lib/fax-credits';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const credits = await getCredits(local);
+    const credits = await ensureCreditsAllowance(local, wallet);
     return NextResponse.json({ local, domain, credits }, { status: 200, headers: NO_STORE });
   } catch {
     return NextResponse.json({ error: 'Credit lookup failed' }, { status: 502, headers: NO_STORE });
