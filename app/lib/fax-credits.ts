@@ -16,6 +16,12 @@ export const FADE_MS = FADE_HOURS * 60 * 60 * 1000;
 
 export const BASE_FREE_CREDITS = 2;
 
+/// Basic-tier monthly allowance: every account's credit floor is topped up to
+/// 10 on the first activity of each calendar month (UTC). Earned credits above
+/// the floor carry over — this is a floor, not a reset. Mirrors the email
+/// basic-tier quota (10 sends/month) enforced in /api/send-email.
+export const MONTHLY_FREE_SENDS = 10;
+
 /// First 100 accounts to ever check their fax credits get a launch bonus of
 /// 5 free credits instead of the standard 2. Best-effort (not transactional —
 /// concurrent first-time joins may occasionally over/undercount by a couple
@@ -24,6 +30,10 @@ export const BASE_FREE_CREDITS = 2;
 export const FIRST_JOINER_BONUS_CREDITS = 5;
 export const FIRST_JOINER_CAP = 100;
 const JOINER_COUNT_KEY = 'fax-joiner-count';
+
+function currentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
 
 function labelKey(prefix: string, label: string): string {
   return `${prefix}:${label.toLowerCase().trim()}`;
@@ -116,6 +126,7 @@ export async function applyThermalFade(label: string, ownerAddress: string): Pro
 }
 
 export async function spendCredit(label: string, ownerAddress: string): Promise<boolean> {
+  await ensureMonthlyCredits(label, ownerAddress);
   const credits = await applyThermalFade(label, ownerAddress);
   if (credits <= 0) return false;
   await setCredits(label, credits - 1, ownerAddress);
@@ -168,13 +179,38 @@ export async function ensureJoinerBonus(label: string, ownerAddress: string): Pr
   return granted;
 }
 
-/// Reset an account's thermal-fade jam and refill free credits.
+/// Tops an account's credits up to MONTHLY_FREE_SENDS once per calendar month
+/// (UTC), keyed by `fax-credits-month:{label}`. Never removes credits — earned
+/// credits above the floor carry over.
+export async function ensureMonthlyCredits(label: string, ownerAddress: string): Promise<number> {
+  const month = currentMonth();
+  const mKey = labelKey('fax-credits-month', label);
+  if ((await kvGet(mKey)) === month) {
+    return getCredits(label);
+  }
+  const current = await getCredits(label);
+  const next = Math.max(current, MONTHLY_FREE_SENDS);
+  await Promise.all([
+    setCredits(label, next, ownerAddress),
+    kvPut(mKey, month, ownerAddress),
+  ]);
+  return next;
+}
+
+/// Entry point for the credits GET route: applies the first-joiner launch
+/// bonus, then the monthly basic-tier allowance.
+export async function ensureCreditsAllowance(label: string, ownerAddress: string): Promise<number> {
+  await ensureJoinerBonus(label, ownerAddress);
+  return ensureMonthlyCredits(label, ownerAddress);
+}
+
+/// Reset an account's thermal-fade jam and refill to the monthly allowance.
 export async function clearJam(label: string, ownerAddress: string): Promise<number> {
   const now = Date.now();
   await Promise.all([
-    setCredits(label, BASE_FREE_CREDITS, ownerAddress),
+    setCredits(label, MONTHLY_FREE_SENDS, ownerAddress),
     setLastReceived(label, now, ownerAddress),
     setLastForwarded(label, now, ownerAddress),
   ]);
-  return BASE_FREE_CREDITS;
+  return MONTHLY_FREE_SENDS;
 }
