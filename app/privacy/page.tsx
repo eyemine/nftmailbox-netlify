@@ -115,7 +115,7 @@ export default function PrivacyPage() {
               <li><strong className="text-white">Privy</strong> — wallet connection and embedded wallet provider. See <a href="https://privy.io/privacy" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] hover:underline">privy.io/privacy</a>.</li>
               <li><strong className="text-white">Cloudflare</strong> — infrastructure, KV storage, Workers. See <a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] hover:underline">cloudflare.com/privacypolicy</a>.</li>
               <li><strong className="text-white">Gnosis Chain</strong> — all on-chain actions are public and permanent by nature of the blockchain.</li>
-              <li><strong className="text-white">Zoho Mail</strong> — used for SMTP relay of inbound emails. See <a href="https://zoho.com/privacy.html" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] hover:underline">zoho.com/privacy.html</a>.</li>
+              <li><strong className="text-white">Mailgun</strong> — used for email delivery and inbound routing. See <a href="https://www.mailgun.com/privacy-policy/" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] hover:underline">mailgun.com/privacy-policy</a>.</li>
               <li><strong className="text-white">MoonPay</strong> (optional, for fiat on-ramp) — if you use card payment, MoonPay processes your payment. See <a href="https://moonpay.com/privacy_policy" target="_blank" rel="noopener noreferrer" className="text-[rgb(160,220,255)] hover:underline">moonpay.com/privacy_policy</a>.</li>
             </ul>
           </section>
