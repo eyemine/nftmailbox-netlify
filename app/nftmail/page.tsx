@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { NFTLogin } from '../components/NFTLogin';
 import { MintNFTMail } from '../components/MintNFTMail';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 type Tier = 'none' | 'free' | 'pro';
 
@@ -47,7 +48,7 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
     setUpgrading(true);
     setError('');
     try {
-      const res = await fetch('/api/upgrade-tier', {
+      const res = await workerFetch('/api/upgrade-tier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentTxHash: hash, paymentToken }),

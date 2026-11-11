@@ -11,6 +11,7 @@
 ///   worker action is invoked.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -46,14 +47,15 @@ export async function POST(req: NextRequest) {
       wrapIv?: string;
       ownerWallet?: string;
     };
-    const { local, publicKey, wrappedPrivateKey, wrapIv, ownerWallet } = body;
+    const { local, publicKey, wrappedPrivateKey, wrapIv, ownerWallet: claimedWallet } = body;
 
     if (!local || !publicKey || !wrappedPrivateKey || !wrapIv) {
       return NextResponse.json({ error: 'Missing local, publicKey, wrappedPrivateKey, or wrapIv' }, { status: 400, headers: NO_STORE });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-    }
+    // ownerWallet is a claim; the caller token must prove control of local.
+    const auth = await requireInboxOwner(req, local, claimedWallet);
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     // Verify the caller controls `local` before provisioning its key vault.
     // Fail CLOSED: registering a fax key sets the public key others encrypt to,
@@ -71,15 +73,6 @@ export async function POST(req: NextRequest) {
     const resolved = await resolveRes.json() as Record<string, unknown>;
     if (resolved.exists === false) {
       return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
-    }
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (!controller) {
-      return NextResponse.json({
-        error: 'Ownership could not be verified. Connect the wallet that controls this mailbox.',
-      }, { status: 403, headers: NO_STORE });
-    }
-    if (controller !== ownerWallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
     }
 
     const res = await fetch(WORKER_URL, {

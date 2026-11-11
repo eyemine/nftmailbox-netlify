@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 interface AttachmentSettingsProps {
   label: string;
@@ -28,7 +29,7 @@ export function AttachmentSettings({ label, ownerWallet, tier }: AttachmentSetti
     }
     void (async () => {
       try {
-        const res = await fetch(`/api/inbox?email=${encodeURIComponent(label + '@nftmail.box')}&ownerWallet=${ownerWallet}`, {
+        const res = await workerFetch(`/api/inbox?email=${encodeURIComponent(label + '@nftmail.box')}&ownerWallet=${ownerWallet}`, {
           cache: 'no-store',
         });
         if (res.ok) {
@@ -48,7 +49,7 @@ export function AttachmentSettings({ label, ownerWallet, tier }: AttachmentSetti
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/attachment-settings', {
+      const res = await workerFetch('/api/attachment-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

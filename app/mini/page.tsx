@@ -1062,32 +1062,16 @@ export default function MiniApp() {
                 sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || humanEmail, to: m.to, body: m.body || m.content || '', timestamp: m.receivedAt || Date.now() }))}
                 isOwner={true}
                 onSendMessage={async (to, body) => {
-                  const res = await fetch('/api/send', {
+                  // Metered path (basic = 10/month); send-email records the sent copy.
+                  const res = await workerFetch('/api/send-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fromEmail: humanEmail || `${agentName}@nftmail.box`, toAddress: to, subject: `Re: chat`, content: body }),
+                    body: JSON.stringify({ label: (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', ''), to, subject: 'Re: chat', body }),
                   });
                   if (!res.ok) {
                     const d = await res.json().catch(() => ({})) as { error?: string };
                     throw new Error(d.error || `Send failed (${res.status})`);
                   }
-                  const label = (humanEmail || `${agentName}@nftmail.box`).replace('@nftmail.box', '');
-                  workerFetch(WORKER_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      action: 'storeSentMessage',
-                      localPart: label,
-                      payload: {
-                        messageId: `chat-${Date.now()}`,
-                        from: humanEmail || `${agentName}@nftmail.box`,
-                        to,
-                        subject: 'Re: chat',
-                        body,
-                        timestamp: Date.now(),
-                      },
-                    }),
-                  }).catch(() => {});
                   setTimeout(() => loadInbox(agentName), 1500);
                 }}
                 onDeleteThread={async (_contact, inboxIds, sentIds) => {

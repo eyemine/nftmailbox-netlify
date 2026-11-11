@@ -7,7 +7,7 @@
 /// loads, CSS tricks, script-adjacent behavior) out of the transmission path.
 ///
 /// Body: { fromLabel, ownerWallet, to, format: 'png'|'bmp', dataBase64 }
-/// Auth: ownerWallet must match the on-chain controller of fromLabel (same
+/// Auth: caller token (caller-auth) must control fromLabel (same
 ///       pattern as /api/inbox-action and /api/send-email).
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,6 +15,7 @@ import sharp from 'sharp';
 import { spendCredit, earnForwardCredit, setLastReceived, applyThermalFade, getCredits } from '@/app/lib/fax-credits';
 import { eciesEncrypt } from '@/app/lib/fax-crypto';
 import { isFaxEligible } from '@/app/lib/fax-eligibility';
+import { requireCallerWallet, callerOwnsInbox } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -119,7 +120,6 @@ export async function POST(req: NextRequest) {
       coverNote?: string;
     };
 
-    const collection = (body.collection as string | undefined)?.toLowerCase();
 
     let { fromLabel, ownerWallet, vaultWallet, tokenId, to, format, dataBase64, chainTrayId, isMultipage, colorMode } = body;
     let fromDomain = (body.fromDomain || '').toLowerCase().trim();
@@ -146,9 +146,14 @@ export async function POST(req: NextRequest) {
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    // ownerWallet is a claim; the caller token proves which wallets are theirs.
+    const auth = await requireCallerWallet(req, ownerWallet);
+    if ('res' in auth) return auth.res;
+    const caller = auth.caller;
+    ownerWallet = auth.wallet;
+    // An omitted collection must not open the gate: derive it from the label
+    // prefix (atom.1083 → atom) so @fax ownership is always checked.
+    const collection = ((body.collection as string | undefined) || fromLabel.split('.')[0]).toLowerCase();
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
@@ -210,13 +215,7 @@ export async function POST(req: NextRequest) {
       if (resolved.exists === false) {
         return NextResponse.json({ error: 'Sender mailbox does not exist.' }, { status: 404 });
       }
-      const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-      if (!controller) {
-        return NextResponse.json({
-          error: 'Sender ownership could not be verified. Connect the wallet that controls this mailbox.',
-        }, { status: 403 });
-      }
-      if (controller !== ownerWallet.toLowerCase()) {
+      if (!(await callerOwnsInbox(caller, fromLabel))) {
         return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
       }
       const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
@@ -228,10 +227,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (isFaxSender) {
-      const { eligible, reason } = await isFaxEligible(ownerWallet, fromLabel, collection, normalizedVault, normalizedTokenId);
-      if (!eligible) {
+      // Try the claimed wallet first, then every other wallet the caller proved.
+      const candidates = [ownerWallet, ...caller.wallets.filter((w) => w !== ownerWallet)];
+      let reason: string | undefined;
+      let eligibleWallet: string | null = null;
+      for (const w of candidates) {
+        const r = await isFaxEligible(w, fromLabel, collection, normalizedVault, normalizedTokenId);
+        if (r.eligible) { eligibleWallet = w; break; }
+        reason = reason || r.reason;
+      }
+      if (!eligibleWallet) {
         return NextResponse.json({ error: reason || 'Not eligible to send from this fax mailbox.' }, { status: 403 });
       }
+      ownerWallet = eligibleWallet;
     }
 
     // ── Private (end-to-end encrypted) fax gating ──

@@ -11,6 +11,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 interface NftFaxProps {
   fromLabel: string;
@@ -222,7 +223,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
 
     setSending(true);
     try {
-      const res = await fetch('/api/tray/send', {
+      const res = await workerFetch('/api/tray/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: sendChannel, ...(coverNote.trim() ? { coverNote: coverNote.trim().slice(0, 140) } : {}) }),

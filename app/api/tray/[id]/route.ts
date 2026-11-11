@@ -5,12 +5,13 @@
 /// (ciphertext) — the plaintext image never exists server-side. The recipient
 /// decrypts the envelope client-side with their wallet-unwrapped key.
 ///
-/// DELETE /api/tray/[id]  { local, ownerWallet }
+/// DELETE /api/tray/[id]  { local }  (Authorization: caller token)
 ///
 /// Removes a jammed/decayed fax from the recipient's tray. Ownership is
-/// verified fail-closed via resolveAddress.
+/// verified fail-closed via caller-auth.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -22,27 +23,6 @@ function workerHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
   if (WORKER_SECRET) h['X-Worker-Secret'] = WORKER_SECRET;
   return h;
-}
-
-async function verifyOwner(local: string, wallet: string): Promise<NextResponse | null> {
-  const resolveRes = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: workerHeaders(),
-    body: JSON.stringify({ action: 'resolveAddress', name: local }),
-    cache: 'no-store',
-  });
-  if (!resolveRes.ok) {
-    return NextResponse.json({ error: 'Could not verify mailbox ownership.' }, { status: 503, headers: NO_STORE });
-  }
-  const resolved = await resolveRes.json() as Record<string, unknown>;
-  if (resolved.exists === false) {
-    return NextResponse.json({ error: 'Mailbox does not exist.' }, { status: 404, headers: NO_STORE });
-  }
-  const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-  if (!controller || controller !== wallet.toLowerCase()) {
-    return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
-  }
-  return null;
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -74,17 +54,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const body = await req.json().catch(() => ({})) as { local?: string; ownerWallet?: string };
   const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '').replace(/@fax$/, '');
-  const wallet = (body.ownerWallet || '').trim();
 
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400, headers: NO_STORE });
   if (!local) return NextResponse.json({ error: 'Missing local' }, { status: 400, headers: NO_STORE });
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-  }
 
   try {
-    const denied = await verifyOwner(local, wallet);
-    if (denied) return denied;
+    const auth = await requireInboxOwner(req, local);
+    if ('res' in auth) return auth.res;
 
     const res = await fetch(WORKER_URL, {
       method: 'POST',

@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
+export const dynamic = 'force-dynamic';
+
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
 export async function GET(_req: NextRequest) {

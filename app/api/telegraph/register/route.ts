@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCallerWallet } from '@/app/lib/caller-auth';
 import { isFaxEligible } from '@/app/lib/fax-eligibility';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
@@ -32,6 +33,10 @@ export async function POST(req: NextRequest) {
     if (!/^0x[a-f0-9]{40}$/i.test(wallet)) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
     }
+
+    // `wallet` is a claim; it must be one the signed-in caller proved.
+    const auth = await requireCallerWallet(req, wallet);
+    if ('res' in auth) return auth.res;
 
     const eligibility = await isFaxEligible(wallet, handle, collection, vaultWallet || undefined, tokenId || undefined);
     if (!eligibility.eligible) {

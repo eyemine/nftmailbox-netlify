@@ -11,7 +11,7 @@
 ///               the FID's verified Ethereum addresses.
 ///   privy     — Privy access token (getAccessToken()). Wallets = the wallets
 ///               linked to that Privy user, fetched with the app secret.
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createQuickAuthClient } from '@farcaster/quick-auth';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createPublicClient, http, parseAbi, type Address } from 'viem';
@@ -194,4 +194,62 @@ export async function callerOwnsInbox(caller: Caller, ref: string): Promise<bool
     if ((await safeOwners(safe)).some((o) => mine.has(o))) return true;
   }
   return false;
+}
+
+const NO_STORE = { 'Cache-Control': 'no-store' } as const;
+type Denied = { res: NextResponse };
+
+/// Route guard: the verified caller must control inbox `ref`. Returns the
+/// caller plus the wallet to attribute writes to (the claimed wallet when the
+/// caller proved it, otherwise their first verified wallet).
+export async function requireInboxOwner(
+  req: NextRequest,
+  ref: string,
+  claimedWallet?: string,
+): Promise<{ caller: Caller; wallet: string } | Denied> {
+  const caller = await verifyCaller(req);
+  if (!caller) {
+    return { res: NextResponse.json({ error: 'Sign in required', code: 'AUTH_REQUIRED' }, { status: 401, headers: NO_STORE }) };
+  }
+  if (!ref || !(await callerOwnsInbox(caller, ref))) {
+    return { res: NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE }) };
+  }
+  return { caller, wallet: pickWallet(caller, claimedWallet) };
+}
+
+/// Route guard for wallet-scoped (not inbox-scoped) actions: the claimed
+/// wallet, if given, must be one the caller proved control of.
+export async function requireCallerWallet(
+  req: NextRequest,
+  claimedWallet?: string,
+): Promise<{ caller: Caller; wallet: string } | Denied> {
+  const caller = await verifyCaller(req);
+  if (!caller) {
+    return { res: NextResponse.json({ error: 'Sign in required', code: 'AUTH_REQUIRED' }, { status: 401, headers: NO_STORE }) };
+  }
+  const claimed = (claimedWallet || '').toLowerCase();
+  if (claimed && !caller.wallets.includes(claimed)) {
+    return { res: NextResponse.json({ error: 'Wallet is not linked to your signed-in account' }, { status: 403, headers: NO_STORE }) };
+  }
+  const wallet = pickWallet(caller, claimed);
+  if (!wallet) {
+    return { res: NextResponse.json({ error: 'No verified wallet on this account' }, { status: 403, headers: NO_STORE }) };
+  }
+  return { caller, wallet };
+}
+
+function pickWallet(caller: Caller, claimed?: string): string {
+  const c = (claimed || '').toLowerCase();
+  return c && caller.wallets.includes(c) ? c : caller.wallets[0] || '';
+}
+
+/// Copies the caller proof headers onto a server-to-server call to another
+/// authenticated route of this app (e.g. save → /api/tray/inbox).
+export function forwardAuthHeaders(req: NextRequest): Record<string, string> {
+  const h: Record<string, string> = {};
+  const auth = req.headers.get('authorization');
+  const kind = req.headers.get('x-auth-kind');
+  if (auth) h.Authorization = auth;
+  if (kind) h['X-Auth-Kind'] = kind;
+  return h;
 }

@@ -3,9 +3,9 @@
 /// Re-route a sent fax to a new recipient after 24h with no forward from
 /// the original recipient. The sender stays in control of the chain.
 ///
-/// Body: { fromLabel, ownerWallet, to, dataBase64? }
+/// Body: { fromLabel, to, dataBase64? }
 ///   - fromLabel: sender's mailbox (must control the original fax)
-///   - ownerWallet: sender's wallet (verified against on-chain owner)
+///   - caller token (Authorization + X-Auth-Kind) must control fromLabel
 ///   - to: new recipient address
 ///   - dataBase64: optional new image to composite (if omitted, forwards
 ///     the original fax bitmap unchanged)
@@ -15,6 +15,7 @@
 /// to disable mint for the original recipient.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 import { getCredits, spendCredit, earnForwardCredit } from '@/app/lib/fax-credits';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
@@ -37,38 +38,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     };
 
     const fromLabel = (body.fromLabel || '').toLowerCase().trim();
-    const ownerWallet = (body.ownerWallet || '').toLowerCase().trim();
     const to = (body.to || '').toLowerCase().trim();
 
-    if (!fromLabel || !ownerWallet || !to) {
-      return NextResponse.json({ error: 'Missing fromLabel, ownerWallet, or to' }, { status: 400, headers: NO_STORE });
+    if (!fromLabel || !to) {
+      return NextResponse.json({ error: 'Missing fromLabel or to' }, { status: 400, headers: NO_STORE });
     }
 
-    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400, headers: NO_STORE });
-    }
+    // 1. Verify the caller (Privy / Quick Auth token) controls fromLabel.
+    const auth = await requireInboxOwner(req, fromLabel, body.ownerWallet);
+    if ('res' in auth) return auth.res;
 
-    // 1. Verify the sender controls the fromLabel mailbox
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (WORKER_SECRET) headers['X-Worker-Secret'] = WORKER_SECRET;
-
-    const resolveRes = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ action: 'resolveAddress', name: fromLabel }),
-      cache: 'no-store',
-    });
-    if (!resolveRes.ok) {
-      return NextResponse.json({ error: 'Could not verify sender ownership' }, { status: 503, headers: NO_STORE });
-    }
-    const resolved = await resolveRes.json() as Record<string, unknown>;
-    if (resolved.exists === false) {
-      return NextResponse.json({ error: 'Sender mailbox does not exist' }, { status: 404, headers: NO_STORE });
-    }
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (!controller || controller !== ownerWallet) {
-      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
-    }
 
     // 2. Fetch the original tray document to verify:
     //    a) The sender is the actual sender (from field matches)
@@ -190,7 +171,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     } catch { /* non-fatal — the new fax is already sent */ }
 
     // 6. Earn forward credit for the sender (re-route counts as a forward action)
-    await earnForwardCredit(fromLabel, ownerWallet);
+    await earnForwardCredit(fromLabel, auth.wallet);
 
     return NextResponse.json({
       success: true,

@@ -355,7 +355,7 @@ function DashboardContent() {
     const isPrem = t === 'premium' || t === 'imago' || t === 'ghost';
     const isAgt = selectedName?.label.endsWith('_') ?? false;
     if (!selectedName || !isPrem || isAgt) { setShowForwarding(false); setForwardingConfig(undefined); return; }
-    fetch(`/api/forwarding/${selectedName.label}`)
+    workerFetch(`/api/forwarding/${selectedName.label}`)
       .then(r => r.json())
       .then((d: unknown) => {
         const rd = d as { config?: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } };
@@ -452,7 +452,7 @@ function DashboardContent() {
       const signedAt = Date.now();
       const statement = `NFTMAIL FORWARDING: ${selectedName.label} -> ${config.enabled ? config.targetEmail : 'disabled'} (${config.level}) at ${new Date(signedAt).toISOString()}`;
       const signature = await signWithWallet(statement, walletAddress, wallets, signMessage);
-      const res = await fetch(`/api/forwarding/${selectedName.label}`, {
+      const res = await workerFetch(`/api/forwarding/${selectedName.label}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -832,33 +832,17 @@ function DashboardContent() {
                       sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || selectedName.email, to: m.to, body: m.body, timestamp: m.timestamp }))}
                       isOwner={true}
                       onSendMessage={async (to, body) => {
-                        const res = await fetch('/api/send', {
+                        // Metered path: basic tier counts against 10 sends/month,
+                        // and send-email records the sent copy for the Sent tab.
+                        const res = await workerFetch('/api/send-email', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Re: chat`, content: body }),
+                          body: JSON.stringify({ label: selectedName.email.replace('@nftmail.box', ''), to, subject: 'Re: chat', body }),
                         });
                         if (!res.ok) {
                           const d = await res.json().catch(() => ({})) as { error?: string };
                           throw new Error(d.error || `Send failed (${res.status})`);
                         }
-                        // Store to KV so it appears in the Sent tab (non-fatal)
-                        const label = selectedName.email.replace('@nftmail.box', '');
-                        workerFetch(WORKER_URL, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            action: 'storeSentMessage',
-                            localPart: label,
-                            payload: {
-                              messageId: `chat-${Date.now()}`,
-                              from: selectedName.email,
-                              to,
-                              subject: 'Re: chat',
-                              body,
-                              timestamp: Date.now(),
-                            },
-                          }),
-                        }).catch(() => {});
                         // Refresh sentbox so the thread shows the new message
                         setTimeout(fetchSentbox, 1500);
                       }}

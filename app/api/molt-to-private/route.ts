@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // The worker only checks that `signature` is non-empty — prove ownership here.
+    const auth = await requireInboxOwner(req, name);
+    if ('res' in auth) return auth.res;
 
     const res = await fetch(WORKER_URL, {
       method: 'POST',

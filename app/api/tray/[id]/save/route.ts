@@ -13,6 +13,7 @@
 /// (forwardedTrayId) is the document persisted — otherwise the original.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner, forwardAuthHeaders } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -43,20 +44,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     gnosisTokenId?: string | number;
   };
   const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '');
-  const wallet = (body.ownerWallet || '').trim();
 
   if (!id) return NextResponse.json({ error: 'Missing tray id' }, { status: 400, headers: NO_STORE });
   if (!local) return NextResponse.json({ error: 'Missing local' }, { status: 400, headers: NO_STORE });
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-  }
+  const auth = await requireInboxOwner(req, local, (body.ownerWallet || '').trim());
+  if ('res' in auth) return auth.res;
+  const wallet = auth.wallet;
 
   try {
     // Ownership is derived from the caller's own inbox listing, which itself
     // enforces the fail-closed wallet-ownership check.
     const listRes = await fetch(
       `${req.nextUrl.origin}/api/tray/inbox?local=${encodeURIComponent(local)}&wallet=${encodeURIComponent(wallet)}`,
-      { cache: 'no-store' },
+      { cache: 'no-store', headers: forwardAuthHeaders(req) },
     );
     if (!listRes.ok) {
       const err = await listRes.json().catch(() => ({})) as { error?: string };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 interface MoltToPrivateProps {
   name: string;
@@ -37,7 +38,7 @@ export function MoltToPrivate({ name, walletAddress, onMolted }: MoltToPrivatePr
         signature = `mock-molt-sig-${Date.now()}`;
       }
 
-      const res = await fetch('/api/molt-to-private', {
+      const res = await workerFetch('/api/molt-to-private', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, signature, newTld: 'vault.gno' }),

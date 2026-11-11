@@ -3,7 +3,7 @@
 /// POST: Update forwarding configuration
 
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -20,7 +20,11 @@ export async function GET(
 ) {
   try {
     const agentName = params.name.toLowerCase();
-    
+
+    // The forward target is the owner's private address — owner-only.
+    const auth = await requireInboxOwner(request, agentName);
+    if ('res' in auth) return auth.res;
+
     const workerResponse = await fetch(`${WORKER_URL}`, {
       method: 'POST',
       headers: {
@@ -57,6 +61,9 @@ export async function POST(
       signedAt?: number;
       statement?: string;
     };
+
+    const auth = await requireInboxOwner(request, agentName, body.ownerAddress);
+    if ('res' in auth) return auth.res;
 
     if (!body.ownerAddress) {
       return NextResponse.json({ error: 'Owner address required for security verification' }, { status: 400 });

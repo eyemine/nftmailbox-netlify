@@ -6,6 +6,7 @@
 /// chain ids.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCallerWallet } from '@/app/lib/caller-auth';
 import sharp from 'sharp';
 import { keccak256, toBytes, hexToBytes } from 'viem';
 
@@ -114,11 +115,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ownerWallet?: string;
       blockHash?: string;
     };
-    const { previousTrayIds = [], ownerWallet, blockHash } = body;
+    const { previousTrayIds = [], blockHash } = body;
 
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    // Attribution of the new KV record goes to a wallet the caller proved.
+    const auth = await requireCallerWallet(req, body.ownerWallet);
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     const current = await getTrayDocument(id);
     if (!current) {

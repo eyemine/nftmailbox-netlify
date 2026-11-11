@@ -19,6 +19,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
+import { requireInboxOwner } from '../../lib/caller-auth';
 import { verifyXDAIPayment, verifyEUREPayment, verifyUSDCBasePayment, autoDetectXDAIPayment, autoDetectEUREPayment, autoDetectUSDCBasePayment, burnTxHash, TIER_PRICES_USD, TIER_PRICES_EURE } from '../../lib/payments';
 
 const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
@@ -89,14 +90,16 @@ export async function POST(req: NextRequest) {
       autoDetect?: boolean;
     };
 
-    const { label, ownerWallet, newTier, paymentTxHash, paymentToken = 'xdai', legacyIdentity, autoDetect } = body;
+    const { label, ownerWallet: claimedWallet, newTier, paymentTxHash, paymentToken = 'xdai', legacyIdentity, autoDetect } = body;
 
     if (!label || typeof label !== 'string') {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Invalid ownerWallet' }, { status: 400 });
-    }
+    // ownerWallet is a claim; the caller token must prove control of the label.
+    // The returned wallet is the one payments are matched against.
+    const auth = await requireInboxOwner(req, label, claimedWallet);
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
     // Accept 'pro' as canonical name; 'premium' is kept as an alias for backwards compat
     const normalisedTier = newTier === 'pro' ? 'premium' : newTier;
     if (!normalisedTier || !['lite', 'premium', 'ghost'].includes(normalisedTier)) {

@@ -23,6 +23,7 @@ import {
   hasWrappedPgpKey,
   type WrappedPgpKey,
 } from '../lib/pgp-crypto';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 export interface PgpKeyInfo {
   hasKey: boolean;
@@ -110,7 +111,7 @@ export function usePgpKey(agentName: string | null): UsePgpKeyReturn {
       const wrapped = await provisionPgpKey(signature, base);
 
       // Register with worker via proxy
-      const res = await fetch('/api/pgp-key', {
+      const res = await workerFetch('/api/pgp-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

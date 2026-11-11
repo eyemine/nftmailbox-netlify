@@ -6,6 +6,7 @@
 /// Auth: ownerWallet must match the registered controller for the label.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -18,14 +19,15 @@ export async function POST(req: NextRequest) {
       ownerWallet?: string;
     };
 
-    const { label, messageId, ownerWallet } = body;
+    const { label, messageId, ownerWallet: claimedWallet } = body;
 
     if (!label || !messageId) {
       return NextResponse.json({ error: 'Missing label or messageId' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'ownerWallet required for auth' }, { status: 401 });
-    }
+    // ownerWallet is a claim; the caller token must prove control of label.
+    const auth = await requireInboxOwner(req, label, claimedWallet);
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     // Verify ownership via resolveAddress
     const resolveRes = await fetch(WORKER_URL, {
@@ -39,10 +41,6 @@ export async function POST(req: NextRequest) {
     const resolved = (await resolveRes.json()) as Record<string, unknown>;
     if (!resolved?.exists) {
       return NextResponse.json({ error: 'Address not found' }, { status: 404 });
-    }
-    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (controller && controller !== ownerWallet.toLowerCase()) {
-      return NextResponse.json({ error: 'Wallet does not match registered owner' }, { status: 403 });
     }
 
     // Fetch the full message from KV (includes attachment data)

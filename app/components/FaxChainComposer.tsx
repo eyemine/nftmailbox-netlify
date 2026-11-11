@@ -7,6 +7,7 @@
 'use client';
 
 import { useState } from 'react';
+import { workerFetch } from '@/app/lib/worker-fetch';
 
 interface FaxChainComposerProps {
   fromLabel: string;
@@ -49,7 +50,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/tray/${encodeURIComponent(sourceId.trim())}/chain`, {
+      const res = await workerFetch(`/api/tray/${encodeURIComponent(sourceId.trim())}/chain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,7 +91,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/tray/send', {
+      const res = await workerFetch('/api/tray/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

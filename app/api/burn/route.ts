@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireInboxOwner } from '@/app/lib/caller-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest) {
     if (!localPart || !signature) {
       return NextResponse.json({ error: 'Missing localPart or signature' }, { status: 400 });
     }
+
+    // The worker only checks that `signature` is non-empty, so the caller must
+    // be proven here: a verified caller token that owns the inbox. Without
+    // this, anyone could purge (or with scope=full, destroy) any mailbox.
+    const auth = await requireInboxOwner(req, localPart);
+    if ('res' in auth) return auth.res;
 
     if (scope === 'full' && !WEBHOOK_SECRET) {
       return NextResponse.json({ error: 'Full burn not configured (missing WEBHOOK_SECRET)' }, { status: 503 });
