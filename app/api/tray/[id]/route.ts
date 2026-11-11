@@ -11,6 +11,7 @@
 /// verified fail-closed via resolveAddress.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -72,15 +73,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = await req.json().catch(() => ({})) as { local?: string; ownerWallet?: string };
+  const body = await req.json().catch(() => ({})) as { local?: string; ownerWallet?: string; signature?: string; signedAt?: number };
   const local = (body.local || '').toLowerCase().trim().replace(/@nftmail\.box$/, '').replace(/@fax$/, '');
-  const wallet = (body.ownerWallet || '').trim();
+  const claimedWallet = (body.ownerWallet || '').trim();
 
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400, headers: NO_STORE });
   if (!local) return NextResponse.json({ error: 'Missing local' }, { status: 400, headers: NO_STORE });
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-  }
+  const auth = await requireVerifiedWallet(req, claimedWallet, { signature: body.signature, signedAt: body.signedAt });
+  if ('res' in auth) return auth.res;
+  const wallet = auth.wallet;
 
   try {
     const denied = await verifyOwner(local, wallet);

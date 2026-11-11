@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { keccak256, toBytes, hexToBytes } from 'viem';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -112,13 +113,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await req.json() as {
       previousTrayIds?: string[];
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       blockHash?: string;
     };
-    const { previousTrayIds = [], ownerWallet, blockHash } = body;
+    const { previousTrayIds = [], ownerWallet: claimedWallet, blockHash } = body;
 
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const auth = await requireVerifiedWallet(req, claimedWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     const current = await getTrayDocument(id);
     if (!current) {

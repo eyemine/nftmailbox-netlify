@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -12,14 +13,17 @@ const WORKER_SECRET = process.env.WORKER_SECRET || '';
  */
 export async function POST(req: NextRequest) {
   try {
-    const { name, enabled, walletAddress } = await req.json();
+    const { name, enabled, walletAddress, signature, signedAt } = await req.json();
 
-    if (!name || typeof enabled !== 'boolean' || !walletAddress) {
+    if (!name || typeof enabled !== 'boolean') {
       return NextResponse.json(
-        { error: 'Missing name, enabled (boolean), or walletAddress' },
+        { error: 'Missing name or enabled (boolean)' },
         { status: 400 }
       );
     }
+    const auth = await requireVerifiedWallet(req, walletAddress, { signature, signedAt });
+    if ('res' in auth) return auth.res;
+    const wallet = auth.wallet;
 
     const res = await fetch(WORKER_URL, {
       method: 'POST',
@@ -28,7 +32,7 @@ export async function POST(req: NextRequest) {
         action: 'setPrivacy',
         localPart: name,
         privacyEnabled: enabled,
-        walletAddress,
+        walletAddress: wallet,
       }),
     });
 

@@ -11,6 +11,7 @@
 /// Key storage: localStorage key = `nftmail-pgp:{agentName}` (wrapped, never raw).
 
 import { useState, useCallback, useEffect } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 import {
   PGP_KEY_MESSAGE,
   provisionPgpKey,
@@ -112,7 +113,7 @@ export function usePgpKey(agentName: string | null): UsePgpKeyReturn {
       // Register with worker via proxy
       const res = await fetch('/api/pgp-key', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(_walletAddress) },
         body: JSON.stringify({
           local: base,
           publicKey: wrapped.publicKey,

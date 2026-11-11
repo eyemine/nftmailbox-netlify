@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import * as openpgp from 'openpgp';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -391,6 +392,8 @@ export async function POST(req: NextRequest) {
       label?: string;
       domain?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       to?: string;
       subject?: string;
       body?: string;
@@ -411,9 +414,12 @@ export async function POST(req: NextRequest) {
     if (!label || typeof label !== 'string') {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'ownerWallet required for auth' }, { status: 401 });
-    }
+    const auth = await requireVerifiedWallet(req, ownerWallet, {
+      signature: body.signature,
+      signedAt: body.signedAt,
+    });
+    if ('res' in auth) return auth.res;
+    const verifiedWallet = auth.wallet;
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
@@ -439,7 +445,7 @@ export async function POST(req: NextRequest) {
     }
 
     const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (controller && controller !== ownerWallet.toLowerCase()) {
+    if (controller && controller !== verifiedWallet) {
       return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
     }
 
@@ -521,7 +527,7 @@ export async function POST(req: NextRequest) {
           armored: body.pgpArmored,
         });
         const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
-        if (isBasicTier) await recordMonthlySend(label, ownerWallet);
+        if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
         try {
           await fetch(WORKER_URL, {
@@ -587,7 +593,7 @@ export async function POST(req: NextRequest) {
             recipientPublicKeysArmored: recipientKeys,
           });
           const { messageId: pgpMsgId } = await sendMimeViaMailgun({ to, cc, bcc, mime });
-          if (isBasicTier) await recordMonthlySend(label, ownerWallet);
+          if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
           try {
             await fetch(WORKER_URL, {
@@ -638,7 +644,7 @@ export async function POST(req: NextRequest) {
       text: textBody,
       ...(attachments.length > 0 ? { attachments } : {}),
     });
-    if (isBasicTier) await recordMonthlySend(label, ownerWallet);
+    if (isBasicTier) await recordMonthlySend(label, verifiedWallet);
 
     // Store sent message in KV for sentbox display
     try {

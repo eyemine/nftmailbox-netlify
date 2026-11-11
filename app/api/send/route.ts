@@ -4,9 +4,12 @@
 /// For the full tier-gated UI send path, use /api/send-email instead.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const MAILGUN_API_BASE = process.env.MAILGUN_API_BASE || 'https://api.eu.mailgun.net/v3';
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'mg.nftmail.box';
+const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
+const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,12 +19,40 @@ export async function POST(req: NextRequest) {
       subject?: string;
       content?: string;
       html?: string;
+      ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
     };
 
     const { fromEmail, toAddress, subject, content, html } = body;
 
     if (!fromEmail || !fromEmail.endsWith('@nftmail.box')) {
       return NextResponse.json({ error: 'Invalid sender — must be @nftmail.box' }, { status: 400 });
+    }
+
+    const auth = await requireVerifiedWallet(req, body.ownerWallet, {
+      signature: body.signature,
+      signedAt: body.signedAt,
+    });
+    if ('res' in auth) return auth.res;
+    const verifiedWallet = auth.wallet;
+
+    const label0 = fromEmail.replace('@nftmail.box', '');
+    const resolveRes = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+      body: JSON.stringify({ action: 'resolveAddress', name: label0, domain: 'nftmail.box' }),
+    });
+    if (!resolveRes.ok) {
+      return NextResponse.json({ error: `Worker auth failed (${resolveRes.status})` }, { status: 502 });
+    }
+    const resolved = (await resolveRes.json()) as Record<string, unknown>;
+    if (!resolved?.exists) {
+      return NextResponse.json({ error: 'This address does not exist' }, { status: 404 });
+    }
+    const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
+    if (!controller || controller !== verifiedWallet) {
+      return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
     }
     if (!toAddress || !toAddress.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });

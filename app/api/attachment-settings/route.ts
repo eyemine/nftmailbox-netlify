@@ -3,6 +3,7 @@
 /// Pro/Premium only. Auth via ownerWallet (verified against registered controller).
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -12,6 +13,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       label?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       canSendAttachments?: boolean;
       canReceiveAttachments?: boolean;
     };
@@ -21,9 +24,9 @@ export async function POST(req: NextRequest) {
     if (!label) {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'ownerWallet required for auth' }, { status: 401 });
-    }
+    const auth = await requireVerifiedWallet(req, ownerWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const wallet = auth.wallet;
 
     // Verify ownership
     const resolveRes = await fetch(WORKER_URL, {
@@ -39,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Address not found' }, { status: 404 });
     }
     const controller = (resolved.onChainOwner as string | undefined)?.toLowerCase();
-    if (controller && controller !== ownerWallet.toLowerCase()) {
+    if (controller && controller !== wallet) {
       return NextResponse.json({ error: 'Wallet does not match registered owner' }, { status: 403 });
     }
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import { authHeaders, createSessionToken } from '@/app/lib/client-auth';
 import { NFTLogin } from '../components/NFTLogin';
 import { MintNFTMail } from '../components/MintNFTMail';
 
@@ -17,7 +18,7 @@ const TIER_USDC: Record<string, number> = { lite: 10, pro: 24 };
 
 // ─── Tier Upgrade Panel ───
 function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: string }) {
-  const { user } = usePrivy();
+  const { user, signMessage } = usePrivy();
   const [selectedTier, setSelectedTier] = useState<'lite' | 'pro'>(defaultTier === 'pro' || defaultTier === 'premium' ? 'pro' : 'lite');
   const stageName = selectedTier === 'pro' ? 'PREMIUM' : 'PRO';
   const [txHash, setTxHash] = useState('');
@@ -47,9 +48,15 @@ function UpgradeTierPanel({ label, defaultTier }: { label: string; defaultTier: 
     setUpgrading(true);
     setError('');
     try {
+      // Session auth: sign once if this page hasn't established one yet.
+      let headers = authHeaders(ownerWallet);
+      if (!headers.Authorization) {
+        const token = await createSessionToken(ownerWallet, signMessage);
+        headers = { Authorization: `Bearer ${token}` };
+      }
       const res = await fetch('/api/upgrade-tier', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ label, ownerWallet, newTier: selectedTier === 'pro' ? 'premium' : selectedTier, paymentTxHash: hash, paymentToken }),
       });
       const data = await res.json() as { error?: string; [key: string]: any };

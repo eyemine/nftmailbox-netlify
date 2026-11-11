@@ -9,6 +9,7 @@
 ///   deleteMessage — permanently delete a single message by ID
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -32,9 +33,12 @@ export async function POST(req: NextRequest) {
     if (!localPart) {
       return NextResponse.json({ error: 'Missing localPart' }, { status: 400 });
     }
-    if (!ownerWallet) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const auth = await requireVerifiedWallet(req, ownerWallet, {
+      signature: body.signature as string | undefined,
+      signedAt: body.signedAt as number | undefined,
+    });
+    if ('res' in auth) return auth.res;
+    const wallet = auth.wallet;
 
     // Verify caller against on-chain controller
     const resolveRes = await fetch(WORKER_URL, {
@@ -46,13 +50,15 @@ export async function POST(req: NextRequest) {
     if (resolveRes.ok) {
       const rd = await resolveRes.json() as Record<string, unknown>;
       const controller = ((rd.onChainOwner || rd.controller || '') as string).toLowerCase();
-      if (controller && ownerWallet.toLowerCase() !== controller) {
+      if (controller && wallet !== controller) {
         return NextResponse.json({ error: 'Wallet does not match inbox owner' }, { status: 403 });
       }
     }
 
-    // Forward mutation to worker with server-side secret
-    const { ownerWallet: _omit, ...forwardBody } = body;
+    // Forward mutation to worker with server-side secret. The verified wallet
+    // replaces whatever the caller claimed.
+    const { ownerWallet: _omit, signature: _sig, signedAt: _at, ...forwardBody } = body;
+    forwardBody.ownerWallet = wallet;
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },

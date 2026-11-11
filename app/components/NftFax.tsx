@@ -11,6 +11,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 
 interface NftFaxProps {
   fromLabel: string;
@@ -224,7 +225,7 @@ export default function NftFax({ fromLabel, ownerWallet }: NftFaxProps) {
     try {
       const res = await fetch('/api/tray/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(ownerWallet) },
         body: JSON.stringify({ fromLabel, ownerWallet, to, format, dataBase64, channel: sendChannel, ...(coverNote.trim() ? { coverNote: coverNote.trim().slice(0, 140) } : {}) }),
       });
       const data = (await res.json()) as { trayUrl?: string; error?: string; upgradeUrl?: string };

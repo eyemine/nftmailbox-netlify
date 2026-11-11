@@ -6,6 +6,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useEciesDecrypt } from '../../hooks/useEciesDecrypt';
+import { authHeaders, cachedSessionToken, createSessionToken } from '@/app/lib/client-auth';
 
 // Tier normalisation: convert various tier names to standard NftmailTier
 type NftmailTier = 'free' | 'pro' | 'premium';
@@ -265,7 +266,7 @@ export default function InboxPage() {
   }, [name, isAgent, isCast, router]);
 
   // Auth state
-  const { authenticated, user, login, logout } = usePrivy();
+  const { authenticated, user, login, logout, signMessage } = usePrivy();
 
 
   // Address resolution state
@@ -318,6 +319,16 @@ export default function InboxPage() {
     if (isAgent && authenticated) return true;
     return false;
   }, [authenticated, resolving, resolved?.onChainOwner, user, isAgent]);
+
+  // Establish the mailbox session for owner actions: one wallet signature per
+  // 24h issues a Bearer token accepted by all authenticated API routes.
+  const ownerWalletAddr = user?.wallet?.address;
+  useEffect(() => {
+    if (!authenticated || !isOwner || !ownerWalletAddr) return;
+    if (cachedSessionToken(ownerWalletAddr)) return;
+    createSessionToken(ownerWalletAddr, signMessage)
+      .catch((err) => console.warn('[session] could not create mailbox session:', err));
+  }, [authenticated, isOwner, ownerWalletAddr, signMessage]);
 
   const agentName = name?.endsWith('_') ? name.slice(0, -1) : name;
 
@@ -455,7 +466,9 @@ export default function InboxPage() {
         return;
       }
 
-      const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}${isOwner && user?.wallet?.address ? `&ownerWallet=${encodeURIComponent(user.wallet.address)}` : ''}`);
+      const res = await fetch(`/api/inbox?email=${encodeURIComponent(name + '@nftmail.box')}${isOwner && user?.wallet?.address ? `&ownerWallet=${encodeURIComponent(user.wallet.address)}` : ''}`, {
+        headers: isOwner && user?.wallet?.address ? authHeaders(user.wallet.address) : {},
+      });
       const data = await res.json() as { error?: string; messages?: any[]; [key: string]: any };
       if (data.error && !data.messages) {
         setError(data.error);
@@ -585,7 +598,7 @@ export default function InboxPage() {
     try {
       await fetch('/api/inbox-action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(user?.wallet?.address ? authHeaders(user.wallet.address) : {}) },
         body: JSON.stringify({ action: 'setPrivacy', localPart: agentName, tier: nextTier, ownerWallet: user?.wallet?.address }),
       });
       setPrivacyTier(nextTier);
@@ -599,7 +612,7 @@ export default function InboxPage() {
     try {
       const res = await fetch('/api/inbox-action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(user?.wallet?.address ? authHeaders(user.wallet.address) : {}) },
         body: JSON.stringify({ action: 'deleteMessage', localPart: agentName, messageId, ownerWallet: user?.wallet?.address }),
       });
       if (res.ok) {

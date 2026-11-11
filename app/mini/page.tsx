@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { sdk } from '@farcaster/miniapp-sdk';
+import { authHeaders, cachedSessionToken, createSessionToken } from '@/app/lib/client-auth';
 import { LOGO_URL, MAILBOX_ICON_URL, TIER_IMAGES, EMPTY_INBOX_URL, LOADING_LOGO_URL } from './images';
 import { ChatView } from '../components/ChatView';
 
@@ -1061,10 +1062,27 @@ export default function MiniApp() {
                 sentMessages={sentMessages.map((m: any) => ({ id: m.id, from: m.from || humanEmail, to: m.to, body: m.body || m.content || '', timestamp: m.receivedAt || Date.now() }))}
                 isOwner={true}
                 onSendMessage={async (to, body) => {
+                  // Session auth: sign once with the Farcaster wallet provider,
+                  // then send the Bearer token — /api/send rejects unsigned claims.
+                  const provider = sdk.wallet.ethProvider;
+                  const accounts = await provider.request({ method: 'eth_requestAccounts' }) as string[];
+                  const wallet = accounts[0];
+                  if (!wallet) throw new Error('No Farcaster wallet available');
+                  let token = cachedSessionToken(wallet);
+                  if (!token) {
+                    token = await createSessionToken(wallet, async (message) => {
+                      const hex = `0x${Buffer.from(message, 'utf8').toString('hex')}` as `0x${string}`;
+                      const addr = wallet as `0x${string}`;
+                      return (await provider.request({
+                        method: 'personal_sign',
+                        params: [hex, addr],
+                      })) as string;
+                    });
+                  }
                   const res = await fetch('/api/send', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fromEmail: humanEmail || `${agentName}@nftmail.box`, toAddress: to, subject: `Re: chat`, content: body }),
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ fromEmail: humanEmail || `${agentName}@nftmail.box`, toAddress: to, subject: `Re: chat`, content: body, ownerWallet: wallet }),
                   });
                   if (!res.ok) {
                     const d = await res.json().catch(() => ({})) as { error?: string };

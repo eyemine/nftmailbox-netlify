@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
 
@@ -28,8 +29,8 @@ export async function GET(req: NextRequest) {
 
     // ── Auth gate: non-agent (human) inboxes are private ──
     // Agent addresses (trailing _) are publicly readable.
-    // All others require the caller to supply their ownerWallet, which must
-    // match the controller recorded in the worker's KV.
+    // All others require a verified wallet (Bearer session or one-shot
+    // signature) matching the controller recorded in the worker's KV.
     const ownerWalletParam = req.nextUrl.searchParams.get('ownerWallet')?.toLowerCase() || '';
 
     // Always fetch from Worker KV (all streams store here)
@@ -71,16 +72,21 @@ export async function GET(req: NextRequest) {
 
       // Enforce auth gate for human accounts (no trailing _) unless explicitly public
       if (!isAgentAddress && privacyTier !== 'exposed') {
-        if (!ownerWalletParam) {
+        const auth = await requireVerifiedWallet(req, ownerWalletParam, {
+          signature: req.nextUrl.searchParams.get('signature') || undefined,
+          signedAt: req.nextUrl.searchParams.get('signedAt') || undefined,
+        });
+        if ('res' in auth) {
           return NextResponse.json({ error: 'Authentication required to view this inbox', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
         }
+        const verifiedWallet = auth.wallet;
         // If owner addresses are recorded, verify the caller matches one of them
         const hasOwnerRecord = !!(controller || onChainOwner || safe);
         if (hasOwnerRecord) {
-          const isAuthorized = 
-            (controller && ownerWalletParam === controller) ||
-            (onChainOwner && ownerWalletParam === onChainOwner) ||
-            (safe && ownerWalletParam === safe);
+          const isAuthorized =
+            (controller && verifiedWallet === controller) ||
+            (onChainOwner && verifiedWallet === onChainOwner) ||
+            (safe && verifiedWallet === safe);
           if (!isAuthorized) {
             return NextResponse.json({ error: 'Wallet address does not match inbox owner', messages: [], total: 0 }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
           }

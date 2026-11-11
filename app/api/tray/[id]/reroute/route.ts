@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCredits, spendCredit, earnForwardCredit } from '@/app/lib/fax-credits';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -32,21 +33,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json() as {
       fromLabel?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       to?: string;
       dataBase64?: string;
     };
 
     const fromLabel = (body.fromLabel || '').toLowerCase().trim();
-    const ownerWallet = (body.ownerWallet || '').toLowerCase().trim();
     const to = (body.to || '').toLowerCase().trim();
 
-    if (!fromLabel || !ownerWallet || !to) {
-      return NextResponse.json({ error: 'Missing fromLabel, ownerWallet, or to' }, { status: 400, headers: NO_STORE });
+    if (!fromLabel || !to) {
+      return NextResponse.json({ error: 'Missing fromLabel or to' }, { status: 400, headers: NO_STORE });
     }
 
-    if (!/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400, headers: NO_STORE });
-    }
+    const auth = await requireVerifiedWallet(req, body.ownerWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     // 1. Verify the sender controls the fromLabel mailbox
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

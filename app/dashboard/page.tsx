@@ -17,6 +17,7 @@ import PgpDecrypt from '../components/PgpDecrypt';
 import PgpOnchainSetup from '../components/PgpOnchainSetup';
 import { AttachmentSettings } from '../components/AttachmentSettings';
 import { signWithWallet } from '@/app/lib/wallet-sign';
+import { authHeaders, cachedSessionToken, createSessionToken } from '@/app/lib/client-auth';
 // Chain-letter "game" (FaxChainComposer) is reserved for the standalone NFTfax
 // app (fax.nftmail.box). Hidden in the mailbox console.
 // import FaxChainComposer from '../components/FaxChainComposer';
@@ -185,6 +186,14 @@ function DashboardContent() {
   // Debug: log detected wallets
   console.log('Detected wallets:', { linkedWallets, embeddedWallet, allWalletAddresses });
 
+  // Establish the mailbox session: one wallet signature per 24h issues a Bearer
+  // token that all authenticated API routes accept (stored in localStorage).
+  useEffect(() => {
+    if (!walletAddress || cachedSessionToken(walletAddress)) return;
+    createSessionToken(walletAddress, (msg) => signWithWallet(msg, walletAddress, wallets, signMessage))
+      .catch((err) => console.warn('[session] could not create mailbox session:', err));
+  }, [walletAddress, wallets, signMessage]);
+
   // Load persisted read IDs + privacy preferences from localStorage
   useEffect(() => {
     try {
@@ -213,10 +222,10 @@ function DashboardContent() {
     if (!selectedName?.email) return;
     const label = selectedName.email.replace('@nftmail.box', '');
     try {
-      await fetch('/api/delete-message', {
+      await fetch('/api/inbox-action', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId }),
+        headers: { 'Content-Type': 'application/json', ...(walletAddress ? authHeaders(walletAddress) : {}) },
+        body: JSON.stringify({ action: 'deleteMessage', localPart: label, messageId, ownerWallet: walletAddress }),
       });
       setMessages(prev => prev.filter(m => m.messageId !== messageId));
       if (selectedMessage?.messageId === messageId) setSelectedMessage(null);
@@ -275,7 +284,9 @@ function DashboardContent() {
     setLoadingInbox(true);
     try {
       const ownerParam = walletAddress ? `&ownerWallet=${encodeURIComponent(walletAddress)}` : '';
-      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`);
+      const inboxRes = await fetch(`/api/inbox?email=${encodeURIComponent(selectedName.email)}${ownerParam}`, {
+        headers: walletAddress ? authHeaders(walletAddress) : {},
+      });
       const data = await inboxRes.json() as { error?: string; messages?: any[]; tier?: string; accountTier?: string; note?: string };
       if (!inboxRes.ok) throw new Error(data.error || 'Failed to fetch inbox');
       setMessages(data.messages || []);
@@ -332,7 +343,9 @@ function DashboardContent() {
     setLoadingSent(true);
     try {
       const label = selectedName.email.replace('@nftmail.box', '');
-      const res = await fetch(`/api/sentbox?label=${encodeURIComponent(label)}`);
+      const res = await fetch(`/api/sentbox?label=${encodeURIComponent(label)}&wallet=${encodeURIComponent(walletAddress || '')}`, {
+        headers: walletAddress ? authHeaders(walletAddress) : {},
+      });
       const data = await res.json() as { error?: string; messages?: any[] };
       if (!res.ok) throw new Error(data.error || 'Failed to fetch sentbox');
       setSentMessages(data.messages || []);
@@ -354,7 +367,9 @@ function DashboardContent() {
     const isPrem = t === 'premium' || t === 'imago' || t === 'ghost';
     const isAgt = selectedName?.label.endsWith('_') ?? false;
     if (!selectedName || !isPrem || isAgt) { setShowForwarding(false); setForwardingConfig(undefined); return; }
-    fetch(`/api/forwarding/${selectedName.label}`)
+    fetch(`/api/forwarding/${selectedName.label}?wallet=${encodeURIComponent(walletAddress || '')}`, {
+      headers: walletAddress ? authHeaders(walletAddress) : {},
+    })
       .then(r => r.json())
       .then((d: unknown) => {
         const rd = d as { config?: { enabled: boolean; targetEmail: string; level: 'imago' | 'ghost' } };
@@ -374,7 +389,7 @@ function DashboardContent() {
       try {
         const res = await fetch('/api/send-email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders(preferredWallet.address) },
           body: JSON.stringify({
             label: fromLabel,
             domain: selectedFromDomain,
@@ -833,8 +848,8 @@ function DashboardContent() {
                       onSendMessage={async (to, body) => {
                         const res = await fetch('/api/send', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Re: chat`, content: body }),
+                          headers: { 'Content-Type': 'application/json', ...(walletAddress ? authHeaders(walletAddress) : {}) },
+                          body: JSON.stringify({ fromEmail: selectedName.email, toAddress: to, subject: `Re: chat`, content: body, ownerWallet: walletAddress }),
                         });
                         if (!res.ok) {
                           const d = await res.json().catch(() => ({})) as { error?: string };

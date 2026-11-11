@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 
 type NftmailTier = 'free' | 'pro' | 'premium';
 
@@ -155,7 +156,7 @@ export function ComposeEmail({
       for (const recipient of recipients) {
         const res = await fetch('/api/send-email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders(ownerWallet) },
           body: JSON.stringify({ 
             label, 
             ownerWallet, 

@@ -7,6 +7,7 @@
 'use client';
 
 import { useState } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 
 interface FaxChainComposerProps {
   fromLabel: string;
@@ -51,7 +52,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
     try {
       const res = await fetch(`/api/tray/${encodeURIComponent(sourceId.trim())}/chain`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(ownerWallet) },
         body: JSON.stringify({
           ownerWallet,
           previousTrayIds,
@@ -92,7 +93,7 @@ export default function FaxChainComposer({ fromLabel, ownerWallet }: FaxChainCom
     try {
       const res = await fetch('/api/tray/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(ownerWallet) },
         body: JSON.stringify({
           fromLabel,
           ownerWallet,

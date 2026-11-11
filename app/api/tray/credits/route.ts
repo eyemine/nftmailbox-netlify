@@ -6,6 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCredits, spendCredit, earnForwardCredit, clearJam, ensureCreditsAllowance } from '@/app/lib/fax-credits';
+import { isFaxEligible } from '@/app/lib/fax-eligibility';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -19,7 +21,16 @@ function workerHeaders(): Record<string, string> {
 }
 
 async function verifyOwner(local: string, wallet: string, domain: string): Promise<NextResponse | null> {
-  if (domain === 'fax') return null;
+  if (domain === 'fax') {
+    // @fax handles are NFT-collection inboxes — ownership means owning the
+    // token named by the label (e.g. atom.1083 → POW #1083, or a delegate).
+    const collection = local.split('.')[0];
+    const eligible = await isFaxEligible(wallet, local, collection);
+    if (!eligible.eligible) {
+      return NextResponse.json({ error: eligible.reason || 'Wallet does not own this fax handle' }, { status: 403, headers: NO_STORE });
+    }
+    return null;
+  }
   const resolveRes = await fetch(WORKER_URL, {
     method: 'POST',
     headers: workerHeaders(),
@@ -56,14 +67,17 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const domain = (searchParams.get('domain') || 'nftmail.box').toLowerCase();
   const local = cleanLocal(searchParams.get('local') || '', domain);
-  const wallet = (searchParams.get('wallet') || '').trim();
+  const claimedWallet = (searchParams.get('wallet') || '').trim();
 
   if (!local) {
     return NextResponse.json({ error: 'Missing local' }, { status: 400, headers: NO_STORE });
   }
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-  }
+  const auth = await requireVerifiedWallet(req, claimedWallet, {
+    signature: searchParams.get('signature') || undefined,
+    signedAt: searchParams.get('signedAt') || undefined,
+  });
+  if ('res' in auth) return auth.res;
+  const wallet = auth.wallet;
 
   const denied = await verifyOwner(local, wallet, domain);
   if (denied) return denied;
@@ -80,19 +94,24 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as {
     local?: string;
     ownerWallet?: string;
+    signature?: string;
+    signedAt?: number;
     domain?: string;
     op?: 'spend' | 'earn' | 'clear';
   };
   const domain = (body.domain || 'nftmail.box').toLowerCase();
   const local = cleanLocal(body.local || '', domain);
-  const wallet = (body.ownerWallet || '').trim();
+  const claimedWallet = (body.ownerWallet || '').trim();
 
   if (!local) {
     return NextResponse.json({ error: 'Missing local' }, { status: 400, headers: NO_STORE });
   }
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-  }
+  const auth = await requireVerifiedWallet(req, claimedWallet, {
+    signature: body.signature,
+    signedAt: body.signedAt,
+  });
+  if ('res' in auth) return auth.res;
+  const wallet = auth.wallet;
 
   const denied = await verifyOwner(local, wallet, domain);
   if (denied) return denied;

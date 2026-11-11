@@ -15,6 +15,7 @@ import sharp from 'sharp';
 import { spendCredit, earnForwardCredit, setLastReceived, applyThermalFade, getCredits } from '@/app/lib/fax-credits';
 import { eciesEncrypt } from '@/app/lib/fax-crypto';
 import { isFaxEligible } from '@/app/lib/fax-eligibility';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -105,6 +106,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       fromLabel?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       vaultWallet?: string;
       tokenId?: string;
       to?: string;
@@ -146,9 +149,12 @@ export async function POST(req: NextRequest) {
     if (!fromLabel) {
       return NextResponse.json({ error: 'Missing fromLabel' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    const auth = await requireVerifiedWallet(req, ownerWallet, {
+      signature: body.signature,
+      signedAt: body.signedAt,
+    });
+    if ('res' in auth) return auth.res;
+    ownerWallet = auth.wallet;
     if (!to || !to.includes('@')) {
       return NextResponse.json({ error: 'Invalid recipient address' }, { status: 400 });
     }
@@ -216,7 +222,7 @@ export async function POST(req: NextRequest) {
           error: 'Sender ownership could not be verified. Connect the wallet that controls this mailbox.',
         }, { status: 403 });
       }
-      if (controller !== ownerWallet.toLowerCase()) {
+      if (controller !== ownerWallet) {
         return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403 });
       }
       const accountTier = ((resolved.accountTier as string | undefined) || 'basic').toLowerCase();
@@ -228,7 +234,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (isFaxSender) {
-      const { eligible, reason } = await isFaxEligible(ownerWallet, fromLabel, collection, normalizedVault, normalizedTokenId);
+      // Collection defaults to the label's prefix (atom.1083 → 'atom' → POW NFT)
+      // so @fax senders always get a real ownerOf check, not the open Phase-1 gate.
+      const effectiveCollection = collection || fromLabel.split('.')[0];
+      const { eligible, reason } = await isFaxEligible(ownerWallet, fromLabel, effectiveCollection, normalizedVault, normalizedTokenId);
       if (!eligible) {
         return NextResponse.json({ error: reason || 'Not eligible to send from this fax mailbox.' }, { status: 403 });
       }

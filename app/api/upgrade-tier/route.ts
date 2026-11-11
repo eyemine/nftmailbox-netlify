@@ -20,6 +20,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { gnosis } from 'viem/chains';
 import { verifyXDAIPayment, verifyEUREPayment, verifyUSDCBasePayment, autoDetectXDAIPayment, autoDetectEUREPayment, autoDetectUSDCBasePayment, burnTxHash, TIER_PRICES_USD, TIER_PRICES_EURE } from '../../lib/payments';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const NFTMAIL_WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -82,6 +83,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       label?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
       newTier?: string;
       paymentTxHash?: string;
       paymentToken?: 'xdai' | 'eure' | 'usdc-base'; // default: 'xdai'
@@ -89,14 +92,14 @@ export async function POST(req: NextRequest) {
       autoDetect?: boolean;
     };
 
-    const { label, ownerWallet, newTier, paymentTxHash, paymentToken = 'xdai', legacyIdentity, autoDetect } = body;
+    const { label, ownerWallet: claimedWallet, newTier, paymentTxHash, paymentToken = 'xdai', legacyIdentity, autoDetect } = body;
 
     if (!label || typeof label !== 'string') {
       return NextResponse.json({ error: 'Missing label' }, { status: 400 });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Invalid ownerWallet' }, { status: 400 });
-    }
+    const auth = await requireVerifiedWallet(req, claimedWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
     // Accept 'pro' as canonical name; 'premium' is kept as an alias for backwards compat
     const normalisedTier = newTier === 'pro' ? 'premium' : newTier;
     if (!normalisedTier || !['lite', 'premium', 'ghost'].includes(normalisedTier)) {

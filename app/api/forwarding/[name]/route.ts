@@ -3,7 +3,7 @@
 /// POST: Update forwarding configuration
 
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 
@@ -20,7 +20,26 @@ export async function GET(
 ) {
   try {
     const agentName = params.name.toLowerCase();
-    
+
+    // Forwarding config leaks the owner's target address — owner-only.
+    const walletParam = request.nextUrl.searchParams.get('wallet') || undefined;
+    const auth = await requireVerifiedWallet(request, walletParam, {
+      signature: request.nextUrl.searchParams.get('signature') || undefined,
+      signedAt: request.nextUrl.searchParams.get('signedAt') || undefined,
+    });
+    if ('res' in auth) return auth.res;
+
+    const resolveRes = await fetch(`${WORKER_URL}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Worker-Secret': WORKER_SECRET },
+      body: JSON.stringify({ action: 'resolveAddress', name: agentName, domain: 'nftmail.box' }),
+    });
+    const resolved = resolveRes.ok ? (await resolveRes.json()) as Record<string, unknown> : null;
+    const controller = (resolved?.onChainOwner as string | undefined)?.toLowerCase();
+    if (!resolved?.exists || !controller || controller !== auth.wallet) {
+      return NextResponse.json({ error: 'Not authorized for this mailbox' }, { status: 403 });
+    }
+
     const workerResponse = await fetch(`${WORKER_URL}`, {
       method: 'POST',
       headers: {

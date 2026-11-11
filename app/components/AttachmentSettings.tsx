@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 
 interface AttachmentSettingsProps {
   label: string;
@@ -30,6 +31,7 @@ export function AttachmentSettings({ label, ownerWallet, tier }: AttachmentSetti
       try {
         const res = await fetch(`/api/inbox?email=${encodeURIComponent(label + '@nftmail.box')}&ownerWallet=${ownerWallet}`, {
           cache: 'no-store',
+          headers: authHeaders(ownerWallet),
         });
         if (res.ok) {
           const data = await res.json() as { canSendAttachments?: boolean; canReceiveAttachments?: boolean };
@@ -50,7 +52,7 @@ export function AttachmentSettings({ label, ownerWallet, tier }: AttachmentSetti
     try {
       const res = await fetch('/api/attachment-settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(ownerWallet) },
         body: JSON.stringify({
           label,
           ownerWallet,

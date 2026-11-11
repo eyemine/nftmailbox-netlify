@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { authHeaders } from '@/app/lib/client-auth';
 
 interface TogglePrivacyProps {
   name: string;
@@ -38,7 +39,7 @@ export function TogglePrivacy({ name, walletAddress, onPrivacyChange }: TogglePr
       const newState = !privacyEnabled;
       const res = await fetch('/api/toggle-privacy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(walletAddress) },
         body: JSON.stringify({
           name,
           enabled: newState,

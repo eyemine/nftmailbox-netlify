@@ -13,6 +13,7 @@
 ///   before the secret-gated worker action `setPgpKey` is invoked.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || process.env.NEXT_PUBLIC_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -50,15 +51,17 @@ export async function POST(req: NextRequest) {
       wrappedPrivateKey?: string;
       wrapIv?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
     };
-    const { local, publicKey, fingerprint, keyId, algo, wrappedPrivateKey, wrapIv, ownerWallet } = body;
+    const { local, publicKey, fingerprint, keyId, algo, wrappedPrivateKey, wrapIv, ownerWallet: claimedWallet } = body;
 
     if (!local || !publicKey) {
       return NextResponse.json({ error: 'Missing local or publicKey' }, { status: 400, headers: NO_STORE });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-    }
+    const auth = await requireVerifiedWallet(req, claimedWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     // Verify the caller controls `local` before registering its PGP key.
     // Fail CLOSED: the registered public key is what senders encrypt to, so an
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
         error: 'Ownership could not be verified. Connect the wallet that controls this mailbox.',
       }, { status: 403, headers: NO_STORE });
     }
-    if (controller !== ownerWallet.toLowerCase()) {
+    if (controller !== ownerWallet) {
       return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
     }
 
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
         ...(keyId ? { keyId } : {}),
         ...(algo ? { algo } : {}),
         ...(wrappedPrivateKey && wrapIv ? { wrappedPrivateKey, wrapIv } : {}),
-        ownerWallet: ownerWallet.toLowerCase(),
+        ownerWallet,
       }),
     });
     const data = await res.json() as { error?: string };

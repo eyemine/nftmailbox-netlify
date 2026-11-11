@@ -53,6 +53,7 @@ const COLLECTIONS: Record<string, { contract: string; chain: Chain; rpc?: string
   dfz: { contract: '0x2acab3dea77832c09420663b0e1cb386031ba17b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
   normie: { contract: '0x9eb6e2025b64f340691e424b7fe7022ffde12438', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
   pow: { contract: '0x9abb7bddc43fa67c76a62d8c016513827f59be1b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
+  atom: { contract: '0x9abb7bddc43fa67c76a62d8c016513827f59be1b', chain: mainnet, rpc: 'https://ethereum-rpc.publicnode.com', mode: 'owner' },
 };
 
 const FAX_COLLECTION_CONTRACT = (process.env.FAX_COLLECTION_CONTRACT || '').toLowerCase();

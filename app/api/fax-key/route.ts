@@ -11,6 +11,7 @@
 ///   worker action is invoked.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -45,15 +46,17 @@ export async function POST(req: NextRequest) {
       wrappedPrivateKey?: string;
       wrapIv?: string;
       ownerWallet?: string;
+      signature?: string;
+      signedAt?: number;
     };
-    const { local, publicKey, wrappedPrivateKey, wrapIv, ownerWallet } = body;
+    const { local, publicKey, wrappedPrivateKey, wrapIv, ownerWallet: claimedWallet } = body;
 
     if (!local || !publicKey || !wrappedPrivateKey || !wrapIv) {
       return NextResponse.json({ error: 'Missing local, publicKey, wrappedPrivateKey, or wrapIv' }, { status: 400, headers: NO_STORE });
     }
-    if (!ownerWallet || !/^0x[a-fA-F0-9]{40}$/.test(ownerWallet)) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: NO_STORE });
-    }
+    const auth = await requireVerifiedWallet(req, claimedWallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const ownerWallet = auth.wallet;
 
     // Verify the caller controls `local` before provisioning its key vault.
     // Fail CLOSED: registering a fax key sets the public key others encrypt to,
@@ -78,7 +81,7 @@ export async function POST(req: NextRequest) {
         error: 'Ownership could not be verified. Connect the wallet that controls this mailbox.',
       }, { status: 403, headers: NO_STORE });
     }
-    if (controller !== ownerWallet.toLowerCase()) {
+    if (controller !== ownerWallet) {
       return NextResponse.json({ error: 'Wallet does not match the registered owner' }, { status: 403, headers: NO_STORE });
     }
 
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
         publicKey,
         wrappedPrivateKey,
         wrapIv,
-        ownerWallet: ownerWallet.toLowerCase(),
+        ownerWallet,
       }),
     });
     const data = await res.json() as { error?: string };

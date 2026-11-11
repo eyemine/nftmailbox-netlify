@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isFaxEligible } from '@/app/lib/fax-eligibility';
+import { requireVerifiedWallet } from '@/app/lib/wallet-auth';
 
 const WORKER_URL = process.env.NFTMAIL_WORKER_URL || 'https://worker.nftmail.box';
 const WORKER_SECRET = process.env.WORKER_SECRET || '';
@@ -10,6 +11,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       handle?: string;
       wallet?: string;
+      signature?: string;
+      signedAt?: number;
       collection?: string;
       ready?: boolean;
       readyUntil?: number;
@@ -18,20 +21,19 @@ export async function POST(req: NextRequest) {
     };
 
     const handle = (body.handle || '').toLowerCase().trim();
-    const wallet = (body.wallet || '').toLowerCase().trim();
     const collection = (body.collection || '').toLowerCase().trim();
     const ready = body.ready === true;
     const readyUntil = Number(body.readyUntil) || 0;
     const vaultWallet = (body.vaultWallet || '').toLowerCase().trim();
     const tokenId = (body.tokenId || '').trim();
 
-    if (!handle || !wallet || !collection) {
-      return NextResponse.json({ error: 'Missing handle, wallet, or collection' }, { status: 400 });
+    if (!handle || !collection) {
+      return NextResponse.json({ error: 'Missing handle or collection' }, { status: 400 });
     }
 
-    if (!/^0x[a-f0-9]{40}$/i.test(wallet)) {
-      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
-    }
+    const auth = await requireVerifiedWallet(req, body.wallet, { signature: body.signature, signedAt: body.signedAt });
+    if ('res' in auth) return auth.res;
+    const wallet = auth.wallet;
 
     const eligibility = await isFaxEligible(wallet, handle, collection, vaultWallet || undefined, tokenId || undefined);
     if (!eligibility.eligible) {
