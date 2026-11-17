@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { namehash } from 'viem/ens';
+import { labelhash, namehash } from 'viem/ens';
 
 const ETH_RPC = process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com';
 const ENS_REGISTRY = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
 const ENS_NAME_WRAPPER = '0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401';
+// ENSv2 ETHRegistry — new .eth registrations live here, invisible to v1.
+const ENS_V2_REGISTRY = '0xf60aba43e1f7f3dab1186ff03b561401c9df85e2';
 
 export const runtime = 'nodejs';
 
@@ -64,9 +66,36 @@ export async function GET(req: NextRequest) {
       if (wrappedOwner) owner = wrappedOwner;
     }
 
-    return NextResponse.json({ 
+    // ENSv2 fallback: getOwner(anyId) accepts the v1 labelhash directly.
+    // selector: keccak256("getOwner(uint256)")[0:4] = 0xc41a360a
+    if (!registered) {
+      const lhHex = BigInt(labelhash(label)).toString(16).padStart(64, '0');
+      const v2Res = await fetch(ETH_RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 3, method: 'eth_call',
+          params: [{ to: ENS_V2_REGISTRY, data: '0xc41a360a' + lhHex }, 'latest']
+        }),
+      });
+      const v2Json = await v2Res.json() as { result?: string };
+      const v2Owner = v2Json.result && v2Json.result !== '0x' && v2Json.result !== '0x' + '0'.repeat(64)
+        ? '0x' + v2Json.result.slice(-40) : null;
+      if (v2Owner && v2Owner !== '0x0000000000000000000000000000000000000000') {
+        return NextResponse.json({
+          checked: true,
+          registered: true,
+          owner: v2Owner,
+          wrapped: false,
+          ensv2: true,
+          name: `${label}.eth`
+        });
+      }
+    }
+
+    return NextResponse.json({
       checked: true,
-      registered, 
+      registered,
       owner,
       wrapped,
       name: `${label}.eth`

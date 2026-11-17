@@ -1,18 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createPublicClient, http, parseAbi, namehash } from 'viem';
+import { createPublicClient, http, parseAbi, labelhash, namehash } from 'viem';
 import { gnosis, mainnet } from 'viem/chains';
 
 const GNS_REGISTRY      = '0x00cEBf9E1E81D3CC17fbA0a49306fA77e3dBe823' as const;
 const ENS_REGISTRY      = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
 const ENS_NAME_WRAPPER  = '0xD4416b13d2b3a9aBAE7AcD5D6C2BbDBE25686401' as const;
+// ENSv2 ETHRegistry — new .eth registrations are ERC-1155Singleton tokens here,
+// invisible to the v1 registry/registrar/wrapper.
+const ENS_V2_REGISTRY   = '0xf60aba43e1f7f3dab1186ff03b561401c9df85e2' as const;
 
 const gnosisClient = createPublicClient({ chain: gnosis,  transport: http('https://rpc.gnosischain.com') });
 const ethClient    = createPublicClient({ chain: mainnet, transport: http('https://cloudflare-eth.com') });
 
 const GNS_ABI = parseAbi(['function owner(bytes32 node) view returns (address)']);
 const ENS_ABI = parseAbi(['function ownerOf(uint256 tokenId) view returns (address)']);
+const V2_ABI  = parseAbi(['function getOwner(uint256 anyId) view returns (address)']);
 
 export type NameStatus =
   | { state: 'idle' }
@@ -87,6 +91,21 @@ export function useNameCheck(
           }
         } catch {
           ensOwner = null;
+        }
+
+        // ENSv2 fallback: getOwner(anyId) accepts the v1 labelhash directly.
+        if (!ensOwner || ensOwner === '0x0000000000000000000000000000000000000000') {
+          try {
+            const v2Owner = (await ethClient.readContract({
+              address: ENS_V2_REGISTRY, abi: V2_ABI, functionName: 'getOwner',
+              args: [BigInt(labelhash(label))],
+            })) as string;
+            if (v2Owner && v2Owner !== '0x0000000000000000000000000000000000000000') {
+              ensOwner = v2Owner;
+            }
+          } catch {
+            // stay null
+          }
         }
 
         if (ensOwner && ensOwner !== '0x0000000000000000000000000000000000000000') {
