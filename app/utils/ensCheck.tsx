@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createPublicClient, http, parseAbi, namehash, labelhash } from 'viem';
+import { createPublicClient, http, parseAbi, namehash } from 'viem';
 import { gnosis, mainnet } from 'viem/chains';
 
 const GNS_REGISTRY      = '0x00cEBf9E1E81D3CC17fbA0a49306fA77e3dBe823' as const;
-const ENS_BASE_REGISTRAR = '0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85' as const;
+const ENS_REGISTRY      = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const;
+const ENS_NAME_WRAPPER  = '0xD4416b13d2b3a9aBAE7AcD5D6C2BbDBE25686401' as const;
 
 const gnosisClient = createPublicClient({ chain: gnosis,  transport: http('https://rpc.gnosischain.com') });
 const ethClient    = createPublicClient({ chain: mainnet, transport: http('https://cloudflare-eth.com') });
@@ -65,15 +66,26 @@ export function useNameCheck(
           return;
         }
 
-        // 2. ENS: does label.eth exist on mainnet?
-        const tokenId = BigInt(labelhash(label));
+        // 2. ENS: does label.eth exist on mainnet? Read the ENS registry, not
+        // the base registrar — wrapped names are escrowed to the NameWrapper
+        // contract (ERC-1155 keyed by namehash), so registrar.ownerOf would
+        // report the wrapper as the owner and wrongly flag the name reserved.
+        const ethNode = namehash(`${label}.eth`);
         let ensOwner: string | null = null;
         try {
-          ensOwner = (await ethClient.readContract({
-            address: ENS_BASE_REGISTRAR, abi: ENS_ABI, functionName: 'ownerOf', args: [tokenId],
+          const regOwner = (await ethClient.readContract({
+            address: ENS_REGISTRY, abi: GNS_ABI, functionName: 'owner', args: [ethNode],
           })) as string;
+          if (regOwner && regOwner !== '0x0000000000000000000000000000000000000000') {
+            if (regOwner.toLowerCase() === ENS_NAME_WRAPPER.toLowerCase()) {
+              ensOwner = (await ethClient.readContract({
+                address: ENS_NAME_WRAPPER, abi: ENS_ABI, functionName: 'ownerOf', args: [BigInt(ethNode)],
+              })) as string;
+            } else {
+              ensOwner = regOwner;
+            }
+          }
         } catch {
-          // ownerOf reverts when token doesn't exist — no reservation needed
           ensOwner = null;
         }
 

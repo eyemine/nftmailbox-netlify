@@ -3,6 +3,7 @@ import { namehash } from 'viem/ens';
 
 const ETH_RPC = process.env.ETH_RPC_URL || 'https://ethereum.publicnode.com';
 const ENS_REGISTRY = '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e';
+const ENS_NAME_WRAPPER = '0xd4416b13d2b3a9abae7acd5d6c2bbdbe25686401';
 
 export const runtime = 'nodejs';
 
@@ -41,13 +42,33 @@ export async function GET(req: NextRequest) {
     }
 
     const result = json.result || '0x';
-    const owner = result !== '0x' && result !== '0x' + '0'.repeat(64) ? '0x' + result.slice(-40) : null;
+    let owner = result !== '0x' && result !== '0x' + '0'.repeat(64) ? '0x' + result.slice(-40) : null;
     const registered = !!owner && owner !== '0x0000000000000000000000000000000000000000';
-    
+    let wrapped = false;
+
+    // Wrapped names escrow to the NameWrapper — registry.owner returns the
+    // wrapper contract, not the holder. Resolve the real owner via
+    // NameWrapper.ownerOf(namehash) so callers comparing owner → wallet work.
+    if (registered && owner!.toLowerCase() === ENS_NAME_WRAPPER) {
+      wrapped = true;
+      const wrappedRes = await fetch(ETH_RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 2, method: 'eth_call',
+          params: [{ to: ENS_NAME_WRAPPER, data: '0x6352211e' + node.slice(2) }, 'latest']
+        }),
+      });
+      const wrappedJson = await wrappedRes.json() as { result?: string };
+      const wrappedOwner = wrappedJson.result && wrappedJson.result !== '0x' ? '0x' + wrappedJson.result.slice(-40) : null;
+      if (wrappedOwner) owner = wrappedOwner;
+    }
+
     return NextResponse.json({ 
       checked: true,
       registered, 
       owner,
+      wrapped,
       name: `${label}.eth`
     });
   } catch (error) {
